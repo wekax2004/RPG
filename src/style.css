@@ -1,0 +1,301 @@
+:root {
+    --bg-dark: #2d2d2d;
+    --bg-panel: #4a4a4a;
+    --bg-light: #6e6e6e;
+    --text-color: #d0d0d0;
+    --border-light: #888;
+    --border-dark: #222;
+}
+
+body {
+    margin: 0;
+    background-color: #050505;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    /* Larger base size for pixel font */
+    color: var(--text-color);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+/* The Main Window Frame */
+#client-frame {
+    width: 800px;
+    height: 600px;
+    background: var(--bg-panel);
+    border: 2px solid var(--border-light);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    box-sizing: border-box;
+}
+
+/* Header */
+#client-header {
+    background: #222;
+    padding: 4px 8px;
+    border: 2px solid #555;
+    border-bottom: 2px solid #000;
+    font-size: 20px;
+    color: #ffd700;
+    /* Gold color */
+    text-shadow: 2px 2px #000;
+    margin-bottom: 4px;
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+/* Body: Game | Sidebar */
+#client-body {
+    display: flex;
+    flex: 1;
+    /* Fills remaining height */
+    gap: 4px;
+    margin-bottom: 4px;
+    overflow: hidden;
+}
+
+/* Game Viewport */
+#game-viewport {
+    flex: 1;
+    background: #000;
+    border: 2px solid var(--border-dark);
+    border-right-color: var(--border-light);
+    /* Inset effect */
+    border-bottom-color: var(--border-light);
+    position: relative;
+    display: flex;
+    /* Center canvas */
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+    /* Prevent shrinking */
+}
+
+/* Canvas Scaling */
+#game-canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    object-fit: contain;
+    /* Respect aspect ratio */
+}
+
+/* Sidebar */
+#sidebar {
+    width: 180px;
+    background: var(--bg-dark);
+    border: 2px inset var(--bg-light);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 2px;
+    overflow-y: auto;
+}
+
+.panel {
+    background: var(--bg-panel);
+    border: 2px solid var(--border-light);
+    border-right-color: var(--border-dark);
+    border-bottom-color: var(--border-dark);
+    padding: 2px;
+}
+
+.panel-header {
+    background: #333;
+    color: #aaa;
+    font-weight: bold;
+    text-align: center;
+    border: 1px solid #000;
+    margin-bottom: 2px;
+    padding: 1px;
+}
+
+/* Minimap */
+#minimap-placeholder {
+    width: 100%;
+    height: 100px;
+    background: #000;
+}
+
+/* Status */
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 4px;
+}
+
+.val {
+    color: #fff;
+}
+
+/* Inventory Grid */
+.slots-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    padding: 4px;
+    justify-items: center;
+}
+
+#bag-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    /* 4 cols for bag */
+    gap: 2px;
+    padding: 4px;
+    justify-items: center;
+}
+
+.slot {
+    width: 34px;
+    height: 34px;
+    background: #333;
+    border: 2px outset #666;
+    /* Retro 3D button look */
+    image-rendering: pixelated;
+    position: relative;
+}
+
+.slot:hover {
+    border-color: #888;
+    background: #444;
+}
+
+/* Dialog Box */
+#dialogue-box {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    background: rgba(0, 0, 0, 0.85);
+    border: 2px solid #fff;
+    padding: 10px;
+    color: #fff;
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    text-align: center;
+    border-radius: 4px;
+    box-shadow: 0 0 10px #000;
+    pointer-events: none;
+    z-index: 4000;
+    /* Let clicks pass through if needed */
+}
+
+#dialogue-box.hidden {
+    display: none;
+}
+
+#dialogue-text {
+    margin: 0;
+    padding: 0;
+    line-height: 1.2;
+}
+
+.head {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.backpack {
+    grid-column: 3;
+    grid-row: 1;
+    background-color: #322;
+}
+
+.body {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.lhand {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.rhand {
+    grid-column: 3;
+    grid-row: 2;
+}
+
+.feet {
+    grid-column: 2;
+    grid-row: 3;
+}
+
+.potion {
+    grid-column: 1;
+    grid-row: 3;
+    background-color: #2e1a1a;
+}
+
+
+
+
+/* Chat Console */
+#console-panel {
+    height: 120px;
+    min-height: 120px;
+    max-height: 120px;
+    flex-shrink: 0;
+    background: var(--bg-panel);
+    border: 2px inset var(--bg-light);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #111;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #555;
+    border: 1px solid #000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
+
+#console-log {
+    flex: 1;
+    background: #1a1a1a;
+    padding: 4px;
+    overflow-y: scroll;
+    font-family: monospace;
+    font-size: 10px;
+    border-bottom: 1px solid #333;
+}
+
+.msg.system {
+    color: #888;
+}
+
+.msg.info {
+    color: #fff;
+}
+
+#console-input {
+    /* background: #111; */
+    border: none;
+    border-top: 1px solid #333;
+    color: #fff;
+    background: #222;
+    padding: 4px;
+    font-family: inherit;
+}
+
+/* Utility */
+.hidden {
+    display: none !important;
+}
