@@ -10,11 +10,17 @@ Since this is the source code, you will need `Node.js` installed.
     ```bash
     npm install
     ```
-4.  **Start the Game**:
+4.  **Start the Game (Desktop Mode)**:
+    ```bash
+    npm run start:electron
+    ```
+    This will launch the game window.
+
+    *Alternatively, for just the web version:*
     ```bash
     npm run dev
     ```
-    This will open the game in your browser (usually at `http://localhost:5173`).
+    (Then open http://localhost:5173 in Chrome)
 
 ## Building for Release
 To create the `.zip` or `.exe` build:
