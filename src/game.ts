@@ -166,6 +166,14 @@ export class Teleporter {
     constructor(public targetX: number, public targetY: number) { }
 }
 
+export class LightSource {
+    constructor(
+        public radius: number,
+        public color: string, // HEX or RGB
+        public flickers: boolean = false
+    ) { }
+}
+
 // --- Systems ---
 
 let lastAttackTime = 0;
@@ -1445,12 +1453,84 @@ export function dropLoot(world: World, x: number, y: number, enemyType: string =
         return;
     }
 
-    const rand = Math.random();
     if (rand < 0.1) {
         if (enemyType === "skeleton") {
             createItem(world, x, y, "Wooden Sword", "rhand", SPRITES.WOODEN_SWORD, 8);
         } else if (enemyType === "wolf") {
         } else {
+             createItem(world, x, y, "Health Potion", "consumable", SPRITES.POTION, 0);
+        }
+    }
+}
+
+export function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D, ambientLight: number = 0.9) {
+    let camX = 0, camY = 0;
+    const cameraEntity = world.query([Camera])[0];
+    if (cameraEntity !== undefined) {
+        const cam = world.getComponent(cameraEntity, Camera)!;
+        camX = Math.floor(cam.x + shakeOffsetX);
+        camY = Math.floor(cam.y + shakeOffsetY);
+    }
+
+    const lights = world.query([Position, LightSource]);
+
+    ctx.save();
+    
+    // 1. Draw Darkness
+    ctx.fillStyle = `rgba(0, 0, 0, ${ambientLight})`;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    // 2. Cut Holes
+    ctx.globalCompositeOperation = 'destination-out';
+
+    for(const id of lights) {
+        const pos = world.getComponent(id, Position)!;
+        const light = world.getComponent(id, LightSource)!;
+        
+        const lx = Math.round(pos.x - camX + 8);
+        const ly = Math.round(pos.y - camY + 8);
+
+        let radius = light.radius;
+        if (light.flickers) {
+            radius += (Math.random() - 0.5) * 4;
+        }
+
+        const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, radius);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 1)'); 
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(lx, ly, radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 3. Colored Glow (Optional - Source Over)
+    ctx.globalCompositeOperation = 'lighter';
+    for(const id of lights) {
+        // Only if color is NOT white/null/black
+        const light = world.getComponent(id, LightSource)!;
+        if (light.color && light.color !== '#000000') {
+             const pos = world.getComponent(id, Position)!;
+             const lx = Math.round(pos.x - camX + 8);
+             const ly = Math.round(pos.y - camY + 8);
+             
+             let radius = light.radius;
+             if (light.flickers) radius += (Math.random() - 0.5) * 4;
+
+             const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, radius);
+             gradient.addColorStop(0, light.color); 
+             gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+             ctx.fillStyle = gradient;
+             ctx.beginPath();
+             ctx.arc(lx, ly, radius, 0, Math.PI * 2);
+             ctx.fill();
+        }
+    }
+
+    ctx.restore();
+}
             if (Math.random() < 0.5) createItem(world, x, y, "Iron Sword", "rhand", SPRITES.SWORD, 15);
             else createItem(world, x, y, "Wooden Shield", "lhand", SPRITES.WOODEN_SHIELD, 0);
         }
