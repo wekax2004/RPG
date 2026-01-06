@@ -150,6 +150,29 @@ export class Skills {
     magic: Skill = new Skill(0, 0); // Magic Level (0 start)
 }
 
+export class SpellBook {
+    // Spell Name -> Level (0 = locked, 1+ = learned)
+    knownSpells: Map<string, number> = new Map();
+    constructor() {
+        // Default: Fireball level 1 (if starting magus?)
+        // For now start empty or basic
+        this.knownSpells.set("Fireball", 1);
+    }
+}
+
+export class SkillPoints {
+    constructor(public current: number = 0, public total: number = 0) { }
+}
+
+export class ActiveSpell {
+    constructor(public spellName: string = "Fireball") { }
+}
+
+export class StatusEffect {
+    // Type: 'frozen', 'burning', 'poison'
+    constructor(public type: string, public duration: number, public power: number = 0) { }
+}
+
 export class Vocation {
     constructor(
         public name: string,

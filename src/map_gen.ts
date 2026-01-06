@@ -11,6 +11,7 @@ export function generateMap(width: number, height: number, seed: number): { widt
     // 2. Forests (Trees/Wood)
     // 3. Walls/Dungeons
 
+
     // Walls around edges
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -29,18 +30,21 @@ export function generateMap(width: number, height: number, seed: number): { widt
     }
 
     // Spawn Player in Center
-    const centerX = Math.floor(width / 2) * 16;
-    const centerY = Math.floor(height / 2) * 16;
+    const centerX = Math.floor(width / 2) * 32;
+    const centerY = Math.floor(height / 2) * 32;
 
     // Clear "Town" Area (Safe Zone)
     const townRadius = 10;
-    for (let y = centerY / 16 - townRadius; y <= centerY / 16 + townRadius; y++) {
-        for (let x = centerX / 16 - townRadius; x <= centerX / 16 + townRadius; x++) {
+    const centerTileX = Math.floor(centerX / 32);
+    const centerTileY = Math.floor(centerY / 32);
+
+    for (let y = centerTileY - townRadius; y <= centerTileY + townRadius; y++) {
+        for (let x = centerTileX - townRadius; x <= centerTileX + townRadius; x++) {
             if (x >= 0 && x < width && y >= 0 && y < height) {
                 // Border of town
-                if (Math.abs(x - centerX / 16) === townRadius || Math.abs(y - centerY / 16) === townRadius) {
+                if (Math.abs(x - centerTileX) === townRadius || Math.abs(y - centerTileY) === townRadius) {
                     // Add gates
-                    if (x !== centerX / 16 && y !== centerY / 16) {
+                    if (x !== centerTileX && y !== centerTileY) {
                         data[y * width + x] = 17; // Wall
                     } else {
                         data[y * width + x] = 16; // Gate/Grass
@@ -57,8 +61,8 @@ export function generateMap(width: number, height: number, seed: number): { widt
 
     // Helper: Generate House
     const generateHouse = (bx: number, by: number, w: number, h: number) => {
-        const tx = Math.floor(bx / 16);
-        const ty = Math.floor(by / 16);
+        const tx = Math.floor(bx / 32);
+        const ty = Math.floor(by / 32);
         for (let y = ty; y < ty + h; y++) {
             for (let x = tx; x < tx + w; x++) {
                 if (x >= 0 && x < width && y >= 0 && y < height) {
@@ -77,29 +81,29 @@ export function generateMap(width: number, height: number, seed: number): { widt
     };
 
     // Spawn Merchant House (East of Center)
-    generateHouse(centerX + 32, centerY - 16, 5, 5);
-    entities.push({ type: 'merchant', x: centerX + 32 + 32, y: centerY + 16 }); // Inside house roughly
+    generateHouse(centerX + 64, centerY - 32, 5, 5);
+    entities.push({ type: 'merchant', x: centerX + 64 + 64, y: centerY + 32 });
 
     // Spawn NPC House (West of Center)
-    generateHouse(centerX - 96, centerY - 16, 5, 5);
-    entities.push({ type: 'npc', x: centerX - 64, y: centerY + 16, text: "Beware the deep woods..." });
+    generateHouse(centerX - 192, centerY - 32, 5, 5);
+    entities.push({ type: 'npc', x: centerX - 128, y: centerY + 32, text: "Beware the deep woods..." });
 
     // Spawn Boss (Orc Warlord) Camp
     // Place far from center
-    const bossDist = 20 * 16;
+    const bossDist = 20 * 32;
     let bx = centerX;
     let by = centerY - bossDist;
     // Ensure bounds
-    if (by < 32) by = 32;
+    if (by < 64) by = 64;
 
     // Clear area for "Camp"
     const campRadius = 6;
-    const tileBX = Math.floor(bx / 16);
-    const tileBY = Math.floor(by / 16);
+    const tileBX = Math.floor(bx / 32);
+    const tileBY = Math.floor(by / 32);
     for (let y = tileBY - campRadius; y <= tileBY + campRadius; y++) {
         for (let x = tileBX - campRadius; x <= tileBX + campRadius; x++) {
             if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
-                data[y * width + x] = 19; // Wood floor / clear
+                data[y * width + x] = 19; // Wood floor
                 // Wall ring
                 if (Math.abs(x - tileBX) === campRadius || Math.abs(y - tileBY) === campRadius) {
                     if (y !== tileBY + campRadius) { // Leave entrance at bottom
@@ -111,8 +115,8 @@ export function generateMap(width: number, height: number, seed: number): { widt
     }
 
     entities.push({ type: 'boss', x: bx, y: by });
-    entities.push({ type: 'enemy', x: bx - 32, y: by + 32, enemyType: 'orc' });
-    entities.push({ type: 'enemy', x: bx + 32, y: by + 32, enemyType: 'orc' });
+    entities.push({ type: 'enemy', x: bx - 64, y: by + 64, enemyType: 'orc' });
+    entities.push({ type: 'enemy', x: bx + 64, y: by + 64, enemyType: 'orc' });
 
     // --- CRYPT GENERATION (Multi-Level) ---
     const levels = 3;
@@ -131,15 +135,15 @@ export function generateMap(width: number, height: number, seed: number): { widt
     const l1OriginX = levelConfigs[0].ox;
     const l1OriginY = levelConfigs[0].oy;
     const villageStairsX = centerX;
-    const villageStairsY = centerY + 32;
+    const villageStairsY = centerY + 64;
 
     entities.push({
         type: 'teleporter', x: villageStairsX, y: villageStairsY,
-        targetX: (l1OriginX + 2) * 16, targetY: (l1OriginY + 2) * 16 + 24
+        targetX: (l1OriginX + 2) * 32, targetY: (l1OriginY + 2) * 32 + 48
     });
-    entities.push({ type: 'teleporter', x: (l1OriginX + 2) * 16, y: (l1OriginY + 2) * 16, targetX: villageStairsX, targetY: villageStairsY + 24 });
+    entities.push({ type: 'teleporter', x: (l1OriginX + 2) * 32, y: (l1OriginY + 2) * 32, targetX: villageStairsX, targetY: villageStairsY + 48 });
 
-    data[(villageStairsY / 16) * width + (villageStairsX / 16)] = 19; // Wood floor mark
+    data[Math.floor(villageStairsY / 32) * width + Math.floor(villageStairsX / 32)] = 19; // Wood floor mark
 
     for (let i = 0; i < levels; i++) {
         const cfg = levelConfigs[i];
@@ -151,7 +155,6 @@ export function generateMap(width: number, height: number, seed: number): { widt
             for (let x = ox; x < ox + cfg.w; x++) {
                 if (x >= 0 && x < width && y >= 0 && y < height) {
                     // Floor Tile based on Level
-                    // Level 0: Stone (23), Level 1: Mossy (24), Level 2: Dark (25)
                     data[y * width + x] = 23 + i;
 
                     // Walls
@@ -162,11 +165,11 @@ export function generateMap(width: number, height: number, seed: number): { widt
                     else if (x % 6 === 0 && y % 6 === 0) {
                         data[y * width + x] = 17;
                         // Add Wall Torch
-                        entities.push({ type: 'torch', x: x * 16, y: y * 16 });
+                        entities.push({ type: 'torch', x: x * 32, y: y * 32 });
                     } else if (i > 0 && rng.next() < 0.05) {
-                        data[y * width + x] = 21; // Web (Level 2+)
+                        data[y * width + x] = 21; // Web 
                     } else if (i > 0 && rng.next() < 0.05) {
-                        data[y * width + x] = 22; // Bones (Level 2+)
+                        data[y * width + x] = 22; // Bones 
                     }
                 }
             }
@@ -176,33 +179,32 @@ export function generateMap(width: number, height: number, seed: number): { widt
         if (i < levels - 1) {
             const nextCfg = levelConfigs[i + 1];
             // Stairs Down (Bottom Right of current) -> Stairs Up (Top Left of next)
-            const downX = (ox + cfg.w - 3) * 16;
-            const downY = (oy + cfg.h - 3) * 16;
+            const downX = (ox + cfg.w - 3) * 32;
+            const downY = (oy + cfg.h - 3) * 32;
 
-            const upX = (nextCfg.ox + 2) * 16;
-            const upY = (nextCfg.oy + 2) * 16;
+            const upX = (nextCfg.ox + 2) * 32;
+            const upY = (nextCfg.oy + 2) * 32;
 
-            entities.push({ type: 'teleporter', x: downX, y: downY, targetX: upX, targetY: upY + 24 });
-            entities.push({ type: 'teleporter', x: upX, y: upY, targetX: downX, targetY: downY - 24 }); // Return trip
+            entities.push({ type: 'teleporter', x: downX, y: downY, targetX: upX, targetY: upY + 48 });
+            entities.push({ type: 'teleporter', x: upX, y: upY, targetX: downX, targetY: downY - 48 });
 
             // Mark stairs visually
-            data[(downY / 16) * width + (downX / 16)] = 20; // Stairs Sprites need logic? Or just use Teleporter sprite?
-            // Actually, we use Teleporter entity for logic, but let's clear wall if needed.
+            // Int conversion might be tricky if not aligned but strict ox/oy is integer coords.
+            data[Math.floor(downY / 32) * width + Math.floor(downX / 32)] = 20;
         }
 
         // Enemies
         if (i === levels - 1) {
             // BOSS ROOM
-            entities.push({ type: 'boss', x: (ox + cfg.w / 2) * 16, y: (oy + cfg.h / 2) * 16 });
+            entities.push({ type: 'boss', x: (ox + cfg.w / 2) * 32, y: (oy + cfg.h / 2) * 32 });
         }
 
         // Mobs
         for (let m = 0; m < cfg.density; m++) {
-            const mx = (ox + 2 + Math.floor(rng.next() * (cfg.w - 4))) * 16;
-            const my = (oy + 2 + Math.floor(rng.next() * (cfg.h - 4))) * 16;
-            // Avoid spawning on top of teleporters (simple check logic omitted for brevity, trust disjoint probability)
+            const mx = (ox + 2 + Math.floor(rng.next() * (cfg.w - 4))) * 32;
+            const my = (oy + 2 + Math.floor(rng.next() * (cfg.h - 4))) * 32;
             const type = cfg.mobs[Math.floor(rng.next() * cfg.mobs.length)];
-            const diff = 1.0 + (i * 0.5); // Level 1: 1.0, Level 2: 1.5, Level 3: 2.0
+            const diff = 1.0 + (i * 0.5);
             entities.push({ type: 'enemy', x: mx, y: my, enemyType: type, difficulty: diff });
         }
     }
@@ -210,7 +212,7 @@ export function generateMap(width: number, height: number, seed: number): { widt
     return {
         width,
         height,
-        tileSize: 16,
+        tileSize: 32,
         data,
         entities
     };

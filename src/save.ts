@@ -1,5 +1,6 @@
 import { World } from './engine';
-import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS } from './components';
+import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell } from './components';
+import { SPRITES } from './assets';
 
 import { UIManager } from './ui';
 
@@ -7,8 +8,8 @@ interface SaveData {
     position: { x: number, y: number };
     health: { current: number, max: number };
     inventory: {
-        items: Array<{ slot: string, name: string, uIndex: number, damage: number }>;
-        storage: Array<{ slot: string, name: string, uIndex: number, damage: number }>;
+        items: Array<{ slot: string, name: string, uIndex: number, damage: number, price: number, description: string, weaponType: string }>;
+        storage: Array<{ slot: string, name: string, uIndex: number, damage: number, price: number, description: string, weaponType: string }>;
         gold: number;
     };
     quest: {
@@ -21,6 +22,11 @@ interface SaveData {
     experience: { current: number, next: number, level: number };
     mana: { current: number, max: number };
     vocation: string;
+    magic?: {
+        knownSpells: Array<[string, number]>;
+        skillPoints: number;
+        activeSpell: string;
+    };
 }
 
 const SAVE_KEY = 'retro-rpg-save-v2';
@@ -36,19 +42,28 @@ export function saveGame(world: World, ui?: UIManager) {
     const quest = world.getComponent(playerEntity, QuestLog)!;
     const xp = world.getComponent(playerEntity, Experience)!;
     const voc = world.getComponent(playerEntity, Vocation);
+    const spells = world.getComponent(playerEntity, SpellBook);
+    const sp = world.getComponent(playerEntity, SkillPoints);
+    const active = world.getComponent(playerEntity, ActiveSpell);
 
     // Serialize Inventory
     const itemsFunc = (items: Map<string, Item>) => {
         const arr: any[] = [];
         items.forEach((item) => {
-            arr.push({ slot: item.slot, name: item.name, uIndex: item.uIndex, damage: item.damage });
+            arr.push({
+                slot: item.slot, name: item.name, uIndex: item.uIndex,
+                damage: item.damage, price: item.price || 10,
+                description: item.description || "", weaponType: item.weaponType || "sword"
+            });
         });
         return arr;
     };
 
     // Serialize Storage
     const storageArr = inv.storage.map(item => ({
-        slot: item.slot, name: item.name, uIndex: item.uIndex, damage: item.damage
+        slot: item.slot, name: item.name, uIndex: item.uIndex,
+        damage: item.damage, price: item.price || 10,
+        description: item.description || "", weaponType: item.weaponType || "sword"
     }));
 
     const data: SaveData = {
@@ -72,6 +87,11 @@ export function saveGame(world: World, ui?: UIManager) {
             current: xp ? xp.current : 0,
             next: xp ? xp.next : 100,
             level: xp ? xp.level : 1
+        },
+        magic: {
+            knownSpells: spells ? Array.from(spells.knownSpells.entries()) : [['Fireball', 1]],
+            skillPoints: sp ? sp.current : 0,
+            activeSpell: active ? active.spellName : 'Fireball'
         }
     };
 
@@ -139,17 +159,33 @@ export function loadGame(world: World, ui: UIManager): boolean {
 
         // Restore Inventory
         const inv = world.getComponent(playerEntity, Inventory)!;
+        inv.gold = data.inventory.gold || 0;
         inv.items.clear();
         inv.storage = [];
 
         data.inventory.items.forEach((i: any) => {
-            inv.items.set(i.slot, new Item(i.name, i.slot, i.uIndex, i.damage));
+            // Fix Sprite IDs (Migration)
+            if (i.name === "Wooden Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
+            else if (i.name === "Tower Shield") i.uIndex = SPRITES.SHIELD;
+            else if (i.name === "Wooden Sword") i.uIndex = SPRITES.WOODEN_SWORD;
+            else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
+            else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
+
+            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType);
+            inv.items.set(i.slot, item);
         });
 
         data.inventory.storage.forEach((i: any) => {
-            inv.storage.push(new Item(i.name, i.slot, i.uIndex, i.damage));
+            // Fix Sprite IDs (Migration)
+            if (i.name === "Wooden Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
+            else if (i.name === "Tower Shield") i.uIndex = SPRITES.SHIELD;
+            else if (i.name === "Wooden Sword") i.uIndex = SPRITES.WOODEN_SWORD;
+            else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
+            else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
+
+            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType);
+            inv.storage.push(item);
         });
-        inv.gold = (data.inventory as any).gold !== undefined ? (data.inventory as any).gold : 100;
 
         // Restore Quest
         const quest = world.getComponent(playerEntity, QuestLog)!;
@@ -173,6 +209,27 @@ export function loadGame(world: World, ui: UIManager): boolean {
             light.radius = 64;
             light.color = '#cc8844';
             light.flickers = true;
+        }
+
+        if (data.magic) {
+            const spells = world.getComponent(playerEntity, SpellBook);
+            if (spells) {
+                spells.knownSpells = new Map(data.magic.knownSpells);
+            }
+            const sp = world.getComponent(playerEntity, SkillPoints);
+            if (sp) {
+                sp.current = data.magic.skillPoints;
+            }
+            const active = world.getComponent(playerEntity, ActiveSpell);
+            if (active) {
+                active.spellName = data.magic.activeSpell;
+            }
+        } else {
+            // New Magic System Default (Old Save)
+            const spells = world.getComponent(playerEntity, SpellBook);
+            if (spells) spells.knownSpells.set("Fireball", 1);
+            const active = world.getComponent(playerEntity, ActiveSpell);
+            if (active) active.spellName = "Fireball";
         }
 
         ui.updateStatus(hp.current, hp.max, 50, 50, 400, inv.gold, xp.level, xp.current, xp.next);

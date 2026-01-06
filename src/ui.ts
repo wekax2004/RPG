@@ -1,4 +1,4 @@
-import { Inventory, Item, Health, Sprite, Lootable } from './components';
+import { Inventory, Item, Health, Sprite, Lootable, SpellBook, SkillPoints } from './components';
 import { spriteSheet, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
 
 export class UIManager {
@@ -32,7 +32,220 @@ export class UIManager {
     private inspectStats: HTMLElement;
 
     private skillsPanel!: HTMLElement;
+    private skillTreePanel!: HTMLElement;
+    private magicHudIcon!: HTMLElement;
 
+    constructor() {
+        this.box = document.getElementById('box-overlay')!;
+        this.text = document.getElementById('text')!;
+        this.hpVal = document.getElementById('hp-val')!;
+        this.manaVal = document.getElementById('mana-val')!;
+        this.capVal = document.getElementById('cap-val')!;
+        this.levelVal = document.getElementById('lvl-val')!;
+        this.xpVal = document.getElementById('xp-val')!;
+
+        this.createMagicHud(); // Add HUD icon
+        this.createSkillTree(); // Add Modal
+
+        // ... (Existing selections)
+        this.bagPanel = document.getElementById('backpack-panel') || this.createBag();
+        this.bagGrid = document.getElementById('backpack-grid')!;
+
+        // Shop...
+        this.shopPanel = document.getElementById('shop-panel') || this.createShop();
+        this.shopBuyList = document.getElementById('shop-buy-list')!;
+        this.shopSellList = document.getElementById('shop-sell-list')!;
+
+        // Loot...
+        this.lootPanel = document.getElementById('loot-panel') || this.createLoot();
+
+        this.inspectPanel = document.getElementById('inspect-panel')!;
+        this.inspectName = document.getElementById('inspect-name')!;
+        this.inspectDesc = document.getElementById('inspect-desc')!;
+        this.inspectStats = document.getElementById('inspect-stats')!;
+
+        // Chat Input (Bind to existing)
+        this.chatInput = document.getElementById('console-input') as HTMLInputElement;
+
+        // Backpack Toggle Event
+        const backpackSlot = document.querySelector('.slot.backpack');
+        if (backpackSlot) {
+            backpackSlot.addEventListener('click', () => {
+                this.toggleBag();
+            });
+            (backpackSlot as HTMLElement).style.backgroundColor = '#432';
+            (backpackSlot as HTMLElement).innerHTML = '<div style="color:#aaa; font-size:10px; padding:2px;">[BAG]</div>';
+        }
+    }
+
+    private chatInput!: HTMLInputElement;
+
+    createBag(): HTMLElement {
+        // Assume existing in HTML or create if missing (similar to others)
+        // For now, returning null/element as existing logic assumes it exists or creates it elsewhere?
+        // The original code accessed #backpack-panel directly. 
+        // Let's ensure it exists.
+        let panel = document.getElementById('backpack-panel');
+        if (!panel) {
+            // Create Backpack Panel dynamically if missing
+            panel = document.createElement('div');
+            panel.id = 'backpack-panel';
+            panel.className = 'panel hidden';
+            panel.innerHTML = `<div class="panel-header">Backpack</div><div id="backpack-grid" class="inventory-grid"></div>`;
+
+            // Append to sidebar
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.appendChild(panel);
+            else document.body.appendChild(panel);
+        }
+        return panel;
+    }
+
+    createShop(): HTMLElement {
+        let panel = document.getElementById('shop-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'shop-panel';
+            panel.className = 'panel hidden';
+            panel.innerHTML = `
+                <div class="panel-header">Merchant</div>
+                <div style="font-size:12px; color:#aaa; margin-bottom:4px;">Buying:</div>
+                <div id="shop-buy-list" style="margin-bottom:10px;"></div>
+                <div style="font-size:12px; color:#aaa; margin-bottom:4px;">Selling (Backpack):</div>
+                <div id="shop-sell-list"></div>
+                <div style="margin-top:10px; text-align:center; font-size:12px; cursor:pointer;" onclick="document.getElementById('shop-panel').classList.add('hidden')">Close</div>
+            `;
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.appendChild(panel);
+            else document.body.appendChild(panel);
+        }
+        return panel;
+    }
+
+    createLoot(): HTMLElement {
+        let panel = document.getElementById('loot-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'loot-panel';
+            panel.className = 'panel hidden';
+            panel.innerHTML = `
+                <div class="panel-header">Corpse Loot</div>
+                <div id="loot-grid" style="display:grid; grid-template-columns: repeat(5, 32px); gap: 4px; padding: 10px;"></div>
+                <div style="text-align:center; font-size:12px; cursor:pointer; margin-top:10px;" onclick="document.getElementById('loot-panel').classList.add('hidden')">Close</div>
+            `;
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.appendChild(panel);
+            else document.body.appendChild(panel);
+        }
+        return panel;
+    }
+
+    createMagicHud() {
+        const hud = document.createElement('div');
+        hud.id = 'magic-hud';
+        hud.style.position = 'absolute';
+        hud.style.top = '28px'; // Below Mana
+        hud.style.left = '4px';
+        hud.style.display = 'flex';
+        hud.style.alignItems = 'center';
+        hud.style.gap = '4px';
+        hud.style.zIndex = '10';
+        hud.innerHTML = `<div id="active-spell-icon" style="width:24px;height:24px;border:2px solid #58b;background:#222;image-rendering:pixelated;display:flex;align-items:center;justify-content:center;color:#58b;font-weight:bold;">F</div> <span style="font-size:10px;color:#acc;">[R] to Cast</span>`;
+        document.body.appendChild(hud);
+        this.magicHudIcon = document.getElementById('active-spell-icon')!;
+    }
+
+
+    createSkillTree() {
+        const p = document.createElement('div');
+        p.id = 'skill-tree-panel';
+        p.className = 'dialog-box hidden';
+        p.style.width = '200px';
+        p.style.height = '180px';
+        p.style.left = '50%';
+        p.style.top = '50%';
+        p.style.transform = 'translate(-50%, -50%)';
+        p.style.display = 'none'; // Ensure hidden start
+        p.innerHTML = `
+            <div style="text-align:center; margin-bottom: 8px; border-bottom: 1px solid #555; padding-bottom:4px;">
+                <span class="dialog-title">Arcane Knowledge</span>
+                <div style="position:absolute; right:4px; top:4px; cursor:pointer;" onclick="document.getElementById('skill-tree-panel').style.display='none'">X</div>
+            </div>
+            <div id="skill-points-display" style="text-align:center; color:#fd0; margin-bottom:8px;">Points: 0</div>
+            <div id="skill-tree-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px;">
+                <!-- Spells injected here -->
+            </div>
+            <div style="margin-top:8px; font-size:10px; color:#888; text-align:center;">Press 1-4 to Select Active Spell</div>
+        `;
+        document.body.appendChild(p);
+        this.skillTreePanel = p;
+    }
+
+    toggleSkillTree(spells: SpellBook, points: SkillPoints) {
+        if (this.skillTreePanel.style.display === 'none') {
+            this.skillTreePanel.style.display = 'block';
+            this.renderSkillTree(spells, points);
+        } else {
+            this.skillTreePanel.style.display = 'none';
+        }
+    }
+
+    renderSkillTree(book: SpellBook, points: SkillPoints) {
+        const grid = document.getElementById('skill-tree-grid')!;
+        grid.innerHTML = '';
+
+        const spells = [
+            { name: "Fireball", desc: "Burn foes", color: "#f80" },
+            { name: "Global Heal", desc: "Restore HP", color: "#0f0" },
+            { name: "Ice Shard", desc: "Freeze enemy", color: "#0ef" },
+            { name: "Chain Lightning", desc: "Zap multiple", color: "#ff0" }
+        ];
+
+        spells.forEach(spell => {
+            const level = book.knownSpells.get(spell.name) || 0;
+            const learned = level > 0;
+
+            const btn = document.createElement('div');
+            btn.style.border = learned ? `2px solid ${spell.color}` : '1px solid #444';
+            btn.style.background = learned ? '#222' : '#111';
+            btn.style.padding = '4px';
+            btn.style.cursor = 'pointer';
+            btn.style.opacity = learned ? '1' : '0.6';
+
+            btn.innerHTML = `
+                <div style="color:${spell.color}; font-weight:bold;">${spell.name}</div>
+                <div style="font-size:10px; color:#ccc;">Lvl: ${level}</div>
+                <div style="font-size:9px; color:#888;">${spell.desc}</div>
+            `;
+
+            // Click to Learn/Upgrade
+            btn.onclick = () => {
+                // Send Signal to Game (Hack via window or custom event ideally, but direct call for now?)
+                // We don't have ref to World here easily without callback.
+                // Let's emit a custom event
+                const event = new CustomEvent('skill-upgrade-request', { detail: { spell: spell.name } });
+                window.dispatchEvent(event);
+            };
+
+            grid.appendChild(btn);
+        });
+
+        document.getElementById('skill-points-display')!.innerText = `Available Points: ${points.current}`;
+    }
+
+    updateMagicHud(activeSpell: string) {
+        if (!this.magicHudIcon) return;
+        this.magicHudIcon.innerText = activeSpell.charAt(0).toUpperCase();
+        let color = '#ccc';
+        if (activeSpell === 'Fireball') color = '#f80';
+        if (activeSpell === 'Global Heal') color = '#0f0';
+        if (activeSpell === 'Ice Shard') color = '#0ef';
+        if (activeSpell === 'Chain Lightning') color = '#ff0';
+        this.magicHudIcon.style.color = color;
+        this.magicHudIcon.style.borderColor = color;
+    }
+
+    // Existing updateStatus update...
     updateStatus(hp: number, maxHp: number, mana: number, maxMana: number, capacity: number, gold: number, level: number, xp: number, nextXp: number, skills: any = null) {
         this.hpVal.innerText = `${hp}/${maxHp}`;
         this.manaVal.innerText = `${mana}/${maxMana}`;
@@ -100,46 +313,7 @@ export class UIManager {
         }
     }
 
-    constructor() {
-        this.box = document.getElementById('dialogue-box')!;
-        this.text = document.getElementById('dialogue-text')!;
-        this.hpVal = document.getElementById('hp-val')!;
-        this.manaVal = document.getElementById('mana-val')!;
-        this.capVal = document.getElementById('cap-val')!;
-        this.levelVal = document.getElementById('level-val')!;
-        this.xpVal = document.getElementById('xp-val')!;
-        this.bagPanel = document.getElementById('bag-panel')!;
-        this.bagGrid = document.getElementById('bag-grid')!;
-
-        // Shop UI
-        this.shopPanel = document.getElementById('shop-panel')!;
-        this.shopBuyList = document.getElementById('shop-buy-list')!;
-        this.shopSellList = document.getElementById('shop-sell-list')!;
-
-        // Backpack Toggle
-        const backpackSlot = document.querySelector('.slot.backpack');
-        if (backpackSlot) {
-            backpackSlot.addEventListener('click', () => {
-                this.toggleBag();
-            });
-            // Visual style for backpack slot
-            (backpackSlot as HTMLElement).style.backgroundColor = '#432';
-            (backpackSlot as HTMLElement).innerHTML = '<div style="color:#aaa; font-size:10px; padding:2px;">[BAG]</div>';
-            (backpackSlot as HTMLElement).innerHTML = '<div style="color:#aaa; font-size:10px; padding:2px;">[BAG]</div>';
-        }
-
-        // Inspect UI
-        this.inspectPanel = document.getElementById('inspection-panel')!;
-        this.inspectName = document.getElementById('inspect-name')!;
-        this.inspectDesc = document.getElementById('inspect-desc')!;
-        this.inspectStats = document.getElementById('inspect-stats')!;
-
-        // Initial Hide
-        this.inspectPanel.classList.add('hidden');
-
-        // Chat Input (Bind to existing)
-        this.chatInput = document.getElementById('console-input') as HTMLInputElement;
-    }
+    // Constructor Removed (Merged)
 
     private chatInput!: HTMLInputElement;
 
@@ -413,42 +587,7 @@ export class UIManager {
 
     openLoot(lootable: Lootable, entityId: number, playerInv: Inventory) {
         if (!this.lootPanel) {
-            // Lazy Create
-            const panel = document.createElement('div');
-            panel.id = 'loot-panel';
-            panel.className = 'panel';
-            panel.style.display = 'none'; // hidden class is better but style works
-            panel.classList.add('hidden');
-
-            const header = document.createElement('div');
-            header.className = 'panel-header';
-            header.innerText = 'Corpse Loot';
-            panel.appendChild(header);
-
-            const grid = document.createElement('div');
-            grid.id = 'loot-grid';
-            grid.style.display = 'grid';
-            grid.style.gridTemplateColumns = 'repeat(5, 32px)';
-            grid.style.gap = '4px';
-            grid.style.padding = '10px';
-            panel.appendChild(grid);
-
-            // Button to close
-            const closeBtn = document.createElement('div');
-            closeBtn.innerText = "Close";
-            closeBtn.style.textAlign = 'center';
-            closeBtn.style.fontSize = '12px';
-            closeBtn.style.cursor = 'pointer';
-            closeBtn.style.marginTop = '10px';
-            closeBtn.onclick = () => this.hideDialogue();
-            panel.appendChild(closeBtn);
-
-            // Append to sidebar or body?
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) sidebar.appendChild(panel);
-            else document.body.appendChild(panel);
-
-            this.lootPanel = panel;
+            this.lootPanel = this.createLoot();
         }
 
         this.activeLootEntityId = entityId;

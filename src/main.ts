@@ -1,5 +1,5 @@
 import { World, InputHandler } from './engine';
-import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem } from './game';
+import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell } from './game';
 import { Vocation, lightingRenderSystem, LightSource, RemotePlayer, Sprite, SPRITES, spriteSheet, Velocity } from './game'; // Fix TS2552
 import { UIManager, ConsoleManager, CharacterCreation } from './ui';
 import { saveGame, loadGame } from './save';
@@ -306,6 +306,8 @@ class Game {
             } else {
                 // Game Hotkeys
                 // Check both code (physical) and key (value)
+                // Game Hotkeys
+                // Check both code (physical) and key (value)
                 if (e.code === 'KeyP' || e.key.toLowerCase() === 'p') {
                     console.log("[Game] Toggling PvP...");
                     this.pvpEnabled = !this.pvpEnabled;
@@ -326,6 +328,52 @@ class Game {
                     if (pvpEl) {
                         pvpEl.innerText = this.pvpEnabled ? "PvP: ON" : "PvP: OFF";
                         pvpEl.style.color = this.pvpEnabled ? "#ff5555" : "#55ff55";
+                    }
+                }
+
+                // Magic Hotkeys
+                const player = this.world.query([PlayerControllable, SpellBook, SkillPoints, ActiveSpell])[0];
+                if (player !== undefined) {
+                    const spells = this.world.getComponent(player, SpellBook)!;
+                    const points = this.world.getComponent(player, SkillPoints)!;
+                    const active = this.world.getComponent(player, ActiveSpell)!;
+                    const vocation = this.world.getComponent(player, Vocation);
+                    const vocName = vocation ? vocation.name.toLowerCase() : 'knight';
+
+                    if (e.code === 'KeyK') {
+                        this.ui.toggleSkillTree(spells, points, vocName);
+                    } else if (e.key === '1') {
+                        // Slot 1: Light Healing (All)
+                        active.spellName = 'exura';
+                        this.ui.updateMagicHud(active.spellName);
+                        this.console.addSystemMessage("Active: Light Healing (exura)");
+                    } else if (e.key === '2') {
+                        // Slot 2: Primary Attack
+                        if (vocName === 'mage') active.spellName = 'adori flam';
+                        else if (vocName === 'ranger') active.spellName = 'utito san';
+                        else active.spellName = 'exori'; // Knight
+
+                        this.ui.updateMagicHud(active.spellName);
+                        this.console.addSystemMessage(`Active: ${active.spellName}`);
+                    } else if (e.key === '3') {
+                        // Slot 3: Secondary Attack / Utility
+                        if (vocName === 'mage') active.spellName = 'adori frigo';
+                        else if (vocName === 'knight') active.spellName = 'exori mas';
+                        else active.spellName = 'exura'; // Fallback
+
+                        this.ui.updateMagicHud(active.spellName);
+                        this.console.addSystemMessage(`Active: ${active.spellName}`);
+                    } else if (e.key === '4') {
+                        // Slot 4: Ultimate / Strong
+                        if (vocName === 'mage') active.spellName = 'exevo gran vis lux';
+                        else if (vocName === 'knight') active.spellName = 'exura'; // Fallback
+                        else active.spellName = 'exura'; // Fallback
+
+                        this.ui.updateMagicHud(active.spellName);
+                        this.console.addSystemMessage(`Active: ${active.spellName}`);
+                    } else if (e.code === 'KeyR') {
+                        // Cast Active Spell (Incantation is stored in active.spellName)
+                        castSpell(this.world, this.ui, active.spellName, this.network);
                     }
                 }
             }
@@ -545,8 +593,8 @@ class Game {
         // Draw Entities (foreground)
         renderSystem(this.world, this.ctx);
 
-        // Lighting Overlay
-        lightingRenderSystem(this.world, this.ctx, 0.92);
+        // Lighting Overlay (Day: 0.1, Night: 0.9)
+        lightingRenderSystem(this.world, this.ctx, 0.0); // 0.0 = Bright Day
 
         // Draw Floating Text (UI overlay layer)
         textRenderSystem(this.world, this.ctx);

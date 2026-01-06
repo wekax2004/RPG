@@ -10,7 +10,8 @@ import {
     Position, Velocity, Sprite, TileMap, PlayerControllable, RemotePlayer, AI, Interactable,
     Item, Inventory, Health, Camera, Particle, ScreenShake, FloatingText, Name, QuestLog,
     QuestGiver, Facing, Projectile, Mana, Experience, Merchant, Skill, Skills, Vocation,
-    VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable
+    VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable,
+    SpellBook, SkillPoints, ActiveSpell, StatusEffect
 } from './components';
 import { NetworkManager } from './network';
 
@@ -69,17 +70,17 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
         // Priority: Interactions > Targeting
         for (const id of interactables) {
             const pos = world.getComponent(id, Position)!;
-            if (worldX >= pos.x && worldX <= pos.x + 16 &&
-                worldY >= pos.y && worldY <= pos.y + 16) {
+            if (worldX >= pos.x && worldX <= pos.x + 32 &&
+                worldY >= pos.y && worldY <= pos.y + 32) {
 
                 const player = world.query([PlayerControllable, Position])[0];
                 if (player) {
                     const pPos = world.getComponent(player, Position)!;
-                    const dx = (pPos.x + 8) - (pos.x + 8);
-                    const dy = (pPos.y + 8) - (pos.y + 8);
+                    const dx = (pPos.x + 16) - (pos.x + 16);
+                    const dy = (pPos.y + 16) - (pos.y + 16);
                     const dist = Math.sqrt(dx * dx + dy * dy);
 
-                    if (dist <= 40) {
+                    if (dist <= 80) {
                         // Execute Interaction
                         const lootable = world.getComponent(id, Lootable);
                         const merchant = world.getComponent(id, Merchant);
@@ -114,9 +115,9 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
             if (world.getComponent(eId, PlayerControllable)) continue;
             const pos = world.getComponent(eId, Position)!;
 
-            // Box Check (16x16)
-            if (worldX >= pos.x && worldX <= pos.x + 16 &&
-                worldY >= pos.y && worldY <= pos.y + 16) {
+            // Box Check (32x32)
+            if (worldX >= pos.x && worldX <= pos.x + 32 &&
+                worldY >= pos.y && worldY <= pos.y + 32) {
 
                 const player = world.query([PlayerControllable])[0];
                 if (player !== undefined) {
@@ -158,7 +159,7 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
     // const pc = world.getComponent(playerEntity, PlayerControllable)!;
 
     // Radius check instead of directional
-    const interactRadius = 40;
+    const interactRadius = 60;
 
     // Find closest interacting entity
     const interactables = world.query([Interactable, Position]);
@@ -167,8 +168,8 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
 
     for (const id of interactables) {
         const iPos = world.getComponent(id, Position)!;
-        const dx = (pos.x + 8) - (iPos.x + 8);
-        const dy = (pos.y + 8) - (iPos.y + 8);
+        const dx = (pos.x + 16) - (iPos.x + 16);
+        const dy = (pos.y + 16) - (iPos.y + 16);
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < minDist) {
@@ -375,22 +376,47 @@ export function remotePlayerInterpolationSystem(world: World, dt: number) {
     }
 }
 
+// Status Effect System
+export function statusEffectSystem(world: World, dt: number) {
+    const entities = world.query([StatusEffect, AI]); // Only affect AI for now? Or Players too?
+    for (const id of entities) {
+        const status = world.getComponent(id, StatusEffect)!;
+        const ai = world.getComponent(id, AI);
+
+        status.duration -= dt;
+
+        if (status.type === 'frozen') {
+            // Halt AI - crude method
+            if (ai) {
+                // Store original speed? We don't have a clean way yet. 
+                // Just set vel to 0 in movement system or ai system if frozen.
+                // We'll update aiSystem to check for StatusEffect
+            }
+        }
+
+        if (status.duration <= 0) {
+            world.removeComponent(id, StatusEffect);
+        }
+    }
+}
+
 export function aiSystem(world: World, dt: number) {
     const players = world.query([PlayerControllable, Position]);
     if (players.length === 0) return;
     const playerPos = world.getComponent(players[0], Position)!;
 
-    // Map Center (roughly, hardcoded for now or passed in?)
-    // In map_gen we used center of map. Let's assume map is 60x60 tiles = 960x960. Center is 480,480.
-    // Ideally we should pass map dimensions to aiSystem or store "SafeZone" component.
-    // For now, let's assume Town is near 480,480 (from map_gen).
+    // Map Center...
     const centerX = 480;
     const centerY = 480;
-    const safeRadius = 160; // 10 tiles
+    const safeRadius = 160;
 
     const enemies = world.query([AI, Position, Velocity]);
     for (const id of enemies) {
+        const status = world.getComponent(id, StatusEffect);
+        if (status && status.type === 'frozen') continue; // Skip AI if frozen
+
         const pos = world.getComponent(id, Position)!;
+        // ... (rest of AI)
         if (pos.x < -100) continue;
 
         const vel = world.getComponent(id, Velocity)!;
@@ -539,7 +565,7 @@ export function cameraSystem(world: World, mapWidth: number, mapHeight: number) 
 }
 
 // --- RENDERING ---
-import { spriteSheet, SPRITES, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
+import { spriteSheet, spriteCanvas, SPRITES, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
 
 
 export function combatSystem(world: World, input: InputHandler, audio: AudioController, ui: UIManager, network?: any, pvpEnabled: boolean = false) {
@@ -743,13 +769,20 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
 }
 
 function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: number, dy: number, size: number = 16) {
+    const sx = (uIndex % SHEET_COLS) * SHEET_TILE_SIZE;
+    const sy = Math.floor(uIndex / SHEET_COLS) * SHEET_TILE_SIZE;
+
+    // Use Canvas Source directly if available (Faster, no load wait)
+    if (spriteCanvas) {
+        ctx.drawImage(spriteCanvas, sx, sy, SHEET_TILE_SIZE, SHEET_TILE_SIZE, dx, dy, size, size);
+        return;
+    }
+
     if (!spriteSheet.complete || spriteSheet.naturalWidth === 0) {
         ctx.fillStyle = '#ff00ff';
         ctx.fillRect(dx, dy, size, size);
         return;
     }
-    const sx = (uIndex % SHEET_COLS) * SHEET_TILE_SIZE;
-    const sy = Math.floor(uIndex / SHEET_COLS) * SHEET_TILE_SIZE;
     ctx.drawImage(spriteSheet, sx, sy, SHEET_TILE_SIZE, SHEET_TILE_SIZE, dx, dy, size, size);
 }
 
@@ -776,7 +809,7 @@ export function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
                 if (tileId === 17) drawWall(ctx, drawX, drawY, map.tileSize);
                 else {
                     // Direct map: Sprite ID matches Tile ID
-                    drawSprite(ctx, tileId, drawX, drawY, 16);
+                    drawSprite(ctx, tileId, drawX, drawY, map.tileSize);
                 }
             }
         }
@@ -953,6 +986,10 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
         const cam = world.getComponent(cameraEntity, Camera)!;
         camX = Math.floor(cam.x);
         camY = Math.floor(cam.y);
+        if (isNaN(camX) || isNaN(camY)) {
+            console.error("Camera NaN detected! Resetting.");
+            cam.x = 0; cam.y = 0; camX = 0; camY = 0;
+        }
     }
     const entities = world.query([Position, Sprite]);
     entities.sort((a, b) => {
@@ -1004,7 +1041,7 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
-    world.addComponent(e, new Sprite(SPRITES.PLAYER, 16));
+    world.addComponent(e, new Sprite(SPRITES.PLAYER, 32));
     world.addComponent(e, new PlayerControllable());
     world.addComponent(e, new Inventory());
     world.addComponent(e, new Health(200, 200));
@@ -1044,27 +1081,27 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
     const hpScale = difficulty;
 
     if (type === "wolf") {
-        world.addComponent(e, new Sprite(SPRITES.WOLF, 16));
+        world.addComponent(e, new Sprite(SPRITES.WOLF, 32));
         world.addComponent(e, new AI(50));
         world.addComponent(e, new Health(20 * hpScale, 20 * hpScale));
         world.addComponent(e, new Name("Wolf"));
     } else if (type === "skeleton") {
-        world.addComponent(e, new Sprite(SPRITES.SKELETON, 16));
+        world.addComponent(e, new Sprite(SPRITES.SKELETON, 32));
         world.addComponent(e, new AI(20));
         world.addComponent(e, new Health(40 * hpScale, 40 * hpScale));
         world.addComponent(e, new Name("Skeleton"));
     } else if (type === "ghost") {
-        world.addComponent(e, new Sprite(SPRITES.GHOST, 16));
+        world.addComponent(e, new Sprite(SPRITES.GHOST, 32));
         world.addComponent(e, new AI(30));
         world.addComponent(e, new Health(60 * hpScale, 60 * hpScale));
         world.addComponent(e, new Name("Ghost"));
     } else if (type === "slime") {
-        world.addComponent(e, new Sprite(SPRITES.SLIME, 16));
+        world.addComponent(e, new Sprite(SPRITES.SLIME, 32));
         world.addComponent(e, new AI(10)); // Slow
         world.addComponent(e, new Health(100 * hpScale, 100 * hpScale)); // Tanky
         world.addComponent(e, new Name("Slime"));
     } else {
-        world.addComponent(e, new Sprite(SPRITES.ORC, 16));
+        world.addComponent(e, new Sprite(SPRITES.ORC, 32));
         world.addComponent(e, new AI(30));
         world.addComponent(e, new Health(30 * hpScale, 30 * hpScale));
         world.addComponent(e, new Name("Orc"));
@@ -1076,7 +1113,7 @@ export function createBoss(world: World, x: number, y: number) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
-    world.addComponent(e, new Sprite(SPRITES.ORC, 24));
+    world.addComponent(e, new Sprite(SPRITES.ORC, 48)); // Boss bigger
     world.addComponent(e, new AI(40));
     world.addComponent(e, new Health(200, 200));
     world.addComponent(e, new Name("Orc Warlord"));
@@ -1087,7 +1124,7 @@ export function createNPC(world: World, x: number, y: number, text: string) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
-    world.addComponent(e, new Sprite(SPRITES.NPC, 16));
+    world.addComponent(e, new Sprite(SPRITES.NPC, 32));
     world.addComponent(e, new Interactable(text));
     world.addComponent(e, new QuestGiver("Kill Warlord", "Orc Warlord", 1, "The Orc Warlord threatens us! Slay him!", "Have you killed the Warlord?", "The Warlord is dead! We are saved!"));
     return e;
@@ -1096,7 +1133,7 @@ export function createNPC(world: World, x: number, y: number, text: string) {
 export function createMerchant(world: World, x: number, y: number) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
-    world.addComponent(e, new Sprite(SPRITES.NPC, 16));
+    world.addComponent(e, new Sprite(SPRITES.NPC, 32));
     world.addComponent(e, new Interactable("Open Shop"));
     const merch = new Merchant();
     merch.items.push(new Item("Health Potion", "potion", SPRITES.POTION, 20, 50));
@@ -1112,7 +1149,7 @@ export function createTeleporter(world: World, x: number, y: number, targetX: nu
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Teleporter(targetX, targetY));
-    world.addComponent(e, new Sprite(SPRITES.STAIRS, 16)); // Visual Marker
+    world.addComponent(e, new Sprite(SPRITES.STAIRS, 32)); // Visual Marker
     return e;
 }
 
@@ -1125,7 +1162,7 @@ export function createItem(world: World, x: number, y: number, name: string, slo
 
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
-    world.addComponent(e, new Sprite(uIndex, 12));
+    world.addComponent(e, new Sprite(uIndex, 24)); // Items slightly smaller than players
     if (slot === 'potion') price = 50;
     if (slot === 'lhand') price = 100;
     if (slot === 'rhand') price = 150;
@@ -1228,16 +1265,37 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
     const mana = world.getComponent(playerEntity, Mana)!;
     const pos = world.getComponent(playerEntity, Position)!;
     const facing = world.getComponent(playerEntity, Facing)!;
-    const skills = world.getComponent(playerEntity, Skills); // Optional for safety
+    const skills = world.getComponent(playerEntity, Skills);
+    const spellBook = world.getComponent(playerEntity, SpellBook);
+    const vocation = world.getComponent(playerEntity, Vocation);
     const console = (ui as any).console;
 
-    if (spellName === 'exura') { // HEAL
+    const vocName = vocation ? vocation.name.toLowerCase() : 'knight'; // Default to Knight
+    const spellKey = spellName.toLowerCase();
+
+    // Helper: Verify Class Permission
+    const canCast = (allowedClasses: string[]) => {
+        if (!allowedClasses.includes(vocName)) {
+            if (console) console.addSystemMessage("Your vocation cannot use this spell.");
+            spawnFloatingText(world, pos.x, pos.y, "Restricted", '#ccc');
+            return false;
+        }
+        return true;
+    };
+
+    // Helper: Get Spell Level (Key is Incantation now)
+    const getLevel = (key: string) => {
+        return spellBook ? (spellBook.knownSpells.get(key) || 1) : 1;
+    };
+
+    if (spellKey === 'exura') {
+        // LIGHT HEALING (All Classes)
         if (mana.current >= 20) {
             mana.current -= 20;
             const oldHp = hp.current;
             const magicLevel = skills ? skills.magic.level : 1;
-            const healAmount = 20 + (magicLevel * 2);
-
+            const spellLvl = getLevel('exura');
+            const healAmount = 20 + (magicLevel * 2) + (spellLvl * 10);
             hp.current = Math.min(hp.current + healAmount, hp.max);
             const healed = hp.current - oldHp;
 
@@ -1246,25 +1304,53 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
             world.addComponent(ft, new Velocity(0, -20));
             world.addComponent(ft, new FloatingText(`+${healed}`, '#00f'));
 
-            if (console) console.addSystemMessage(`You healed ${healed} HP.`);
+            if (console) console.addSystemMessage(`You healed ${healed} HP (exura).`);
         } else {
             if (console) console.addSystemMessage(`Not enough mana.`);
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
-    } else if (spellName === 'fireball') { // FIREBALL
-        if (mana.current >= 10) {
-            mana.current -= 10;
+
+    } else if (spellKey === 'exura gran') {
+        // STRONG HEALING (Mage Only)
+        if (!canCast(['mage'])) return;
+
+        if (mana.current >= 70) {
+            mana.current -= 70;
+            const oldHp = hp.current;
+            const magicLevel = skills ? skills.magic.level : 1;
+            const spellLvl = getLevel('exura gran');
+            const healAmount = 50 + (magicLevel * 4) + (spellLvl * 15);
+            hp.current = Math.min(hp.current + healAmount, hp.max);
+            const healed = hp.current - oldHp;
+
+            const ft = world.createEntity();
+            world.addComponent(ft, new Position(pos.x, pos.y));
+            world.addComponent(ft, new Velocity(0, -20));
+            world.addComponent(ft, new FloatingText(`+${healed}`, '#0000ff')); // Darker blue
+
+            if (console) console.addSystemMessage(`You healed ${healed} HP (exura gran).`);
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+
+    } else if (spellKey === 'adori flam') {
+        // FIREBALL (Mage Only)
+        if (!canCast(['mage'])) return;
+
+        if (mana.current >= 20) {
+            mana.current -= 20;
             const pId = world.createEntity();
             world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
 
-            // Aiming Logic
+            // Aiming
             const targetComp = world.getComponent(playerEntity, Target);
             let vx = facing.x * 150;
             let vy = facing.y * 150;
 
             if (targetComp) {
                 const targetPos = world.getComponent(targetComp.targetId, Position);
-                if (targetPos) { // Target might be dead/gone
+                if (targetPos) {
                     const dx = (targetPos.x + 8) - (pos.x + 8);
                     const dy = (targetPos.y + 8) - (pos.y + 8);
                     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1273,36 +1359,71 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
                         vy = (dy / dist) * 150;
                     }
                 } else {
-                    // Target invalid, remove it
                     world.removeComponent(playerEntity, Target);
                 }
             }
 
             world.addComponent(pId, new Velocity(vx, vy));
             world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8));
-
             const magicLevel = skills ? skills.magic.level : 0;
-            const dmg = 20 + (magicLevel * 3);
+            const spellLvl = getLevel('adori flam');
+            const dmg = 25 + (magicLevel * 3) + (spellLvl * 5);
             world.addComponent(pId, new Projectile(dmg, 1.0, 'player'));
 
-            if (console) console.addSystemMessage("Cast Fireball!");
+            if (console) console.addSystemMessage("adori flam!");
         } else {
             if (console) console.addSystemMessage("Not enough Mana!");
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
-    } else if (spellName === 'heavystrike') { // HEAVY STRIKE
+
+    } else if (spellKey === 'adori frigo') {
+        // ICE SHARD (Mage Only)
+        if (!canCast(['mage'])) return;
+
+        if (mana.current >= 15) {
+            mana.current -= 15;
+            const pId = world.createEntity();
+            world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
+
+            const targetComp = world.getComponent(playerEntity, Target);
+            let vx = facing.x * 200;
+            let vy = facing.y * 200;
+            if (targetComp) {
+                const targetPos = world.getComponent(targetComp.targetId, Position);
+                if (targetPos) {
+                    const dx = (targetPos.x + 8) - (pos.x + 8);
+                    const dy = (targetPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) { vx = (dx / dist) * 200; vy = (dy / dist) * 200; }
+                }
+            }
+
+            world.addComponent(pId, new Velocity(vx, vy));
+            world.addComponent(pId, new Sprite(SPRITES.SPARKLE, 8)); // Visual
+
+            const magicLevel = skills ? skills.magic.level : 0;
+            const spellLvl = getLevel('adori frigo');
+            const dmg = 15 + (magicLevel * 2) + (spellLvl * 3);
+            world.addComponent(pId, new Projectile(dmg, 1.0, 'player_ice'));
+
+            if (console) console.addSystemMessage("adori frigo!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+
+    } else if (spellKey === 'exori') {
+        // HEAVY STRIKE (Knight Only)
+        if (!canCast(['knight'])) return;
+
         if (mana.current >= 20) {
             mana.current -= 20;
-
-            // Screen Shake
             const shake = world.createEntity();
             world.addComponent(shake, new ScreenShake(0.3, 3));
 
-            // Attack in front
             const targetX = pos.x + (facing.x * 16);
             const targetY = pos.y + (facing.y * 16);
 
-            // Basic hit detection (simplified)
             const enemies = world.query([Health, Position, Name]);
             let hit = false;
             for (const eId of enemies) {
@@ -1313,12 +1434,10 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
                 if (Math.abs(dx) < 16 && Math.abs(dy) < 16) {
                     const eHp = world.getComponent(eId, Health)!;
                     const swordSkill = skills ? skills.sword.level : 10;
-                    const dmg = 30 + (swordSkill * 2);
+                    const dmg = 30 + (swordSkill * 3); // Stronger for Knight
                     eHp.current -= dmg;
                     spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ff0000');
                     hit = true;
-
-                    // Kill check logic (shared with combat)
                     if (eHp.current <= 0) {
                         const nameComp = world.getComponent(eId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
@@ -1328,21 +1447,24 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
                     }
                 }
             }
-            if (console) console.addSystemMessage("Heavy Strike!");
+            if (console) console.addSystemMessage("exori!");
         } else {
             if (console) console.addSystemMessage("Not enough Mana!");
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
-    } else if (spellName === 'exori mas') { // KNIGHT: WHIRLWIND
+
+    } else if (spellKey === 'exori mas') {
+        // WHIRLWIND (Knight Only)
+        if (!canCast(['knight'])) return;
+
         if (mana.current >= 40) {
             mana.current -= 40;
-            // Visual: Screen Shake + Particles around
             const shake = world.createEntity();
             world.addComponent(shake, new ScreenShake(0.2, 4));
 
             const enemies = world.query([Health, Position, Name]);
             let hitCount = 0;
-            const range = 24; // slightly more than 16 to catch diagonals
+            const range = 24;
 
             for (const eId of enemies) {
                 if (world.getComponent(eId, PlayerControllable)) continue;
@@ -1352,11 +1474,10 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
                 if (Math.abs(dx) <= range && Math.abs(dy) <= range) {
                     const eHp = world.getComponent(eId, Health)!;
                     const swordSkill = skills ? skills.sword.level : 10;
-                    const dmg = 50 + (swordSkill * 3);
+                    const dmg = 50 + (swordSkill * 4);
                     eHp.current -= dmg;
                     spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ff0000');
                     hitCount++;
-                    // Death Logic
                     if (eHp.current <= 0) {
                         const nameComp = world.getComponent(eId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
@@ -1366,89 +1487,118 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
                     }
                 }
             }
-            if (console) console.addSystemMessage(`Whirlwind hit ${hitCount} enemies!`);
+            if (console) console.addSystemMessage(`exori mas: ${hitCount} hits!`);
         } else {
             if (console) console.addSystemMessage("Not enough Mana!");
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
-    } else if (spellName === 'exevo vis') { // MAGE: ENERGY WAVE
-        if (mana.current >= 80) {
-            mana.current -= 80;
-            // Beam Logic
+
+    } else if (spellKey === 'exevo gran vis lux') {
+        // CHAIN LIGHTNING (Mage Only)
+        // Note: Renamed from 'chain lightning' / 'exevo vis' logic
+        if (!canCast(['mage'])) return;
+
+        if (mana.current >= 60) {
+            mana.current -= 60;
+
+            const spellLvl = getLevel('exevo gran vis lux');
+            const magicLevel = skills ? skills.magic.level : 1;
+            const baseDmg = 40 + (magicLevel * 3) + (spellLvl * 5); // Stronger
+
+            // Chain Logic (Copied from previous impl, but refined)
             const enemies = world.query([Health, Position, Name]);
-            // 5 tiles length
-            for (let i = 1; i <= 5; i++) {
-                const tx = pos.x + (facing.x * 16 * i);
-                const ty = pos.y + (facing.y * 16 * i);
+            let currentPos = { x: pos.x, y: pos.y };
+            let excludeIds = new Set<number>();
+            let jumps = 4;
+            let hits = 0;
 
-                // Visual Effect at projectile path (static for now)
-                const vis = world.createEntity();
-                world.addComponent(vis, new Position(tx, ty));
-                // Use a generic particle for beam
-                const p = world.createEntity();
-                world.addComponent(p, new Position(tx + 8, ty + 8));
-                world.addComponent(p, new Particle(0.5, 0.5, '#5555ff', 3, 0, 0)); // Blue flash
+            for (let i = 0; i < jumps; i++) {
+                let closestId = -1;
+                let closestDist = 150;
 
-                // Hit detection on this tile
                 for (const eId of enemies) {
+                    if (excludeIds.has(eId)) continue;
                     if (world.getComponent(eId, PlayerControllable)) continue;
-                    const ePos = world.getComponent(eId, Position)!;
-                    // AABB Check
-                    if (ePos.x < tx + 16 && ePos.x + 16 > tx &&
-                        ePos.y < ty + 16 && ePos.y + 16 > ty) {
-                        const eHp = world.getComponent(eId, Health)!;
-                        const magicLevel = skills ? skills.magic.level : 0;
-                        const dmg = 60 + (magicLevel * 5);
-                        eHp.current -= dmg;
-                        spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#aa00ff');
 
-                        if (eHp.current <= 0) {
-                            const nameComp = world.getComponent(eId, Name);
-                            const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
-                            const loot = generateLoot(enemyType);
-                            createCorpse(world, ePos.x, ePos.y, loot);
-                            world.removeEntity(eId);
-                        }
+                    const ePos = world.getComponent(eId, Position)!;
+                    const dx = ePos.x - currentPos.x;
+                    const dy = ePos.y - currentPos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestId = eId;
                     }
                 }
+
+                if (closestId !== -1) {
+                    excludeIds.add(closestId);
+                    const ePos = world.getComponent(closestId, Position)!;
+
+                    // Particles
+                    const chunks = 5;
+                    for (let p = 0; p < chunks; p++) {
+                        const t = p / chunks;
+                        const lx = currentPos.x + (ePos.x - currentPos.x) * t;
+                        const ly = currentPos.y + (ePos.y - currentPos.y) * t;
+                        const part = world.createEntity();
+                        world.addComponent(part, new Position(lx + 4, ly + 4));
+                        world.addComponent(part, new Particle(0.3, 0.3, '#ff0', 2, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10));
+                    }
+
+                    const eHp = world.getComponent(closestId, Health)!;
+                    const dmg = Math.floor(baseDmg * (1.0 - (i * 0.15)));
+                    eHp.current -= dmg;
+                    spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ffff00');
+                    hits++;
+
+                    if (eHp.current <= 0) {
+                        const nameComp = world.getComponent(eId, Name);
+                        const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
+                        const loot = generateLoot(enemyType);
+                        createCorpse(world, ePos.x, ePos.y, loot);
+                        world.removeEntity(eId);
+                    }
+                    currentPos = { x: ePos.x, y: ePos.y };
+                } else {
+                    break;
+                }
             }
-            if (console) console.addSystemMessage("Energy Wave!");
+            if (console) console.addSystemMessage(`exevo gran vis lux: ${hits} hits!`);
         } else {
             if (console) console.addSystemMessage("Not enough Mana!");
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
-    } else if (spellName === 'utito san') { // RANGER: PRECISION SHOT
+
+    } else if (spellKey === 'utito san') {
+        // PRECISION SHOT (Ranger Only)
+        if (!canCast(['ranger'])) return;
+
         if (mana.current >= 20) {
             mana.current -= 20;
-
             const pId = world.createEntity();
             world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
 
-            // Aiming Logic
+            // Aiming
             const targetComp = world.getComponent(playerEntity, Target);
-            let vx = facing.x * 250; // Faster
+            let vx = facing.x * 250;
             let vy = facing.y * 250;
-
             if (targetComp) {
                 const targetPos = world.getComponent(targetComp.targetId, Position);
                 if (targetPos) {
                     const dx = (targetPos.x + 8) - (pos.x + 8);
                     const dy = (targetPos.y + 8) - (pos.y + 8);
                     const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 0) {
-                        vx = (dx / dist) * 250;
-                        vy = (dy / dist) * 250;
-                    }
+                    if (dist > 0) { vx = (dx / dist) * 250; vy = (dy / dist) * 250; }
                 }
             }
             world.addComponent(pId, new Velocity(vx, vy));
-            world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8)); // Re-use fireball sprite for now
-
+            world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8));
             const distSkill = skills ? skills.distance.level : 10;
             const dmg = 40 + (distSkill * 3);
-            world.addComponent(pId, new Projectile(dmg, 0.8, 'player')); // Short life
+            world.addComponent(pId, new Projectile(dmg, 0.8, 'player'));
 
-            if (console) console.addSystemMessage("Precision Shot sent!");
+            if (console) console.addSystemMessage("utito san!");
         } else {
             if (console) console.addSystemMessage("Not enough Mana!");
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
