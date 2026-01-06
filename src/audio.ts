@@ -139,4 +139,147 @@ export class AudioController {
         this.playTone(554, 'square', 0.2, now + 0.1);
         this.playTone(659, 'square', 0.4, now + 0.2);
     }
+    // --- New Immersive Audio Methods ---
+
+    playFootstep(material: 'grass' | 'stone' | 'wood') {
+        if (!this.initialized) return;
+
+        const now = this.ctx.currentTime;
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+
+        // Create random noise burst
+        const bufferSize = this.ctx.sampleRate * 0.1;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        // Shape based on material
+        if (material === 'wood') {
+            // Low thud
+            filter.type = 'lowpass';
+            filter.frequency.value = 200;
+            filter.Q.value = 1;
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        } else if (material === 'stone') {
+            // High click
+            filter.type = 'highpass';
+            filter.frequency.value = 1000;
+            filter.Q.value = 0.5;
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+        } else { // Grass
+            // Soft noise
+            filter.type = 'bandpass';
+            filter.frequency.value = 600;
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.15);
+        }
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        noise.start();
+    }
+
+    private currentAmbience: 'village' | 'crypt' | null = null;
+    private ambienceNodes: AudioNode[] = [];
+
+    setAmbience(type: 'village' | 'crypt') {
+        if (this.currentAmbience === type) return;
+        this.currentAmbience = type;
+        this.stopAmbience();
+
+        if (type === 'crypt') {
+            // Scary Drone (Brown Noise-ish)
+            this.startDrone();
+        } else {
+            // Restart standard BGM loop (Village)
+            this.startMusic();
+        }
+    }
+
+    private stopAmbience() {
+        this.ambienceNodes.forEach(node => node.disconnect());
+        this.ambienceNodes = [];
+        this.stopMusic(); // Stop the melody loop if switching to Crypt
+    }
+
+    private startDrone() {
+        if (!this.initialized) return;
+        // Simple low frequency oscillator FM synthesis for "rumble"
+        const osc = this.ctx.createOscillator();
+        const lfo = this.ctx.createOscillator();
+        const lfoGain = this.ctx.createGain();
+        const gain = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+
+        osc.type = 'sawtooth';
+        osc.frequency.value = 50; // Low rumble root
+
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.2; // Slow modulation
+        lfoGain.gain.value = 20; // Modulate pitch by +/- 20Hz
+
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+
+        filter.type = 'lowpass';
+        filter.frequency.value = 120;
+
+        gain.gain.value = 0.2; // Constant low volume
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+
+        osc.start();
+        lfo.start();
+        this.ambienceNodes.push(osc, lfo, lfoGain, gain, filter);
+    }
+
+
+    update(dt: number, listenerX: number, listenerY: number, emitters: { x: number, y: number }[]) {
+        if (!this.initialized) return;
+
+        // Emitter Logic (Torch Crackle)
+        for (const e of emitters) {
+            const dx = e.x - listenerX;
+            const dy = e.y - listenerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            // If close, perform random crackle
+            if (dist < 100 && Math.random() < 0.05) {
+                this.playCrackle(1 - (dist / 100)); // Volume falls off with distance
+            }
+        }
+    }
+
+    private playCrackle(vol: number) {
+        // Short high-pass noise burst
+        const bufferSize = this.ctx.sampleRate * 0.05;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * vol;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.value = 2000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.1 * vol;
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        noise.start();
+    }
 }

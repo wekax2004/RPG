@@ -1,139 +1,150 @@
-import { Packet, OpCode } from './server/protocol';
-
-// Interface for the Preload API
-interface NetworkAPI {
-    sendPacket: (buffer: Uint8Array) => void;
-    onPacket: (callback: (data: Uint8Array) => void) => void;
-}
-
-declare global {
-    interface Window {
-        networkAPI: NetworkAPI;
-    }
-}
+import { PacketType, PacketWriter, PacketReader } from './protocol';
 
 export class NetworkManager {
-    public onMessage: (msg: string) => void = () => { };
-    public onStats: (hp: number, maxHp: number, mana: number, maxMana: number) => void = () => { };
+    public playerId: number | null = null;
+    public connected: boolean = false;
+    public onLogin: ((seed: number, spawnX: number, spawnY: number) => void) | null = null;
+    public onMessage: ((msg: string) => void) | null = null;
+    public onStats: ((hp: number, maxHp: number, mana: number, maxMana: number) => void) | null = null;
 
-    private buffer: Uint8Array = new Uint8Array(0);
+    constructor(onLogin?: (seed: number, spawnX: number, spawnY: number) => void) {
+        if (onLogin) this.onLogin = onLogin;
 
-    constructor() {
-        if (window.networkAPI) {
-            window.networkAPI.onPacket((data) => this.handleData(data));
-            console.log("NetworkManager: Connected to Bridge");
-
-            // Send Login Packet Example
-            this.sendLogin("Player1");
-        } else {
-            console.warn("NetworkManager: No networkAPI found (Browser Mode?)");
+        // Listen for packets from Electron Main
+        if ((window as any).electronAPI) {
+            (window as any).electronAPI.onPacket((data: Uint8Array) => {
+                this.handlePacket(data);
+            });
         }
     }
 
-    private handleData(data: Uint8Array) {
-        // Concat buffer
-        const newBuf = new Uint8Array(this.buffer.length + data.length);
-        newBuf.set(this.buffer);
-        newBuf.set(data, this.buffer.length);
-        this.buffer = newBuf;
-
-        // Process Packets
-        while (this.buffer.length >= 2) {
-            // Read Length (Little Endian)
-            const length = this.buffer[0] | (this.buffer[1] << 8);
-
-            if (this.buffer.length < length + 2) {
-                break;
-            }
-
-            // Extract Body
-            const body = this.buffer.subarray(2, 2 + length);
-
-            // Create Packet wrapper
-            // Note: server/Packet uses Buffer. Node Buffer is Uint8Array subclass, but we might need a browser-compatible Packet class
-            // or polyfill Buffer. Vite polyfills Buffer usually? 
-            // Let's assume we need to adjust Packet class to work with Uint8Array if Buffer is missing.
-            // For now, let's try assuming standard Buffer works or use a simple DataView approach if straightforward.
-            // Actually, `server/protocol.ts` imports `Buffer`. We need to verify if that works in Vite.
-            // Vite usually requires `vite-plugin-node-polyfills` or similar.
-            // Alternatively, we rewrite Packet to be isomorphic (DataView).
-
-            // For this step, I'll pass it to a handler that assumes it works, 
-            // but I suspect I might need to refactor `Packet` to be isomorphic.
-            this.handlePacket(body);
-
-            // Scavenge
-            this.buffer = this.buffer.subarray(2 + length);
-        }
-    }
-
-    private handlePacket(data: Uint8Array) {
-        try {
-            const packet = new Packet(data);
-            const op = packet.readOpCode();
-
-            if (op === OpCode.SAY) {
-                const msg = packet.readString();
-                console.log(`[Net] Chat: ${msg}`);
-                if (this.onMessage) this.onMessage(msg);
-            } else if (op === OpCode.UPDATE_STATS) {
-                const hp = packet.readUint16();
-                const maxHp = packet.readUint16();
-                const mana = packet.readUint16();
-                const maxMana = packet.readUint16();
-                console.log(`[Net] Stats Update - HP: ${hp}/${maxHp}, Mana: ${mana}/${maxMana}`);
-                if (this.onStats) this.onStats(hp, maxHp, mana, maxMana);
-            } else {
-                console.log(`[Net] OpCode: ${op}`);
-            }
-        } catch (e) { console.error(e); }
-    }
-
-    private sendRaw(packet: Packet) {
-        const body = packet.getBuffer();
-        const length = body.length;
-
-        // Create framed buffer: [Len (2 bytes)] + [Body]
-        const framed = new Uint8Array(2 + length);
-
-        // Write Length (Little Endian)
-        framed[0] = length & 0xFF;
-        framed[1] = (length >> 8) & 0xFF;
-
-        // Copy Body
-        framed.set(body, 2);
-
-        console.log(`[Net] Sending Framed Packet (BodyLen: ${length})`);
-        window.networkAPI.sendPacket(framed);
-    }
-
-    sendLogin(name: string) {
-        const p = new Packet();
-        p.writeOpCode(OpCode.LOGIN);
+    login(name: string) {
+        console.log(`[Network] Sending Login for ${name}...`);
+        const p = new PacketWriter(128);
+        p.writeUint8(PacketType.LOGIN);
         p.writeString(name);
-        this.sendRaw(p);
+        this.send(p);
     }
 
-    sendMove(dx: number, dy: number) {
-        const p = new Packet();
-        p.writeOpCode(OpCode.MOVE);
-        p.writeUint8(dx + 128);
-        p.writeUint8(dy + 128);
-        this.sendRaw(p);
+    sendMove(x: number, y: number) {
+        if (!this.connected) return;
+        const p = new PacketWriter(128);
+        p.writeUint8(PacketType.MOVE);
+        p.writeFloat32(x);
+        p.writeFloat32(y);
+        this.send(p);
     }
 
     sendSay(msg: string) {
-        const p = new Packet();
-        p.writeOpCode(OpCode.SAY); // 48
-        p.writeString(msg);
-        console.log(`[Net] Queuing SAY: ${msg}`);
-        this.sendRaw(p);
+        // Placeholder for now
+        // console.log("Sending chat:", msg);
     }
 
-    sendDamage(amount: number) {
-        const p = new Packet();
-        p.writeOpCode(OpCode.DAMAGE);
-        p.writeUint16(amount);
-        this.sendRaw(p);
+    private send(packet: PacketWriter) {
+        // Force copy to avoid serialization issues with views
+        const data = packet.getData();
+        const copy = new Uint8Array(data);
+        // console.log(`[Network] Passing ${copy.length} bytes to Electron bridge`);
+        (window as any).electronAPI.sendPacket(copy);
+    }
+
+    public onEntityUpdate: ((entities: { id: number, x: number, y: number }[]) => void) | null = null;
+
+    // ... constructor ...
+
+    // ... send methods ...
+
+    private handlePacket(data: Uint8Array) {
+        try {
+            // Ensure data is a valid Uint8Array
+            const validData = new Uint8Array(data);
+            const reader = new PacketReader(validData);
+
+            while (reader.remaining() > 0) {
+                const type = reader.readUint8();
+
+                if (type === PacketType.LOGIN_ACK) {
+                    this.playerId = reader.readUint32();
+                    const seed = reader.readUint32();
+                    const x = reader.readFloat32();
+                    const y = reader.readFloat32();
+
+                    console.log(`[Network] Login Success! ID: ${this.playerId}, Seed: ${seed}`);
+                    this.connected = true;
+                    if (this.onLogin) {
+                        this.onLogin(seed, x, y);
+                    }
+                } else if (type === PacketType.ENTITY_UPDATE) {
+                    const count = reader.readUint8();
+                    const entities = [];
+                    for (let i = 0; i < count; i++) {
+                        const id = reader.readUint32();
+                        const x = reader.readFloat32();
+                        const y = reader.readFloat32();
+                        entities.push({ id, x, y });
+                    }
+                    if (this.onEntityUpdate) this.onEntityUpdate(entities);
+
+                } else if (type === PacketType.CHAT) {
+                    const pid = reader.readUint32();
+                    const msg = reader.readString();
+                    if (this.onChat) this.onChat(pid, msg);
+                } else if (type === PacketType.SPAWN_ITEM) {
+                    const id = reader.readUint32();
+                    const x = reader.readFloat32();
+                    const y = reader.readFloat32();
+                    const sprite = reader.readUint16();
+                    const name = reader.readString();
+                    if (this.onSpawnItem) this.onSpawnItem(id, x, y, sprite, name);
+                } else if (type === PacketType.ITEM_DESPAWN) {
+                    const id = reader.readUint32();
+                    if (this.onItemDespawn) this.onItemDespawn(id);
+                }
+            }
+        } catch (e: any) {
+            console.error(`[Network] Packet Error: ${e.message}`, e);
+        }
+    }
+
+    public onChat: ((playerId: number, msg: string) => void) | null = null;
+    public onSpawnItem: ((id: number, x: number, y: number, sprite: number, name: string) => void) | null = null;
+    public onItemDespawn: ((id: number) => void) | null = null;
+
+    sendChat(msg: string) {
+        if (!this.connected) return;
+        // console.log(`[Network] Sending Chat: ${msg}`);
+        const p = new PacketWriter(512);
+        p.writeUint8(PacketType.CHAT);
+        p.writeString(msg);
+        this.send(p);
+    }
+
+    sendAttack(targetId: number) {
+        if (!this.connected) return;
+        // [Type 0x06] [TargetID u32]
+        const writer = new PacketWriter(5);
+        writer.writeUint8(PacketType.ATTACK);
+        writer.writeUint32(targetId);
+        this.send(writer);
+    }
+
+    sendSpawnItem(x: number, y: number, sprite: number, name: string) {
+        if (!this.connected) return;
+        const p = new PacketWriter(128);
+        p.writeUint8(PacketType.SPAWN_ITEM);
+        p.writeFloat32(x);
+        p.writeFloat32(y);
+        p.writeUint16(sprite);
+        p.writeString(name);
+        this.send(p);
+    }
+
+    sendPickupItem(id: number) {
+        // [Type 0x09] [NetID u32]
+        if (!this.connected) return;
+        const p = new PacketWriter(5);
+        p.writeUint8(PacketType.ITEM_PICKUP);
+        p.writeUint32(id);
+        this.send(p);
     }
 }

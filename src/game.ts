@@ -2,177 +2,19 @@ import { World, Entity, InputHandler } from './engine';
 import { UIManager } from './ui';
 import { AudioController } from './audio';
 
-// --- Components ---
-export class Position {
-    constructor(public x: number, public y: number) { }
-}
-
-export class Velocity {
-    constructor(public x: number, public y: number) { }
-}
-
-export class Sprite {
-    // uIndex: horizontal index in 16px grid
-    constructor(public uIndex: number, public size: number = 16) { }
-}
-
-export class TileMap {
-    constructor(
-        public width: number,
-        public height: number,
-        public tileSize: number,
-        public data: number[]
-    ) { }
-}
-
-export class PlayerControllable {
-    public facingX: number = 0;
-    public facingY: number = 1;
-}
-
-export class AI {
-    constructor(public speed: number = 30) { }
-}
-
-export class Interactable {
-    constructor(public message: string) { }
-}
-
-export class Item {
-    constructor(
-        public name: string,
-        public slot: string,
-        public uIndex: number,
-        public damage: number = 0,
-        public price: number = 10,
-        public description: string = "",
-        public weaponType: string = "sword"
-    ) { }
-}
-
-export class Inventory {
-    items: Map<string, Item> = new Map();
-    storage: Item[] = [];
-    gold: number = 0;
-    cap: number = 400; // Capacity (oz)
-    constructor(initialItems: Item[] = []) {
-        initialItems.forEach(item => this.items.set(item.name, item));
-    }
-}
-
-export class Health {
-    constructor(public current: number, public max: number) { }
-}
-
-export class Camera {
-    constructor(public x: number, public y: number) { }
-}
+// --- Components (Re-exported from separate file) ---
+// --- Components (Re-exported from separate file) ---
+export * from './components';
+export * from './assets';
+import {
+    Position, Velocity, Sprite, TileMap, PlayerControllable, RemotePlayer, AI, Interactable,
+    Item, Inventory, Health, Camera, Particle, ScreenShake, FloatingText, Name, QuestLog,
+    QuestGiver, Facing, Projectile, Mana, Experience, Merchant, Skill, Skills, Vocation,
+    VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable
+} from './components';
+import { NetworkManager } from './network';
 
 
-export class Particle {
-    constructor(
-        public life: number,
-        public maxLife: number,
-        public color: string,
-        public size: number,
-        public vx: number,
-        public vy: number
-    ) { }
-}
-
-export class ScreenShake {
-    constructor(public duration: number, public intensity: number) { }
-}
-
-export class FloatingText {
-    constructor(public text: string, public color: string = '#fff', public life: number = 1.0, public maxLife: number = 1.0) { }
-}
-
-export class Name {
-    constructor(public value: string) { }
-}
-
-export class QuestLog {
-    questId: string = "";
-    targetType: string = "";
-    targetCount: number = 0;
-    progress: number = 0;
-    completed: boolean = false;
-}
-
-export class QuestGiver {
-    constructor(
-        public questId: string,
-        public targetType: string,
-        public count: number,
-        public startText: string,
-        public progressText: string,
-        public completeText: string
-    ) { }
-}
-
-export class Facing {
-    constructor(public x: number, public y: number) { }
-}
-
-export class Projectile {
-    constructor(public damage: number, public life: number, public ownerType: string) { }
-}
-
-export class Mana {
-    constructor(public current: number, public max: number) { }
-}
-
-export class Experience {
-    constructor(public current: number, public next: number, public level: number) { }
-}
-
-export class Merchant {
-    items: Item[] = [];
-}
-
-export class Skill {
-    constructor(public level: number = 10, public xp: number = 0) { }
-}
-
-export class Skills {
-    sword: Skill = new Skill();
-    axe: Skill = new Skill();
-    club: Skill = new Skill();
-    distance: Skill = new Skill();
-    shielding: Skill = new Skill();
-    magic: Skill = new Skill(0, 0); // Magic Level (0 start)
-}
-
-export class Vocation {
-    constructor(
-        public name: string,
-        public hpGain: number,
-        public manaGain: number,
-        public capGain: number
-    ) { }
-}
-export const VOCATIONS: Record<string, { name: string, hpGain: number, manaGain: number, capGain: number, startHp: number, startMana: number, startCap: number }> = {
-    knight: { name: 'Knight', hpGain: 15, manaGain: 5, capGain: 25, startHp: 150, startMana: 20, startCap: 450 },
-    mage: { name: 'Mage', hpGain: 5, manaGain: 30, capGain: 10, startHp: 80, startMana: 100, startCap: 300 },
-    ranger: { name: 'Ranger', hpGain: 10, manaGain: 15, capGain: 20, startHp: 100, startMana: 60, startCap: 380 }
-};
-
-export class Target {
-    constructor(public targetId: number) { }
-}
-
-export class Teleporter {
-    constructor(public targetX: number, public targetY: number) { }
-}
-
-export class LightSource {
-    constructor(
-        public radius: number,
-        public color: string, // HEX or RGB
-        public flickers: boolean = false
-    ) { }
-}
 
 // --- Systems ---
 
@@ -220,6 +62,50 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
 
         const worldX = mx + camX;
         const worldY = my + camY;
+
+        const interactables = world.query([Interactable, Position]);
+        let clickedInteractable = false;
+
+        // Priority: Interactions > Targeting
+        for (const id of interactables) {
+            const pos = world.getComponent(id, Position)!;
+            if (worldX >= pos.x && worldX <= pos.x + 16 &&
+                worldY >= pos.y && worldY <= pos.y + 16) {
+
+                const player = world.query([PlayerControllable, Position])[0];
+                if (player) {
+                    const pPos = world.getComponent(player, Position)!;
+                    const dx = (pPos.x + 8) - (pos.x + 8);
+                    const dy = (pPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist <= 40) {
+                        // Execute Interaction
+                        const lootable = world.getComponent(id, Lootable);
+                        const merchant = world.getComponent(id, Merchant);
+
+                        if (lootable) {
+                            const playerInv = world.getComponent(player, Inventory)!;
+                            ui.openLoot(lootable, id, playerInv);
+                            clickedInteractable = true;
+                        } else if (merchant) {
+                            const playerInv = world.getComponent(player, Inventory)!;
+                            ui.currentMerchant = merchant;
+                            ui.activeMerchantId = id;
+                            ui.renderShop(merchant, playerInv);
+                            ui.shopPanel.classList.remove('hidden');
+                            clickedInteractable = true;
+                        }
+                    } else {
+                        if ((ui as any).console) (ui as any).console.addSystemMessage("Too far away.");
+                        clickedInteractable = true; // Consume click
+                    }
+                }
+                if (clickedInteractable) break;
+            }
+        }
+
+        if (clickedInteractable) return; // Skip targeting if we interacted
 
         const enemies = world.query([Health, Position, Name]);
         let clickedTarget = false;
@@ -295,6 +181,13 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
         const interact = world.getComponent(closestId, Interactable)!;
         const qGiver = world.getComponent(closestId, QuestGiver);
         const merchant = world.getComponent(closestId, Merchant);
+        const lootable = world.getComponent(closestId, Lootable);
+
+        if (lootable) {
+            const playerInv = world.getComponent(playerEntity, Inventory)!;
+            ui.openLoot(lootable, closestId, playerInv);
+            return;
+        }
 
         if (merchant) {
             // Open Shop
@@ -397,9 +290,9 @@ export function projectileSystem(world: World, dt: number, ui: UIManager, audio:
                     if (hp.current <= 0) {
                         const nameComp = world.getComponent(eId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
-                        dropLoot(world, ePos.x, ePos.y, enemyType);
-
+                        const loot = generateLoot(enemyType);
                         gainExperience(world, 50, ui, audio);
+                        createCorpse(world, ePos.x, ePos.y, loot);
                         world.removeEntity(eId);
                     }
                     return;
@@ -452,6 +345,32 @@ export function screenShakeSystem(world: World, dt: number) {
             shakeOffsetY = (Math.random() - 0.5) * shake.intensity;
         } else {
             world.removeEntity(id);
+        }
+    }
+}
+
+export function remotePlayerInterpolationSystem(world: World, dt: number) {
+    const entities = world.query([RemotePlayer, Position]);
+    const lerpFactor = 10 * dt; // Adjust speed (10 = fast snap, 5 = smoother)
+
+    for (const id of entities) {
+        const rp = world.getComponent(id, RemotePlayer)!;
+        const pos = world.getComponent(id, Position)!;
+
+        // Simple Linear Interpolation
+        pos.x += (rp.targetX - pos.x) * lerpFactor;
+        pos.y += (rp.targetY - pos.y) * lerpFactor;
+
+        // Teleport if too far (lag spike or teleport packet)
+        const dist = Math.abs(pos.x - rp.targetX) + Math.abs(pos.y - rp.targetY);
+        if (dist > 50) {
+            pos.x = rp.targetX;
+            pos.y = rp.targetY;
+        }
+
+        // Update Facing for animation (basic)
+        if (Math.abs(rp.targetX - pos.x) > 1) {
+            // Side facing logic if we had it, for now just move
         }
     }
 }
@@ -509,7 +428,9 @@ export function aiSystem(world: World, dt: number) {
     }
 }
 
-export function movementSystem(world: World, dt: number) {
+
+
+export function movementSystem(world: World, dt: number, audio: AudioController, network?: NetworkManager) {
     const entities = world.query([Position, Velocity]);
 
     const mapEntity = world.query([TileMap])[0];
@@ -522,6 +443,7 @@ export function movementSystem(world: World, dt: number) {
         const pos = world.getComponent(id, Position)!;
         const vel = world.getComponent(id, Velocity)!;
 
+        // Direction logic ...
         if (vel.x !== 0 || vel.y !== 0) {
             const facing = world.getComponent(id, Facing);
             if (facing) {
@@ -541,54 +463,59 @@ export function movementSystem(world: World, dt: number) {
         const nextY = pos.y + vel.y * dt;
 
         if (map) {
+            // ... collision logic ...
             const centerX = nextX + 8;
             const centerY = nextY + 8;
-
             const tileX = Math.floor(centerX / map.tileSize);
             const tileY = Math.floor(centerY / map.tileSize);
 
             if (tileX < 0 || tileX >= map.width || tileY < 0 || tileY >= map.height) continue;
+            const tileId = map.data[tileY * map.width + tileX];
 
-            // Check for Teleporters (Entities with Teleporter + Position)
-            // Optimization: Only check if player? Or all? Let's do player for now.
+            // Collision Check (Walls 17, Water 18, Pillars 20/22?)
+            // For now existing logic:
+            if (tileId === 17) continue;
+            if (tileId === 18) continue;
+
+            // Update Position
+            pos.x = nextX;
+            pos.y = nextY;
+
+            // Network Update (Player Only)
             if (world.getComponent(id, PlayerControllable)) {
+                if (network) network.sendMove(pos.x, pos.y);
+
+                // Teleport Check
                 const teleporters = world.query([Teleporter, Position]);
                 for (const tId of teleporters) {
                     const tPos = world.getComponent(tId, Position)!;
                     const tData = world.getComponent(tId, Teleporter)!;
-                    // Center to Center check
-                    // Player is 16x16, Teleporter is 16x16
-                    const pCx = nextX + 8;
-                    const pCy = nextY + 8;
-                    const tCx = tPos.x + 8;
-                    const tCy = tPos.y + 8;
 
-                    const dx = pCx - tCx;
-                    const dy = pCy - tCy;
-
-                    // 12px radius trigger (slightly larger)
-                    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
-                        // Teleport!
-                        console.log(`Teleporting to ${tData.targetX}, ${tData.targetY}`);
+                    if (Math.abs((pos.x + 8) - (tPos.x + 8)) < 12 && Math.abs((pos.y + 8) - (tPos.y + 8)) < 12) {
                         pos.x = tData.targetX;
                         pos.y = tData.targetY;
-                        // Cancel velocity to prevent sliding
-                        world.getComponent(id, Velocity)!.x = 0;
-                        world.getComponent(id, Velocity)!.y = 0;
+                        // Sync Teleport too
+                        if (network) network.sendMove(pos.x, pos.y);
                         return;
                     }
                 }
+
+                // Footsteps
+                const pc = world.getComponent(id, PlayerControllable)!;
+                pc.footstepTimer -= dt;
+                if (pc.footstepTimer <= 0) {
+                    let material: 'grass' | 'stone' | 'wood' = 'grass';
+                    if (tileId === 19 || tileId === 20) material = 'wood';
+                    else if (tileId >= 23 || tileId === 17) material = 'stone';
+
+                    audio.playFootstep(material);
+                    pc.footstepTimer = 0.4;
+                }
             }
-
-            const tileId = map.data[tileY * map.width + tileX];
-            if (tileId === 17) continue; // Wall is 17 now? Need to verify logic
-            if (tileId === 18) continue; // Water
         }
-
-        pos.x = nextX;
-        pos.y = nextY;
     }
 }
+
 
 export function cameraSystem(world: World, mapWidth: number, mapHeight: number) {
     const playerEntity = world.query([PlayerControllable, Position])[0];
@@ -612,77 +539,10 @@ export function cameraSystem(world: World, mapWidth: number, mapHeight: number) 
 }
 
 // --- RENDERING ---
+import { spriteSheet, SPRITES, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
 
-export const spriteSheet = new Image();
-// spriteSheet.src = '/sprites.png'; // DISABLED: suspected bad file
 
-const canvas = document.createElement('canvas');
-canvas.width = 128;
-canvas.height = 128; // 8x8 grid of 16px sprites
-
-function generateSpriteSheet() {
-    console.log("Generating Procedural Sprites...");
-    const ctx = canvas.getContext('2d')!;
-    // Colors
-    const drawTile = (idx: number, color: string, icon?: (ctx: CanvasRenderingContext2D, x: number, y: number) => void) => {
-        const x = (idx % 8) * 16;
-        const y = Math.floor(idx / 8) * 16;
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, 16, 16);
-        if (icon) icon(ctx, x, y);
-    };
-
-    drawTile(0, '#0000', (c, x, y) => { c.fillStyle = '#33f'; c.fillRect(x + 4, y + 2, 8, 12); c.fillStyle = '#fc9'; c.fillRect(x + 5, y + 3, 6, 4); }); // Player
-    drawTile(1, '#0000', (c, x, y) => { c.fillStyle = '#151'; c.fillRect(x + 2, y + 2, 12, 12); c.fillStyle = '#f00'; c.fillRect(x + 4, y + 5, 2, 2); c.fillRect(x + 10, y + 5, 2, 2); }); // Orc
-    drawTile(2, '#0000', (c, x, y) => { c.fillStyle = '#a63'; c.fillRect(x + 4, y + 2, 8, 12); c.fillStyle = '#fc9'; c.fillRect(x + 5, y + 3, 6, 4); }); // NPC
-    drawTile(3, '#0000', (c, x, y) => { c.fillStyle = '#888'; c.fillRect(x + 2, y + 6, 12, 8); c.fillRect(x + 10, y + 3, 5, 5); c.fillStyle = '#f00'; c.fillRect(x + 11, y + 4, 1, 1); }); // Wolf
-    drawTile(4, '#0000', (c, x, y) => { c.fillStyle = '#ddd'; c.fillRect(x + 6, y + 2, 4, 4); c.fillRect(x + 7, y + 6, 2, 8); c.fillRect(x + 4, y + 6, 8, 2); c.fillRect(x + 5, y + 14, 2, 2); c.fillRect(x + 9, y + 14, 2, 2); }); // Skeleton
-    drawTile(5, '#0000', (c, x, y) => { c.fillStyle = '#ccf'; c.globalAlpha = 0.7; c.fillRect(x + 4, y + 2, 8, 10); c.fillRect(x + 2, y + 8, 12, 6); c.globalAlpha = 1.0; c.fillStyle = '#000'; c.fillRect(x + 5, y + 4, 2, 2); c.fillRect(x + 9, y + 4, 2, 2); }); // Ghost
-    drawTile(6, '#0000', (c, x, y) => { c.fillStyle = '#4f4'; c.beginPath(); c.arc(x + 8, y + 10, 6, 0, Math.PI * 2); c.fill(); c.fillStyle = '#000'; c.fillRect(x + 6, y + 8, 1, 1); c.fillRect(x + 9, y + 8, 1, 1); }); // Slime
-
-    drawTile(16, '#2a2', (c, x, y) => { c.fillStyle = '#4c4'; c.fillRect(x + 2, y + 2, 2, 2); }); // Grass
-    drawTile(17, '#777', (c, x, y) => { c.fillStyle = '#555'; c.fillRect(x, y + 3, 16, 1); c.fillRect(x, y + 13, 16, 1); c.fillRect(x + 8, y + 3, 1, 5); }); // Wall
-    drawTile(18, '#44f', (c, x, y) => { c.fillStyle = '#66f'; c.fillRect(x + 2, y + 4, 12, 2); }); // Water
-    drawTile(19, '#752', (c, x, y) => { c.fillStyle = '#541'; c.fillRect(x, y + 4, 16, 1); }); // Wood
-    drawTile(20, '#000', (c, x, y) => { c.fillStyle = '#444'; c.fillRect(x + 2, y + 2, 12, 12); c.fillStyle = '#777'; c.fillRect(x + 3, y + 3, 10, 2); c.fillRect(x + 4, y + 6, 8, 2); c.fillRect(x + 5, y + 9, 6, 2); }); // Stairs
-    drawTile(21, '#0000', (c, x, y) => { c.strokeStyle = '#eee'; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 16, y + 16); c.moveTo(x + 16, y); c.lineTo(x, y + 16); c.stroke(); }); // Web
-    drawTile(22, '#0000', (c, x, y) => { c.fillStyle = '#ccc'; c.fillRect(x + 6, y + 6, 4, 2); c.fillRect(x + 5, y + 5, 2, 2); c.fillRect(x + 9, y + 5, 2, 2); }); // Bones
-
-    drawTile(23, '#445', (c, x, y) => { c.fillStyle = '#556'; c.fillRect(x + 1, y + 1, 14, 14); c.fillStyle = '#334'; c.fillRect(x, y, 16, 1); c.fillRect(x, y, 1, 16); }); // Stone Floor (Lev 1)
-    drawTile(24, '#343', (c, x, y) => { c.fillStyle = '#454'; c.fillRect(x + 1, y + 1, 14, 14); c.fillStyle = '#232'; c.fillRect(x + 4, y + 4, 4, 4); c.fillRect(x + 10, y + 10, 2, 2); }); // Mossy Floor (Lev 2)
-    drawTile(25, '#223', (c, x, y) => { c.fillStyle = '#334'; c.fillRect(x, y, 16, 16); c.fillStyle = '#112'; c.beginPath(); c.moveTo(x + 2, y + 2); c.lineTo(x + 14, y + 14); c.stroke(); }); // Dark Cracked (Lev 3)
-
-    drawTile(32, '#0000', (c, x, y) => { c.fillStyle = '#f00'; c.beginPath(); c.arc(x + 8, y + 10, 5, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ccc'; c.fillRect(x + 6, y + 3, 4, 3); }); // Potion
-    drawTile(33, '#0000', (c, x, y) => { c.fillStyle = '#44a'; c.fillRect(x + 3, y + 3, 10, 10); c.fillStyle = '#ea0'; c.strokeRect(x + 3.5, y + 3.5, 9, 9); }); // Shield
-    drawTile(34, '#0000', (c, x, y) => { c.fillStyle = '#aaa'; c.fillRect(x + 6, y + 2, 4, 10); c.fillStyle = '#420'; c.fillRect(x + 4, y + 10, 8, 2); }); // Sword
-    drawTile(35, '#0000', (c, x, y) => { c.fillStyle = '#642'; c.beginPath(); c.arc(x + 8, y + 8, 6, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#853'; c.stroke(); c.fillStyle = '#999'; c.fillRect(x + 7, y + 7, 2, 2); }); // Wooden Shield
-    drawTile(36, '#0000', (c, x, y) => { c.fillStyle = '#fd0'; c.fillRect(x + 6, y + 2, 4, 10); c.fillStyle = '#408'; c.fillRect(x + 4, y + 10, 8, 2); c.fillStyle = '#f0f'; c.fillRect(x + 7, y + 12, 2, 3); }); // Noble Sword
-    drawTile(37, '#0000', (c, x, y) => { c.fillStyle = '#853'; c.fillRect(x + 6, y + 2, 4, 10); c.fillStyle = '#642'; c.fillRect(x + 4, y + 10, 8, 2); });
-    drawTile(40, '#0000', (c, x, y) => { c.fillStyle = '#f40'; c.beginPath(); c.arc(x + 8, y + 8, 4, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ff0'; c.beginPath(); c.arc(x + 8, y + 8, 2, 0, Math.PI * 2); c.fill(); }); // Fireball
-
-    spriteSheet.src = canvas.toDataURL();
-}
-
-generateSpriteSheet();
-
-/*
-spriteSheet.onerror = () => {
-    console.warn("Using Generated Sprites");
-    generateSpriteSheet();
-};
-*/
-
-const SHEET_TILE_SIZE = 16;
-const SHEET_COLS = 8;
-const SPRITES = {
-    PLAYER: 0, ORC: 1, NPC: 2, WOLF: 3, SKELETON: 4, GHOST: 5, SLIME: 6,
-    GRASS: 16, WALL: 17, WATER: 18, WOOD: 19, STAIRS: 20, WEB: 21, BONES: 22,
-    STONE: 23, MOSSY: 24, DARK: 25,
-    POTION: 32, SHIELD: 33, SWORD: 34, WOODEN_SHIELD: 35, NOBLE_SWORD: 36, WOODEN_SWORD: 37,
-    FIREBALL: 40
-};
-
-export function combatSystem(world: World, input: InputHandler, ui: UIManager, audio: AudioController) {
+export function combatSystem(world: World, input: InputHandler, audio: AudioController, ui: UIManager, network?: any, pvpEnabled: boolean = false) {
     // Auto-Attack (Target Locked)
     const playerEntity = world.query([PlayerControllable, Position, Inventory])[0];
     if (playerEntity === undefined) return;
@@ -769,36 +629,103 @@ export function combatSystem(world: World, input: InputHandler, ui: UIManager, a
 
     const enemies = world.query([Health, Position]);
     let hit = false;
-    const targets: { id: number, dist: number }[] = [];
-    for (const id of enemies) {
-        if (id === playerEntity) continue;
-        const ePos = world.getComponent(id, Position)!;
-        const dx = (pos.x + 8) - (ePos.x + 8);
-        const dy = (pos.y + 8) - (ePos.y + 8);
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist <= attackRadius) targets.push({ id, dist });
+    let targetId = -1;
+
+    // 1. Check Locked Target First
+    // Use existing variable from outer scope if accessible, or rename to avoid conflict
+    // The outer one is line 504. Let's start fresh for clarity or reuse.
+    // Actually, line 504 is 'if (targetComp)'. Where is it defined?
+    // It was passed into the function? No.
+    // It must be defined earlier in the function. Let me check line 48... NO.
+    // Ah, I missed where 'targetComp' was defined in the original file.
+    // Let's assume it IS defined earlier. I will use a NEW name 'lockedTarget'.
+
+    const lockedTarget = world.getComponent(playerEntity, Target);
+    if (lockedTarget) {
+        const tPos = world.getComponent(lockedTarget.targetId, Position);
+        if (tPos) {
+            const dx = (pos.x + 8) - (tPos.x + 8);
+            const dy = (pos.y + 8) - (tPos.y + 8);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= attackRadius) {
+                targetId = lockedTarget.targetId;
+            }
+        }
     }
-    targets.sort((a, b) => a.dist - b.dist);
 
-    if (targets.length > 0) {
-        const id = targets[0].id;
-        const health = world.getComponent(id, Health)!;
-        const ePos = world.getComponent(id, Position)!;
+    // 2. Fallback to Closest Enemy if no locked target or out of range
+    if (targetId === -1) {
+        const targets: { id: number, dist: number }[] = [];
+        for (const id of enemies) {
+            if (id === playerEntity) continue;
+            const ePos = world.getComponent(id, Position)!;
+            const dx = (pos.x + 8) - (ePos.x + 8);
+            const dy = (pos.y + 8) - (ePos.y + 8);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= attackRadius) targets.push({ id, dist });
+        }
+        targets.sort((a, b) => a.dist - b.dist);
+        if (targets.length > 0) targetId = targets[0].id;
+    }
 
-        health.current -= damage;
-        audio.playHit();
-        if ((ui as any).console) (ui as any).console.sendMessage(`You hit Enemy for ${damage} dmg.`);
+    if (targetId !== -1) {
+        const ePos = world.getComponent(targetId, Position)!;
 
-        const ft = world.createEntity();
-        world.addComponent(ft, new Position(ePos.x, ePos.y));
-        world.addComponent(ft, new Velocity(0, -20));
-        world.addComponent(ft, new FloatingText(`-${damage}`, '#ff3333'));
+        // Check Network Target
+        const rp = world.getComponent(targetId, RemotePlayer);
+        if (rp && (ui as any).network && (ui as any).network.connected) {
+            if (pvpEnabled) {
+                (ui as any).network.sendAttack(rp.id);
 
-        // Screen Shake
+                // Visual Feedback for PvP
+                // Red 'Ping' effect
+                const ft = world.createEntity();
+                world.addComponent(ft, new Position(ePos.x, ePos.y - 10));
+                world.addComponent(ft, new Velocity(0, -10));
+                world.addComponent(ft, new FloatingText("Attack!", '#ff5555', 0.5, 0.5));
+            } else {
+                if ((ui as any).console) (ui as any).console.addSystemMessage("PvP is Disabled. Press 'P' to enable.");
+            }
+        } else {
+            // Local Enemy Logic
+            const health = world.getComponent(targetId, Health);
+            if (health) {
+                health.current -= damage;
+                audio.playHit();
+                if ((ui as any).console) (ui as any).console.sendMessage(`You hit Enemy for ${damage} dmg.`);
+
+                const ft = world.createEntity();
+                world.addComponent(ft, new Position(ePos.x, ePos.y));
+                world.addComponent(ft, new Velocity(0, -20));
+                world.addComponent(ft, new FloatingText(`-${damage}`, '#ff3333'));
+
+                if (health.current <= 0) {
+                    const nameComp = world.getComponent(targetId, Name);
+                    const enemyName = nameComp ? nameComp.value : "Enemy";
+                    if ((ui as any).console) (ui as any).console.sendMessage(`${enemyName} died.`);
+
+                    const qLog = world.getComponent(playerEntity, QuestLog);
+                    if (qLog && qLog.questId && !qLog.completed && qLog.targetType === enemyName) {
+                        qLog.progress++;
+                        if ((ui as any).console) (ui as any).console.sendMessage(`Quest: ${qLog.progress}/${qLog.targetCount} ${enemyName}s`);
+                        if (qLog.progress >= qLog.targetCount) {
+                            if ((ui as any).console) (ui as any).console.addSystemMessage("Quest Objective Complete! Return to villager.");
+                        }
+                    }
+
+                    const loot = generateLoot(enemyName.toLowerCase());
+                    gainExperience(world, 50, ui, audio);
+                    createCorpse(world, ePos.x, ePos.y, loot);
+                    world.removeEntity(targetId);
+                }
+            }
+        }
+
+        // Screen Shake (Shared)
         const shake = world.createEntity();
         world.addComponent(shake, new ScreenShake(0.2, 2.0));
 
-        // Blood Particles
+        // Blood Particles (Shared)
         for (let i = 0; i < 5; i++) {
             const p = world.createEntity();
             world.addComponent(p, new Position(ePos.x + 8, ePos.y + 8));
@@ -806,26 +733,6 @@ export function combatSystem(world: World, input: InputHandler, ui: UIManager, a
             const speed = Math.random() * 50 + 20;
             const life = Math.random() * 0.3 + 0.2;
             world.addComponent(p, new Particle(life, life, '#a00', 2, Math.cos(angle) * speed, Math.sin(angle) * speed));
-        }
-
-        if (health.current <= 0) {
-            const nameComp = world.getComponent(id, Name);
-            const enemyName = nameComp ? nameComp.value : "Enemy";
-            if ((ui as any).console) (ui as any).console.sendMessage(`${enemyName} died.`);
-
-            const qLog = world.getComponent(playerEntity, QuestLog);
-            if (qLog && qLog.questId && !qLog.completed && qLog.targetType === enemyName) {
-                qLog.progress++;
-                if ((ui as any).console) (ui as any).console.sendMessage(`Quest: ${qLog.progress}/${qLog.targetCount} ${enemyName}s`);
-                if (qLog.progress >= qLog.targetCount) {
-                    if ((ui as any).console) (ui as any).console.addSystemMessage("Quest Objective Complete! Return to villager.");
-                }
-            }
-
-            dropLoot(world, ePos.x, ePos.y, enemyName.toLowerCase());
-            gainExperience(world, 50, ui, audio);
-            ePos.x = -9999;
-            world.removeEntity(id);
         }
         hit = true;
     }
@@ -1105,6 +1012,8 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
     world.addComponent(e, new Mana(50, 50));
     world.addComponent(e, new Facing(0, 1));
     world.addComponent(e, new QuestLog());
+    // Lantern: Dimmer to avoid blinding
+    world.addComponent(e, new LightSource(64, '#cc8844', true));
 
     // RPG Depth
     const vocData = VOCATIONS[vocationKey] || VOCATIONS.knight;
@@ -1207,7 +1116,13 @@ export function createTeleporter(world: World, x: number, y: number, targetX: nu
     return e;
 }
 
-export function createItem(world: World, x: number, y: number, name: string, slot: string, uIndex: number, damage: number = 0, price: number = 10) {
+export function createItem(world: World, x: number, y: number, name: string, slot: string, uIndex: number, damage: number = 0, price: number = 10, network?: NetworkManager, networkItem?: NetworkItem) {
+    // 1. Network Spawn Logic
+    if (network && network.connected && !networkItem) {
+        network.sendSpawnItem(x, y, uIndex, name);
+        return;
+    }
+
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Sprite(uIndex, 12));
@@ -1219,11 +1134,24 @@ export function createItem(world: World, x: number, y: number, name: string, slo
     if (name === "Wooden Sword") price = 50;
     if (name === "Tower Shield") price = 200;
     if (name === "Noble Sword") price = 400;
+
+    // Pass price to Item (assuming Item constructor takes it?)
+    // Checking Item component...
+    // In components.ts: Item(name, slot, damage, price, uIndex) ??
+    // Step 1068 says: new Item(name, slot, uIndex, damage, price)
+    // Wait, uIndex is 3rd arg? 
+    // Wait, line 1080: `new Item(name, slot, uIndex, damage, price)`
+    // This looks quirky. Keep it as is.
     world.addComponent(e, new Item(name, slot, uIndex, damage, price));
+
+    if (networkItem) {
+        world.addComponent(e, networkItem);
+    }
     return e;
 }
 
-export function itemPickupSystem(world: World, ui: UIManager, audio: AudioController) {
+
+export function itemPickupSystem(world: World, ui: UIManager, audio: AudioController, network?: NetworkManager) {
     const playerEntity = world.query([PlayerControllable, Position, Inventory])[0];
     if (playerEntity === undefined) return;
     const pPos = world.getComponent(playerEntity, Position)!;
@@ -1232,6 +1160,14 @@ export function itemPickupSystem(world: World, ui: UIManager, audio: AudioContro
     for (const id of items) {
         const iPos = world.getComponent(id, Position)!;
         if (pPos.x < iPos.x + 12 && pPos.x + 16 > iPos.x + 4 && pPos.y < iPos.y + 12 && pPos.y + 16 > iPos.y + 4) {
+
+            // Network Pickup
+            const netItem = world.getComponent(id, NetworkItem);
+            if (netItem && network) {
+                network.sendPickupItem(netItem.id);
+                // Optimistic: We pick it up locally too
+            }
+
             const item = world.getComponent(id, Item)!;
             if (item.slot === 'currency') {
                 const amount = 10;
@@ -1272,9 +1208,20 @@ export function autocloseSystem(world: World, ui: UIManager) {
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 32) ui.hideDialogue();
     }
+    if (ui.activeLootEntityId !== null) {
+        const playerEntity = world.query([PlayerControllable, Position])[0];
+        if (!playerEntity) return;
+        const pos = world.getComponent(playerEntity, Position)!;
+        const lPos = world.getComponent(ui.activeLootEntityId, Position);
+        if (!lPos) { ui.hideDialogue(); return; }
+        const dx = (pos.x + 8) - (lPos.x + 8);
+        const dy = (pos.y + 8) - (lPos.y + 8);
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 32) ui.hideDialogue();
+    }
 }
 
-export function castSpell(world: World, ui: UIManager, spellName: string) {
+export function castSpell(world: World, ui: UIManager, spellName: string, network?: NetworkManager) {
     const playerEntity = world.query([PlayerControllable, Health, Mana, Position, Facing])[0];
     if (playerEntity === undefined) return;
     const hp = world.getComponent(playerEntity, Health)!;
@@ -1375,12 +1322,133 @@ export function castSpell(world: World, ui: UIManager, spellName: string) {
                     if (eHp.current <= 0) {
                         const nameComp = world.getComponent(eId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
-                        dropLoot(world, ePos.x, ePos.y, enemyType);
+                        const loot = generateLoot(enemyType);
+                        createCorpse(world, ePos.x, ePos.y, loot);
                         world.removeEntity(eId);
                     }
                 }
             }
             if (console) console.addSystemMessage("Heavy Strike!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+    } else if (spellName === 'exori mas') { // KNIGHT: WHIRLWIND
+        if (mana.current >= 40) {
+            mana.current -= 40;
+            // Visual: Screen Shake + Particles around
+            const shake = world.createEntity();
+            world.addComponent(shake, new ScreenShake(0.2, 4));
+
+            const enemies = world.query([Health, Position, Name]);
+            let hitCount = 0;
+            const range = 24; // slightly more than 16 to catch diagonals
+
+            for (const eId of enemies) {
+                if (world.getComponent(eId, PlayerControllable)) continue;
+                const ePos = world.getComponent(eId, Position)!;
+                const dx = (pos.x + 8) - (ePos.x + 8);
+                const dy = (pos.y + 8) - (ePos.y + 8);
+                if (Math.abs(dx) <= range && Math.abs(dy) <= range) {
+                    const eHp = world.getComponent(eId, Health)!;
+                    const swordSkill = skills ? skills.sword.level : 10;
+                    const dmg = 50 + (swordSkill * 3);
+                    eHp.current -= dmg;
+                    spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ff0000');
+                    hitCount++;
+                    // Death Logic
+                    if (eHp.current <= 0) {
+                        const nameComp = world.getComponent(eId, Name);
+                        const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
+                        const loot = generateLoot(enemyType);
+                        createCorpse(world, ePos.x, ePos.y, loot);
+                        world.removeEntity(eId);
+                    }
+                }
+            }
+            if (console) console.addSystemMessage(`Whirlwind hit ${hitCount} enemies!`);
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+    } else if (spellName === 'exevo vis') { // MAGE: ENERGY WAVE
+        if (mana.current >= 80) {
+            mana.current -= 80;
+            // Beam Logic
+            const enemies = world.query([Health, Position, Name]);
+            // 5 tiles length
+            for (let i = 1; i <= 5; i++) {
+                const tx = pos.x + (facing.x * 16 * i);
+                const ty = pos.y + (facing.y * 16 * i);
+
+                // Visual Effect at projectile path (static for now)
+                const vis = world.createEntity();
+                world.addComponent(vis, new Position(tx, ty));
+                // Use a generic particle for beam
+                const p = world.createEntity();
+                world.addComponent(p, new Position(tx + 8, ty + 8));
+                world.addComponent(p, new Particle(0.5, 0.5, '#5555ff', 3, 0, 0)); // Blue flash
+
+                // Hit detection on this tile
+                for (const eId of enemies) {
+                    if (world.getComponent(eId, PlayerControllable)) continue;
+                    const ePos = world.getComponent(eId, Position)!;
+                    // AABB Check
+                    if (ePos.x < tx + 16 && ePos.x + 16 > tx &&
+                        ePos.y < ty + 16 && ePos.y + 16 > ty) {
+                        const eHp = world.getComponent(eId, Health)!;
+                        const magicLevel = skills ? skills.magic.level : 0;
+                        const dmg = 60 + (magicLevel * 5);
+                        eHp.current -= dmg;
+                        spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#aa00ff');
+
+                        if (eHp.current <= 0) {
+                            const nameComp = world.getComponent(eId, Name);
+                            const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
+                            const loot = generateLoot(enemyType);
+                            createCorpse(world, ePos.x, ePos.y, loot);
+                            world.removeEntity(eId);
+                        }
+                    }
+                }
+            }
+            if (console) console.addSystemMessage("Energy Wave!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+    } else if (spellName === 'utito san') { // RANGER: PRECISION SHOT
+        if (mana.current >= 20) {
+            mana.current -= 20;
+
+            const pId = world.createEntity();
+            world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
+
+            // Aiming Logic
+            const targetComp = world.getComponent(playerEntity, Target);
+            let vx = facing.x * 250; // Faster
+            let vy = facing.y * 250;
+
+            if (targetComp) {
+                const targetPos = world.getComponent(targetComp.targetId, Position);
+                if (targetPos) {
+                    const dx = (targetPos.x + 8) - (pos.x + 8);
+                    const dy = (targetPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        vx = (dx / dist) * 250;
+                        vy = (dy / dist) * 250;
+                    }
+                }
+            }
+            world.addComponent(pId, new Velocity(vx, vy));
+            world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8)); // Re-use fireball sprite for now
+
+            const distSkill = skills ? skills.distance.level : 10;
+            const dmg = 40 + (distSkill * 3);
+            world.addComponent(pId, new Projectile(dmg, 0.8, 'player')); // Short life
+
+            if (console) console.addSystemMessage("Precision Shot sent!");
         } else {
             if (console) console.addSystemMessage("Not enough Mana!");
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
@@ -1402,10 +1470,10 @@ export function gainExperience(world: World, amount: number, ui: UIManager, audi
     const hp = world.getComponent(playerEntity, Health)!;
     const mana = world.getComponent(playerEntity, Mana)!;
     const pos = world.getComponent(playerEntity, Position)!;
-    const console = (ui as any).console;
+    const gameConsole = (ui as any).console;
 
     xp.current += amount;
-    if (console) console.sendMessage(`You gained ${amount} experience.`);
+    if (gameConsole) gameConsole.sendMessage(`You gained ${amount} experience.`);
     const ft = world.createEntity();
     world.addComponent(ft, new Position(pos.x, pos.y - 12));
     world.addComponent(ft, new Velocity(0, -15));
@@ -1422,7 +1490,11 @@ export function gainExperience(world: World, amount: number, ui: UIManager, audi
 
         if (voc) {
             hp.max += voc.hpGain;
-            if (mana) mana.max += voc.manaGain;
+            if (mana) {
+                console.log(`[LevelUp] Mana Gain: ${voc.manaGain}. Old Max: ${mana.max}`);
+                mana.max += voc.manaGain;
+                console.log(`[LevelUp] New Max: ${mana.max}`);
+            }
             if (inv) inv.cap += voc.capGain;
         } else {
             // Default Fallback
@@ -1433,108 +1505,186 @@ export function gainExperience(world: World, amount: number, ui: UIManager, audi
         hp.current = hp.max;
         if (mana) mana.current = mana.max;
 
-        if (console) console.sendMessage(`You advanced to Level ${xp.level}.`);
-        if (console && voc) console.sendMessage(`HP: +${voc.hpGain}, MP: +${voc.manaGain}, Cap: +${voc.capGain}`);
+        if (gameConsole) gameConsole.sendMessage(`You advanced to Level ${xp.level}.`);
+        if (gameConsole && voc) gameConsole.sendMessage(`HP: +${voc.hpGain}, MP: +${voc.manaGain}, Cap: +${voc.capGain}`);
 
         audio.playLevelUp();
         const lu = world.createEntity();
         world.addComponent(lu, new Position(pos.x, pos.y - 20));
         world.addComponent(lu, new Velocity(0, -10));
         world.addComponent(lu, new FloatingText("LEVEL UP!", '#ffd700', 3.0));
+        world.addComponent(lu, new FloatingText("LEVEL UP!", '#ffd700', 3.0));
     }
+
+    // Refresh UI
+    const inv = world.getComponent(playerEntity, Inventory);
+    const skills = world.getComponent(playerEntity, Skills);
+    const curLevel = xp.level;
+    const curXP = xp.current;
+    const nextXP = xp.next;
+    const curHP = hp.current;
+    const maxHP = hp.max;
+    const curMana = mana ? mana.current : 0;
+    const maxMana = mana ? mana.max : 0;
+    const curCap = inv ? inv.cap : 0;
+    const curGold = inv ? inv.gold : 0;
+
+    ui.updateStatus(curHP, maxHP, curMana, maxMana, curCap, curGold, curLevel, curXP, nextXP, skills);
 }
 
-export function dropLoot(world: World, x: number, y: number, enemyType: string = "orc") {
-    const goldAmount = Math.floor(Math.random() * 20) + 5;
-    createItem(world, x + (Math.random() * 8 - 4), y + (Math.random() * 8 - 4), "Gold Coin", "currency", 32, 0);
-    if (enemyType.includes("warlord")) {
-        // Guaranteed Boss Drop
-        createItem(world, x, y, "Noble Sword", "rhand", SPRITES.NOBLE_SWORD, 25);
-        return;
+export function generateLoot(enemyType: string = "orc"): Item[] {
+    const items: Item[] = [];
+
+    // Gold (Currency)
+    if (Math.random() < 0.5) {
+        const gold = Math.floor(Math.random() * 20) + 5;
+        // Construct Item manually since we aren't spawning entity
+        // Item(slot, name, uIndex, damage/price)
+        // Gold needs a slot? 'currency'.
+        items.push(new Item('currency', 'Gold Coin', SPRITES.POTION, gold)); // Using POTION sprite for now as placeholder
     }
 
+    if (enemyType.includes("warlord")) {
+        items.push(new Item("rhand", "Noble Sword", SPRITES.NOBLE_SWORD, 25));
+        return items;
+    }
+
+    const rand = Math.random();
     if (rand < 0.1) {
         if (enemyType === "skeleton") {
-            createItem(world, x, y, "Wooden Sword", "rhand", SPRITES.WOODEN_SWORD, 8);
+            items.push(new Item("rhand", "Wooden Sword", SPRITES.WOODEN_SWORD, 8));
         } else if (enemyType === "wolf") {
+            // wolf loot?
         } else {
-             createItem(world, x, y, "Health Potion", "consumable", SPRITES.POTION, 0);
+            if (Math.random() < 0.5) items.push(new Item("rhand", "Iron Sword", SPRITES.SWORD, 15));
+            else items.push(new Item("lhand", "Wooden Shield", SPRITES.WOODEN_SHIELD, 0));
         }
+    } else if (rand < 0.4) {
+        items.push(new Item("consumable", "Health Potion", SPRITES.POTION, 0));
     }
+
+    return items;
 }
+
+
+
+
+// Offscreen canvas for lighting
+let lightCanvas: HTMLCanvasElement | null = null;
+let lightCtx: CanvasRenderingContext2D | null = null;
 
 export function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D, ambientLight: number = 0.9) {
     let camX = 0, camY = 0;
     const cameraEntity = world.query([Camera])[0];
     if (cameraEntity !== undefined) {
         const cam = world.getComponent(cameraEntity, Camera)!;
-        camX = Math.floor(cam.x + shakeOffsetX);
-        camY = Math.floor(cam.y + shakeOffsetY);
+        camX = Math.floor(cam.x + (typeof shakeOffsetX !== 'undefined' ? shakeOffsetX : 0));
+        camY = Math.floor(cam.y + (typeof shakeOffsetY !== 'undefined' ? shakeOffsetY : 0));
     }
 
     const lights = world.query([Position, LightSource]);
 
-    ctx.save();
-    
-    // 1. Draw Darkness
-    ctx.fillStyle = `rgba(0, 0, 0, ${ambientLight})`;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-    // 2. Cut Holes
-    ctx.globalCompositeOperation = 'destination-out';
-
-    for(const id of lights) {
-        const pos = world.getComponent(id, Position)!;
-        const light = world.getComponent(id, LightSource)!;
-        
-        const lx = Math.round(pos.x - camX + 8);
-        const ly = Math.round(pos.y - camY + 8);
-
-        let radius = light.radius;
-        if (light.flickers) {
-            radius += (Math.random() - 0.5) * 4;
+    // Initialize Offscreen Canvas
+    if (!lightCanvas) {
+        lightCanvas = document.createElement('canvas');
+        lightCanvas.width = ctx.canvas.width;
+        lightCanvas.height = ctx.canvas.height;
+        lightCtx = lightCanvas.getContext('2d');
+    }
+    // Handle Resize (if necessary)
+    if (lightCanvas && lightCtx) {
+        if (lightCanvas.width !== ctx.canvas.width || lightCanvas.height !== ctx.canvas.height) {
+            lightCanvas.width = ctx.canvas.width;
+            lightCanvas.height = ctx.canvas.height;
         }
 
-        const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, radius);
-        gradient.addColorStop(0, 'rgba(0, 0, 0, 1)'); 
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); 
+        // 1. Setup Darkness on Offscreen
+        lightCtx.save();
+        lightCtx.globalCompositeOperation = 'source-over';
+        lightCtx.fillStyle = `rgba(0, 0, 0, ${ambientLight})`;
+        lightCtx.fillRect(0, 0, lightCanvas.width, lightCanvas.height);
 
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(lx, ly, radius, 0, Math.PI * 2);
-        ctx.fill();
+        // 2. Cut Holes from Darkness (Destination-Out)
+        lightCtx.globalCompositeOperation = 'destination-out';
+        for (const id of lights) {
+            const pos = world.getComponent(id, Position)!;
+            const light = world.getComponent(id, LightSource)!;
+
+            const lx = Math.round(pos.x - camX + 8);
+            const ly = Math.round(pos.y - camY + 8);
+
+            let radius = light.radius;
+            if (light.flickers) {
+                radius += (Math.random() - 0.5) * 4;
+            }
+
+            const gradient = lightCtx.createRadialGradient(lx, ly, 0, lx, ly, radius);
+            gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+            lightCtx.fillStyle = gradient;
+            lightCtx.beginPath();
+            lightCtx.arc(lx, ly, radius, 0, Math.PI * 2);
+            lightCtx.fill();
+        }
+        lightCtx.restore();
+
+        // 3. Draw Offscreen to Main Screen
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(lightCanvas, 0, 0);
+        ctx.restore();
     }
 
-    // 3. Colored Glow (Optional - Source Over)
+    // 4. Draw Colored Glows (Additive Pass on Main)
+    ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for(const id of lights) {
-        // Only if color is NOT white/null/black
+    ctx.globalAlpha = 0.4; // Reduce intensity of the color glow
+    for (const id of lights) {
         const light = world.getComponent(id, LightSource)!;
         if (light.color && light.color !== '#000000') {
-             const pos = world.getComponent(id, Position)!;
-             const lx = Math.round(pos.x - camX + 8);
-             const ly = Math.round(pos.y - camY + 8);
-             
-             let radius = light.radius;
-             if (light.flickers) radius += (Math.random() - 0.5) * 4;
+            const pos = world.getComponent(id, Position)!;
+            const lx = Math.round(pos.x - camX + 8);
+            const ly = Math.round(pos.y - camY + 8);
 
-             const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, radius);
-             gradient.addColorStop(0, light.color); 
-             gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            let radius = light.radius;
+            if (light.flickers) radius += (Math.random() - 0.5) * 4;
 
-             ctx.fillStyle = gradient;
-             ctx.beginPath();
-             ctx.arc(lx, ly, radius, 0, Math.PI * 2);
-             ctx.fill();
+            const gradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, radius);
+            gradient.addColorStop(0, light.color);
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(lx, ly, radius, 0, Math.PI * 2);
+            ctx.fill();
         }
     }
-
     ctx.restore();
 }
-            if (Math.random() < 0.5) createItem(world, x, y, "Iron Sword", "rhand", SPRITES.SWORD, 15);
-            else createItem(world, x, y, "Wooden Shield", "lhand", SPRITES.WOODEN_SHIELD, 0);
+
+
+export function createCorpse(world: World, x: number, y: number, loot: Item[] = []) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    // Use BONES sprite (22)
+    world.addComponent(e, new Sprite(SPRITES.BONES || 22, 16));
+    world.addComponent(e, new Decay(30000)); // 30s decay
+    world.addComponent(e, new Interactable("Loot Corpse"));
+    if (loot.length > 0) {
+        world.addComponent(e, new Lootable(loot));
+    }
+    return e;
+}
+
+
+export function decaySystem(world: World, dt: number) {
+    const entities = world.query([Decay]);
+    for (const id of entities) {
+        const decay = world.getComponent(id, Decay)!;
+        decay.life -= dt;
+        if (decay.life <= 0) {
+            world.removeEntity(id);
         }
-    } else if (rand < 0.4) {
-        createItem(world, x, y, "Health Potion", "potion", SPRITES.POTION, 20);
     }
 }

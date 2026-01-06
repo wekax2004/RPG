@@ -1,6 +1,6 @@
 import { World, InputHandler } from './engine';
-import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, castSpell, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position } from './game';
-import { Vocation } from './game'; // Fix TS2552
+import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem } from './game';
+import { Vocation, lightingRenderSystem, LightSource, RemotePlayer, Sprite, SPRITES, spriteSheet, Velocity } from './game'; // Fix TS2552
 import { UIManager, ConsoleManager, CharacterCreation } from './ui';
 import { saveGame, loadGame } from './save';
 import { NetworkManager } from './network';
@@ -16,6 +16,7 @@ class Game {
     private ctx: CanvasRenderingContext2D;
     private lastTime: number = 0;
     private running: boolean = true;
+    public pvpEnabled: boolean = false; // Safe by default
 
     private mapWidthPixels: number = 0;
     private mapHeightPixels: number = 0;
@@ -37,6 +38,8 @@ class Game {
         this.canvas.width = CANVAS_WIDTH;
         this.canvas.height = CANVAS_HEIGHT;
 
+        // Initial UI Render - Removed invalid early call
+
         // Initialize ECS and UI
         this.world = new World();
         this.input = new InputHandler();
@@ -44,6 +47,24 @@ class Game {
         this.console = new ConsoleManager();
         this.network = new NetworkManager();
         this.audio = new AudioController();
+
+        // Create PvP Indicator
+        const pvpInd = document.createElement('div');
+        pvpInd.id = 'pvp-indicator';
+        pvpInd.style.position = 'absolute';
+        pvpInd.style.top = '10px';
+        pvpInd.style.right = '10px'; // Right side
+        pvpInd.style.color = '#55ff55';
+        pvpInd.style.fontFamily = "'VT323', monospace";
+        pvpInd.style.fontSize = '24px';
+        pvpInd.style.fontWeight = 'bold';
+        pvpInd.style.zIndex = '4000';
+        pvpInd.style.pointerEvents = 'none';
+        pvpInd.innerText = "PvP: OFF";
+        pvpInd.style.textShadow = '1px 1px 0 #000';
+        pvpInd.style.border = '2px solid red'; // DEBUG VISIBILITY
+        pvpInd.style.display = 'block';
+        document.getElementById('game-viewport')!.appendChild(pvpInd);
 
         // Audio Auto-Init
         window.addEventListener('keydown', () => this.audio.init(), { once: true });
@@ -72,81 +93,7 @@ class Game {
             }
         };
 
-        // Chat Input Logic
-        const chatContainer = document.getElementById('console-panel')!;
-        const chatInput = document.getElementById('console-input') as HTMLInputElement;
 
-        // 1. Window Listener: ONLY for Opening Chat
-        // Unified Chat Listener
-        window.addEventListener('keydown', (e) => {
-            const active = document.activeElement;
-            const isInputFocused = active && active.id === 'console-input';
-
-            if (e.key === 'Enter') {
-                if (isInputFocused) {
-                    // SEND
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const msg = chatInput.value;
-                    if (this.ui.console) console.log(`[Debug] Sending: '${msg}'`);
-
-                    if (msg) {
-                        if (msg) {
-                            try {
-                                const cleanMsg = msg.trim().toLowerCase();
-                                // DEBUG
-                                console.log(`[Debug] Checking: '${cleanMsg}'`);
-
-                                if (cleanMsg === 'exura') {
-                                    console.log(`[Debug] Casting Exura!`);
-                                    castSpell(this.world, this.ui, 'exura');
-                                } else if (cleanMsg === 'adori flam') {
-                                    console.log(`[Debug] Casting Fireball!`);
-                                    castSpell(this.world, this.ui, 'fireball');
-                                } else if (cleanMsg === 'exori') {
-                                    console.log(`[Debug] Casting Heavy Strike!`);
-                                    castSpell(this.world, this.ui, 'heavystrike');
-                                } else if (cleanMsg === '/reset') {
-                                    if (confirm("Are you sure you want to wipe your save data?")) {
-                                        this.running = false; // Stop game loop to prevent auto-save
-                                        localStorage.removeItem('retro-rpg-save-v2');
-                                        location.reload();
-                                    }
-                                } else {
-                                    this.network.sendSay(msg);
-                                }
-                            } catch (err: any) {
-                                if (this.ui.console) this.ui.console.addSystemMessage(`[Error] Send Failed: ${err.message}`);
-                            }
-                            chatInput.value = '';
-                        }
-                    }
-
-                    chatInput.blur();
-                    this.canvas.focus();
-                } else {
-                    // FOCUS
-                    e.preventDefault();
-                    chatInput.focus();
-                    // if (this.ui.console) this.ui.console.addSystemMessage("[Debug] Chat Focused");
-                }
-            } else if (e.key === 'Escape') {
-                if (isInputFocused) {
-                    chatInput.blur();
-                    this.canvas.focus();
-                    chatInput.value = '';
-                }
-            } else {
-                // Prevent game input if chatting
-                if (isInputFocused) {
-                    e.stopPropagation();
-                }
-            }
-        });
-
-        // Remove individual listener to avoid conflict
-        // chatInput.addEventListener('keydown', ...) // Removed
 
         // Link UI to Console for system messages
         this.ui.console = this.console;
@@ -156,12 +103,244 @@ class Game {
         this.console.addSystemMessage("Connecting to Retro RPG Server...");
         this.console.addSystemMessage("Assets Loading...");
 
-        try {
-            // const response = await fetch('/maps/village.json?t=' + Date.now() + Math.random());
-            // const mapData = await response.json();
+        // Setup Network Login Callback
+        // Setup Network Login Callback
+        this.network.onLogin = (seed, spawnX, spawnY) => {
+            console.log(`[Game] Login Accepted. Seed: ${seed}`);
+            try {
+                this.console.addSystemMessage("Connected to Server!");
+                this.startGame(seed, spawnX, spawnY);
+            } catch (err: any) {
+                console.error("[Game] StartGame Error:", err);
+            }
+        };
 
+        this.network.onEntityUpdate = (entities) => {
+            try {
+                // Get all existing remote players
+                const remoteEntities = this.world.query([RemotePlayer, Position]);
+
+                // Map existing IDs to Entities for fast lookup
+                const existingMap = new Map<number, number>(); // ID -> EntityID
+                for (const eid of remoteEntities) {
+                    const rp = this.world.getComponent(eid, RemotePlayer)!;
+                    existingMap.set(rp.id, eid);
+                }
+
+                const activeIds = new Set<number>();
+
+                for (const data of entities) {
+                    if (data.id === this.network.playerId) continue;
+
+                    activeIds.add(data.id);
+
+                    if (existingMap.has(data.id)) {
+                        // Update Target instead of Snap
+                        const eid = existingMap.get(data.id)!;
+                        const rp = this.world.getComponent(eid, RemotePlayer)!;
+                        rp.targetX = data.x;
+                        rp.targetY = data.y;
+                    } else {
+                        // Create
+                        const newEnt = this.world.createEntity();
+                        this.world.addComponent(newEnt, new Position(data.x, data.y));
+                        this.world.addComponent(newEnt, new Sprite(SPRITES.PLAYER));
+                        this.world.addComponent(newEnt, new RemotePlayer(data.id, data.x, data.y));
+                    }
+                }
+
+                // Cleanup disconnected players
+                for (const eid of remoteEntities) {
+                    const rp = this.world.getComponent(eid, RemotePlayer)!;
+                    if (!activeIds.has(rp.id)) {
+                        // console.log(`[Network] Removing Player ${rp.id}`);
+                        this.world.removeEntity(eid);
+                    }
+                }
+            } catch (err: any) {
+                console.error("[Game] EntityUpdate Error:", err);
+            }
+
+        };
+
+        this.network.onChat = (pid, msg) => {
+            console.log(`[Game] Chat Rx from ${pid}: ${msg}`);
+            // Display Chat Bubble
+            // Find Entity
+            let targetEnt = -1;
+
+            // Check Local
+            const localP = this.world.query([PlayerControllable])[0];
+            if (localP !== undefined && this.network.playerId === pid) {
+                targetEnt = localP;
+            } else {
+                // Check Remote
+                const remotes = this.world.query([RemotePlayer]);
+                for (const eid of remotes) {
+                    const rp = this.world.getComponent(eid, RemotePlayer)!;
+                    if (rp.id === pid) {
+                        targetEnt = eid;
+                        break;
+                    }
+                }
+            }
+
+            // console.log(`[Game] Chat Target Entity: ${targetEnt}`);
+
+            // Add to Console Log (User Request)
+            const senderName = (this.network.playerId === pid) ? "Me" : `Player${pid}`;
+            this.console.sendMessage(`${senderName}: ${msg}`);
+
+
+
+            if (targetEnt !== -1) {
+                const pos = this.world.getComponent(targetEnt, Position)!;
+                // Create Floating Text
+                const ft = this.world.createEntity();
+                this.world.addComponent(ft, new Position(pos.x, pos.y - 20)); // Above head
+                this.world.addComponent(ft, new Velocity(0, -5)); // Float up slowly
+                this.world.addComponent(ft, new FloatingText(msg, '#ffffff', 4.0, 4.0)); // 4s life, 4s max
+                console.log(`[Game] Spawned Bubble for ${pid}`);
+            }
+        };
+
+        this.network.onSpawnItem = (id, x, y, sprite, name) => {
+            // console.log(`[Game] NetSpawn Item ${id}: ${name}`);
+            let slot = 'rhand';
+            if (name.includes('Potion')) slot = 'consumable';
+            else if (name.includes('Shield')) slot = 'lhand';
+            else if (name.includes('Coin') || name.includes('Gold')) slot = 'currency';
+
+            // createItem(world, x, y, name, slot, sprite, dmg, price, network, netItem)
+            createItem(this.world, x, y, name, slot, sprite, 0, 0, undefined, new NetworkItem(id));
+        };
+
+        this.network.onItemDespawn = (id) => {
+            const items = this.world.query([NetworkItem]);
+            for (const eid of items) {
+                const net = this.world.getComponent(eid, NetworkItem)!;
+                if (net.id === id) {
+                    this.world.removeEntity(eid);
+                    break;
+                }
+            }
+        };
+
+        // Listen for Global Keys (Chat)
+        window.addEventListener('keydown', (e) => {
+            console.log(`[Game] Key: ${e.key}`);
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (this.ui.isChatOpen()) {
+                    // Send
+                    const msg = this.ui.getChatInput();
+                    if (msg.trim().length > 0) {
+                        // Check Spells
+                        if (msg.toLowerCase() === 'exura') {
+                            castSpell(this.world, this.ui, 'exura', this.network);
+                            // this.console.sendMessage("You cast 'exura'."); // castSpell logs it now?
+                            // castSpell logs "You healed X" or "Not enough mana".
+                            // Let's keep a log here just in case? No, duplication.
+                            this.network.sendChat(msg);
+                        } else if (msg.toLowerCase() === 'exori') {
+                            castSpell(this.world, this.ui, 'heavystrike', this.network);
+                            this.network.sendChat(msg);
+                        } else if (msg.toLowerCase() === 'exori mas') {
+                            castSpell(this.world, this.ui, 'exori mas', this.network);
+                            this.network.sendChat(msg);
+                        } else if (msg.toLowerCase() === 'exevo vis') {
+                            castSpell(this.world, this.ui, 'exevo vis', this.network);
+                            this.network.sendChat(msg);
+                        } else if (msg.toLowerCase() === 'utito san') {
+                            castSpell(this.world, this.ui, 'utito san', this.network);
+                            this.network.sendChat(msg);
+                        } else if (msg.toLowerCase() === '/reset' || msg.toLowerCase() === '/restart') {
+                            // Debug Reset
+                            const player = this.world.query([PlayerControllable, Experience, Health, Mana, Inventory, Skills])[0];
+                            if (player !== undefined) {
+                                const xp = this.world.getComponent(player, Experience)!;
+                                const hp = this.world.getComponent(player, Health)!;
+                                const mana = this.world.getComponent(player, Mana)!;
+                                const inv = this.world.getComponent(player, Inventory)!;
+                                const skills = this.world.getComponent(player, Skills)!;
+                                const voc = this.world.getComponent(player, Vocation);
+
+                                xp.level = 1;
+                                xp.current = 0;
+                                xp.next = 100;
+
+                                if (voc) {
+                                    // Hardcoded startup matching createPlayer (approx)
+                                    // Ideally verify vocation name but simple reset is fine
+                                    if (voc.name === 'Knight') { hp.max = 150; mana.max = 20; inv.cap = 450; }
+                                    else if (voc.name === 'Mage') { hp.max = 80; mana.max = 100; inv.cap = 300; }
+                                    else if (voc.name === 'Ranger') { hp.max = 100; mana.max = 60; inv.cap = 380; }
+                                    else { hp.max = 150; mana.max = 50; inv.cap = 400; }
+                                } else {
+                                    hp.max = 200; mana.max = 50;
+                                }
+                                hp.current = hp.max;
+                                mana.current = mana.max;
+
+                                this.console.addSystemMessage("Character Reset to Level 1.");
+                                this.ui.updateStatus(hp.current, hp.max, mana.current, mana.max, inv.cap, inv.gold, xp.level, xp.current, xp.next, skills);
+                            }
+                        } else {
+                            this.network.sendChat(msg);
+                        }
+                    }
+                    this.ui.toggleChat(); // Close
+                } else {
+                    // Open
+                    this.ui.toggleChat();
+                }
+            } else if (e.key === 'Escape') {
+                if (this.ui.isChatOpen()) {
+                    this.ui.toggleChat(); // Close
+                }
+            } else if (this.ui.isChatOpen()) {
+                // Stop other inputs from firing while typing!
+                // console.log("[Game] Input blocked by Chat");
+                e.stopImmediatePropagation(); // Ensure it stops engines
+                e.stopPropagation();
+            } else {
+                // Game Hotkeys
+                // Check both code (physical) and key (value)
+                if (e.code === 'KeyP' || e.key.toLowerCase() === 'p') {
+                    console.log("[Game] Toggling PvP...");
+                    this.pvpEnabled = !this.pvpEnabled;
+                    const status = this.pvpEnabled ? "ENABLED (Unsafe)" : "DISABLED (Safe)";
+                    this.console.addSystemMessage(`PvP Mode: ${status}`);
+                    // Optional: Visual Notification
+                    const player = this.world.query([PlayerControllable, Position])[0];
+                    if (player !== undefined) {
+                        const pos = this.world.getComponent(player, Position)!;
+                        const color = this.pvpEnabled ? '#ff0000' : '#00ff00';
+                        const ft = this.world.createEntity();
+                        this.world.addComponent(ft, new Position(pos.x, pos.y - 30));
+                        this.world.addComponent(ft, new Velocity(0, -10));
+                        this.world.addComponent(ft, new FloatingText(this.pvpEnabled ? "PvP ON" : "Safe Mode", color, 2.0));
+                    }
+                    // Update DOM Indicator
+                    const pvpEl = document.getElementById('pvp-indicator');
+                    if (pvpEl) {
+                        pvpEl.innerText = this.pvpEnabled ? "PvP: ON" : "PvP: OFF";
+                        pvpEl.style.color = this.pvpEnabled ? "#ff5555" : "#55ff55";
+                    }
+                }
+            }
+        }, true); // Capture phase to prevent game inputs? Or check ui state in inputSystem?
+        // Better: InputHandler check ui.isChatOpen()
+
+        // Attempt Login
+        this.network.login("Player" + Math.floor(Math.random() * 1000));
+    }
+
+    async startGame(seed: number, spawnX: number, spawnY: number) {
+        try {
             // Generate Map Procedurally (Larger world for Crypt)
-            const mapData = generateMap(128, 128);
+            // Use Global Seed from Server
+            const mapData = generateMap(128, 128, seed);
 
             // Create Map Entity
             const mapEntity = this.world.createEntity();
@@ -170,12 +349,15 @@ class Game {
             this.mapWidthPixels = mapData.width * mapData.tileSize;
             this.mapHeightPixels = mapData.height * mapData.tileSize;
 
+            // Override spawn with server data
+            this.spawnX = spawnX;
+            this.spawnY = spawnY;
+
             // Process Entities
             if (mapData.entities) {
                 for (const ent of mapData.entities) {
                     if (ent.type === 'player') {
-                        this.spawnX = ent.x;
-                        this.spawnY = ent.y;
+                        // Ignore local player spawn from map gen, use server spawn
                     } else if (ent.type === 'enemy') {
                         createEnemy(this.world, ent.x, ent.y, ent.enemyType, ent.difficulty || 1.0);
                     } else if (ent.type === 'npc') {
@@ -188,12 +370,19 @@ class Game {
                         createBoss(this.world, ent.x, ent.y);
                     } else if (ent.type === 'teleporter') {
                         createTeleporter(this.world, ent.x, ent.y, ent.targetX, ent.targetY);
+                    } else if (ent.type === 'torch') {
+                        const torch = this.world.createEntity();
+                        this.world.addComponent(torch, new Position(ent.x, ent.y));
+                        this.world.addComponent(torch, new LightSource(48, '#ff5500', true));
                     }
                 }
             }
 
             const camEntity = this.world.createEntity();
             this.world.addComponent(camEntity, new Camera(0, 0));
+
+            // Initial UI Render
+            this.ui.updateStatus(150, 150, 0, 100, 400, 0, 1, 0, 100);
 
             const hasSave = localStorage.getItem('retro-rpg-save-v2');
 
@@ -220,6 +409,9 @@ class Game {
                         }
                     }
                     this.console.addSystemMessage("Save Loaded.");
+                    // Force Inventory Update
+                    const inv = this.world.getComponent(player, Inventory);
+                    if (inv) this.ui.updateInventory(inv, spriteSheet.src);
                 }
                 this.startGameLoop();
             } else {
@@ -228,6 +420,14 @@ class Game {
                     console.log(`Vocation selected: ${vocation}`);
                     createPlayer(this.world, this.spawnX, this.spawnY, this.input, vocation);
                     this.console.addSystemMessage(`You have chosen the path of the ${vocation}.`);
+
+                    // Force Inventory Update (New Character)
+                    const player = this.world.query([PlayerControllable])[0];
+                    if (player !== undefined) {
+                        const inv = this.world.getComponent(player, Inventory);
+                        if (inv) this.ui.updateInventory(inv, spriteSheet.src);
+                    }
+
                     this.startGameLoop();
                 });
                 cc.show();
@@ -261,17 +461,37 @@ class Game {
         // System Updates
         if (!this.ui.isShowing()) {
             aiSystem(this.world, dt);
-            movementSystem(this.world, dt);
-            itemPickupSystem(this.world, this.ui, this.audio);
-
-            magicSystem(this.world, this.input, this.ui);
-            projectileSystem(this.world, dt, this.ui, this.audio);
-            combatSystem(this.world, this.input, this.ui, this.audio);
+            interactionSystem(this.world, this.input, this.ui);
+            movementSystem(this.world, dt, this.audio, this.network);
+            itemPickupSystem(this.world, this.ui, this.audio, this.network);
+            // Pass UI for console messages, and Network for PvP
+            combatSystem(this.world, this.input, this.audio, this.ui, this.network, this.pvpEnabled);
+            consumableSystem(this.world, this.input, this.ui);
+            decaySystem(this.world, dt);
             floatingTextSystem(this.world, dt);
             particleSystem(this.world, dt);
             screenShakeSystem(this.world, dt);
-            consumableSystem(this.world, this.input, this.ui);
+            // The original consumableSystem call was duplicated, this one is removed as per the instruction's snippet.
+            // consumableSystem(this.world, this.input, this.ui); 
             enemyCombatSystem(this.world, dt, this.ui, this.audio);
+
+            // Audio Updates
+            const playerPos = this.world.query([PlayerControllable, Position]).map(id => this.world.getComponent(id, Position)!)[0];
+            const lights = this.world.query([LightSource, Position]).map(id => this.world.getComponent(id, Position)!);
+
+            if (playerPos) {
+                this.audio.update(dt, playerPos.x, playerPos.y, lights);
+
+                // Ambience Zone Check
+                // Village Center ~ (128*16)/2 = 1024. Crypt starts somewhere else?
+                // In map_gen, Crypt/Dungeon levels have specific origins. 
+                // Simple check: If Y > 1200
+                if (playerPos.y > 1200) {
+                    this.audio.setAmbience('crypt');
+                } else {
+                    this.audio.setAmbience('village');
+                }
+            }
 
             // Camera follows player
             cameraSystem(this.world, this.mapWidthPixels, this.mapHeightPixels);
@@ -294,51 +514,6 @@ class Game {
             if (inv.gold < 9999) {
                 inv.gold = 9999;
             }
-
-            // Migration: Convert old "Shield" (generic) to Wooden Shield Sprite (35)
-            // If item name is "Shield" and uses Tower Shield sprite (33), fix it.
-            inv.items.forEach(item => {
-                if (item.name === "Shield" && item.uIndex === 33) {
-                    item.uIndex = 35; // WOODEN_SHIELD
-                    item.name = "Wooden Shield";
-                    item.description = "Basic protection. Blk: 2";
-                    item.price = 50;
-                }
-                // Migration: Convert "Spare Sword", "Sword", or unknown item using SWORD sprite to Wooden Sword (37)
-                // BUT keep "Iron Sword" as is.
-                if (item.uIndex === 34 && item.name !== "Iron Sword") {
-                    item.uIndex = 37; // WOODEN_SWORD
-                    item.name = "Wooden Sword";
-                    item.description = "Training gear. Dmg: 5";
-                    item.price = 50;
-                }
-                // Fix Potions
-                if (item.name === "Potion") item.price = 50;
-                if (item.name === "Iron Sword") item.price = 150;
-                if (item.name === "Tower Shield") item.price = 200;
-                if (item.name === "Noble Sword") item.price = 400;
-            });
-            inv.storage.forEach(item => {
-                if (item.name === "Shield" && item.uIndex === 33) {
-                    item.uIndex = 35; // WOODEN_SHIELD
-                    item.name = "Wooden Shield";
-                    item.description = "Basic protection. Blk: 2";
-                    item.price = 50;
-                }
-                if (item.uIndex === 34 && item.name !== "Iron Sword") {
-                    item.uIndex = 37; // WOODEN_SWORD
-                    item.name = "Wooden Sword";
-                    item.description = "Training gear. Dmg: 5";
-                    item.price = 50;
-                }
-                // Fix Potions
-                if (item.name === "Potion") item.price = 50;
-                if (item.name === "Wooden Sword") item.price = 50; // Explicit fix
-                if (item.name === "Wooden Shield") item.price = 50; // Explicit fix
-                if (item.name === "Iron Sword") item.price = 150;
-                if (item.name === "Tower Shield") item.price = 200;
-                if (item.name === "Noble Sword") item.price = 400;
-            });
 
             const xpComp = this.world.getComponent(playerEntity, Experience);
             const skills = this.world.getComponent(playerEntity, Skills);
@@ -370,6 +545,9 @@ class Game {
         // Draw Entities (foreground)
         renderSystem(this.world, this.ctx);
 
+        // Lighting Overlay
+        lightingRenderSystem(this.world, this.ctx, 0.92);
+
         // Draw Floating Text (UI overlay layer)
         textRenderSystem(this.world, this.ctx);
 
@@ -377,7 +555,10 @@ class Game {
         if (!this.ui.isShowing()) {
             this.ctx.fillStyle = '#fff';
             this.ctx.font = '10px monospace';
-            this.ctx.fillText('WASD: Move | SPACE: Talk | F: Attack', 4, 10);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '10px monospace';
+            const pvpStatus = this.pvpEnabled ? "PvP: ON" : "PvP: OFF";
+            this.ctx.fillText(`WASD: Move | SPACE: Talk | F: Attack | P: Toggle PvP (${pvpStatus})`, 4, 10);
         }
     }
 
@@ -403,6 +584,9 @@ window.onload = () => {
         const game = new Game();
         (window as any).game = game;
 
+        console.log('[Debug] RemotePlayer class:', RemotePlayer);
+        console.log('[Debug] Sprite class:', Sprite);
+
         // Init Game (Async)
         game.init().then(() => {
             console.log("Game Initialized");
@@ -410,8 +594,6 @@ window.onload = () => {
             // Remove Loading Screen
             const loading = document.getElementById('loading');
             if (loading) loading.style.display = 'none';
-
-
 
         }).catch(e => {
             throw e;
@@ -426,4 +608,3 @@ window.onload = () => {
         }
     }
 };
-

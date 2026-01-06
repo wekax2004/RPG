@@ -1,4 +1,5 @@
-import { Inventory, Item, Health, spriteSheet } from './game';
+import { Inventory, Item, Health, Sprite, Lootable } from './components';
+import { spriteSheet, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
 
 export class UIManager {
     private box: HTMLElement;
@@ -19,6 +20,10 @@ export class UIManager {
     private shopSellList: HTMLElement;
     public activeMerchantId: number | null = null;
     public currentMerchant: any = null;
+
+    // Loot
+    public lootPanel!: HTMLElement;
+    public activeLootEntityId: number | null = null;
 
     // Inspection
     private inspectPanel: HTMLElement;
@@ -131,6 +136,45 @@ export class UIManager {
 
         // Initial Hide
         this.inspectPanel.classList.add('hidden');
+
+        // Chat Input (Bind to existing)
+        this.chatInput = document.getElementById('console-input') as HTMLInputElement;
+    }
+
+    private chatInput!: HTMLInputElement;
+
+    /*
+    private createChatInput() {
+        // ... Removed in favor of binding to #console-input
+    }
+    */
+
+    toggleChat(forceOpen: boolean = false): boolean {
+        const bar = document.getElementById('chat-input-bar');
+        // Toggle Focus
+        if (document.activeElement !== this.chatInput || forceOpen) {
+            if (bar) bar.style.display = 'block';
+            this.chatInput.focus();
+            this.chatInput.style.background = '#333';
+            return true;
+        } else {
+            this.chatInput.blur();
+            if (bar) bar.style.display = 'none';
+            this.chatInput.style.background = '#222';
+            return false;
+        }
+    }
+
+    isChatOpen(): boolean {
+        return document.activeElement === this.chatInput;
+    }
+
+
+
+    getChatInput(): string {
+        const val = this.chatInput.value;
+        this.chatInput.value = '';
+        return val;
     }
 
     inspectItem(item: any) {
@@ -249,7 +293,9 @@ export class UIManager {
     hideDialogue() {
         this.box.classList.add('hidden');
         this.shopPanel.classList.add('hidden');
+        if (this.lootPanel) this.lootPanel.classList.add('hidden');
         this.activeMerchantId = null;
+        this.activeLootEntityId = null;
         this.closeInspect();
     }
 
@@ -364,6 +410,106 @@ export class UIManager {
         });
     }
 
+
+    openLoot(lootable: Lootable, entityId: number, playerInv: Inventory) {
+        if (!this.lootPanel) {
+            // Lazy Create
+            const panel = document.createElement('div');
+            panel.id = 'loot-panel';
+            panel.className = 'panel';
+            panel.style.display = 'none'; // hidden class is better but style works
+            panel.classList.add('hidden');
+
+            const header = document.createElement('div');
+            header.className = 'panel-header';
+            header.innerText = 'Corpse Loot';
+            panel.appendChild(header);
+
+            const grid = document.createElement('div');
+            grid.id = 'loot-grid';
+            grid.style.display = 'grid';
+            grid.style.gridTemplateColumns = 'repeat(5, 32px)';
+            grid.style.gap = '4px';
+            grid.style.padding = '10px';
+            panel.appendChild(grid);
+
+            // Button to close
+            const closeBtn = document.createElement('div');
+            closeBtn.innerText = "Close";
+            closeBtn.style.textAlign = 'center';
+            closeBtn.style.fontSize = '12px';
+            closeBtn.style.cursor = 'pointer';
+            closeBtn.style.marginTop = '10px';
+            closeBtn.onclick = () => this.hideDialogue();
+            panel.appendChild(closeBtn);
+
+            // Append to sidebar or body?
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.appendChild(panel);
+            else document.body.appendChild(panel);
+
+            this.lootPanel = panel;
+        }
+
+        this.activeLootEntityId = entityId;
+        this.lootPanel.classList.remove('hidden');
+        this.lootPanel.style.display = 'block'; // Ensure visibility
+        this.renderLoot(lootable, playerInv);
+    }
+
+    renderLoot(lootable: Lootable, playerInv: Inventory) {
+        const grid = this.lootPanel.querySelector('#loot-grid')!;
+        grid.innerHTML = '';
+
+        if (lootable.items.length === 0) {
+            const empty = document.createElement('div');
+            empty.innerText = "(Empty)";
+            empty.style.color = '#888';
+            empty.style.fontSize = '12px';
+            empty.style.gridColumn = 'span 5';
+            empty.style.textAlign = 'center';
+            grid.appendChild(empty);
+            return;
+        }
+
+        lootable.items.forEach((item, index) => {
+            const slot = document.createElement('div');
+            slot.className = 'slot';
+            slot.style.border = '1px solid #444';
+            slot.style.backgroundColor = '#222';
+            slot.style.width = '32px';
+            slot.style.height = '32px';
+            slot.style.cursor = 'pointer';
+
+            // Render Sprite
+            slot.style.backgroundImage = `url(${spriteSheet.src})`;
+            const col = item.uIndex % 8;
+            const row = Math.floor(item.uIndex / 8);
+            slot.style.backgroundPosition = `-${col * 32}px -${row * 32}px`;
+            slot.style.backgroundSize = '256px 256px';
+            slot.style.imageRendering = 'pixelated';
+
+            // Inspect
+            slot.onmouseover = () => this.inspectItem(item);
+            slot.onmouseleave = () => this.closeInspect();
+
+            // Loot Interaction
+            slot.onclick = () => {
+                // Move to player
+                // Check capacity? (For now ignore cap)
+                playerInv.storage.push(item);
+                lootable.items.splice(index, 1);
+
+                if (this.console) this.console.sendMessage(`Looted ${item.name}.`);
+                this.updateInventory(playerInv, spriteSheet.src);
+                this.renderLoot(lootable, playerInv);
+
+                // If empty, auto close? Nah, let user close.
+            };
+
+            grid.appendChild(slot);
+        });
+    }
 
 }
 

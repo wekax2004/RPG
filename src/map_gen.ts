@@ -1,7 +1,8 @@
-
 import { TileMap } from './game';
+import { RNG } from './rng';
 
-export function generateMap(width: number, height: number): { width: number, height: number, tileSize: number, data: number[], entities: any[] } {
+export function generateMap(width: number, height: number, seed: number): { width: number, height: number, tileSize: number, data: number[], entities: any[] } {
+    const rng = new RNG(seed);
     const data = new Array(width * height).fill(16); // Fill with Grass (16)
     const entities: any[] = [];
 
@@ -17,7 +18,7 @@ export function generateMap(width: number, height: number): { width: number, hei
                 data[y * width + x] = 17; // Wall
             } else {
                 // Random noise for terrain
-                const rand = Math.random();
+                const rand = rng.next();
                 if (rand < 0.05) {
                     data[y * width + x] = 18; // Water
                 } else if (rand < 0.15) {
@@ -158,11 +159,13 @@ export function generateMap(width: number, height: number): { width: number, hei
                         data[y * width + x] = 17;
                     }
                     // Pillars / Decorations
-                    else if (x % 4 === 0 && y % 4 === 0) {
+                    else if (x % 6 === 0 && y % 6 === 0) {
                         data[y * width + x] = 17;
-                    } else if (i > 0 && Math.random() < 0.05) {
+                        // Add Wall Torch
+                        entities.push({ type: 'torch', x: x * 16, y: y * 16 });
+                    } else if (i > 0 && rng.next() < 0.05) {
                         data[y * width + x] = 21; // Web (Level 2+)
-                    } else if (i > 0 && Math.random() < 0.05) {
+                    } else if (i > 0 && rng.next() < 0.05) {
                         data[y * width + x] = 22; // Bones (Level 2+)
                     }
                 }
@@ -195,10 +198,10 @@ export function generateMap(width: number, height: number): { width: number, hei
 
         // Mobs
         for (let m = 0; m < cfg.density; m++) {
-            const mx = (ox + 2 + Math.floor(Math.random() * (cfg.w - 4))) * 16;
-            const my = (oy + 2 + Math.floor(Math.random() * (cfg.h - 4))) * 16;
+            const mx = (ox + 2 + Math.floor(rng.next() * (cfg.w - 4))) * 16;
+            const my = (oy + 2 + Math.floor(rng.next() * (cfg.h - 4))) * 16;
             // Avoid spawning on top of teleporters (simple check logic omitted for brevity, trust disjoint probability)
-            const type = cfg.mobs[Math.floor(Math.random() * cfg.mobs.length)];
+            const type = cfg.mobs[Math.floor(rng.next() * cfg.mobs.length)];
             const diff = 1.0 + (i * 0.5); // Level 1: 1.0, Level 2: 1.5, Level 3: 2.0
             entities.push({ type: 'enemy', x: mx, y: my, enemyType: type, difficulty: diff });
         }

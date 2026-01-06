@@ -6,3 +6,5 @@ dist
 .gemini
 coverage
 node_modules
+release
+server_config.json
