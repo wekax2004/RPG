@@ -218,3 +218,12 @@ export class Consumable {
         public text: string
     ) { }
 }
+
+export class Passives {
+    constructor(
+        public vitality: number = 0, // +MaxHP
+        public spirit: number = 0,   // +MaxMana
+        public agility: number = 0,  // +Speed
+        public might: number = 0     // +Damage (Physical)
+    ) { }
+}

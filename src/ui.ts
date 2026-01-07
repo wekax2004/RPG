@@ -1,4 +1,4 @@
-import { Inventory, Item, Health, Sprite, Lootable, SpellBook, SkillPoints } from './components';
+import { Inventory, Item, Health, Sprite, Lootable, SpellBook, SkillPoints, Passives } from './components';
 import { spriteSheet, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
 
 export class UIManager {
@@ -36,30 +36,57 @@ export class UIManager {
     private magicHudIcon!: HTMLElement;
 
     constructor() {
-        this.box = document.getElementById('box-overlay')!;
-        this.text = document.getElementById('text')!;
+        this.cleanupLegacyUI(); // Fix: Remove duplicates from previous runs
+
+        this.box = document.getElementById('box-overlay') || this.createOverlay();
+        this.box.style.display = 'none';
+        this.box.classList.add('hidden'); // Force hide on init
+
+        this.text = document.getElementById('text') || this.createText();
+
+        // Check for Status Panel elements, create if missing
+        if (!document.getElementById('hp-val')) {
+            this.createStatusPanel();
+        }
+
         this.hpVal = document.getElementById('hp-val')!;
         this.manaVal = document.getElementById('mana-val')!;
         this.capVal = document.getElementById('cap-val')!;
-        this.levelVal = document.getElementById('lvl-val')!;
+        this.levelVal = document.getElementById('level-val') || document.getElementById('lvl-val')!; // Handle potential ID mismatch
         this.xpVal = document.getElementById('xp-val')!;
 
-        this.createMagicHud(); // Add HUD icon
-        this.createSkillTree(); // Add Modal
+        // Check if createStatusPanel failed or IDs mismatch (Robustness)
+        if (!this.hpVal) console.error("UIManager: hp-val missing!");
+
+        this.createMagicHud();
+        this.createSkillTree();
+        // Force hide skill tree if somehow visible
+        if (this.skillTreePanel) this.skillTreePanel.style.display = 'none';
 
         // ... (Existing selections)
         this.bagPanel = document.getElementById('backpack-panel') || this.createBag();
+        this.bagPanel.style.display = 'none';
+        this.bagPanel.classList.add('hidden');
+
         this.bagGrid = document.getElementById('backpack-grid')!;
 
         // Shop...
         this.shopPanel = document.getElementById('shop-panel') || this.createShop();
+        this.shopPanel.style.display = 'none';
+        this.shopPanel.classList.add('hidden');
+
         this.shopBuyList = document.getElementById('shop-buy-list')!;
         this.shopSellList = document.getElementById('shop-sell-list')!;
 
         // Loot...
         this.lootPanel = document.getElementById('loot-panel') || this.createLoot();
+        this.lootPanel.style.display = 'none';
+        this.lootPanel.classList.add('hidden');
 
-        this.inspectPanel = document.getElementById('inspect-panel')!;
+        this.inspectPanel = document.getElementById('inspect-panel') || this.createInspect();
+        this.inspectPanel.style.display = 'none';
+        this.inspectPanel.classList.add('hidden');
+
         this.inspectName = document.getElementById('inspect-name')!;
         this.inspectDesc = document.getElementById('inspect-desc')!;
         this.inspectStats = document.getElementById('inspect-stats')!;
@@ -76,15 +103,78 @@ export class UIManager {
             (backpackSlot as HTMLElement).style.backgroundColor = '#432';
             (backpackSlot as HTMLElement).innerHTML = '<div style="color:#aaa; font-size:10px; padding:2px;">[BAG]</div>';
         }
+
+        // Global Mouse Tracking for Tooltip
+        document.addEventListener('mousemove', (e) => {
+            if (this.inspectPanel && this.inspectPanel.style.display !== 'none') {
+                const x = e.clientX + 15;
+                const y = e.clientY + 15;
+
+                // Boundary check to keep in screen
+                // Simple clamp not needed if body is overflow hidden, but good UX
+                this.inspectPanel.style.left = `${x}px`;
+                this.inspectPanel.style.top = `${y}px`;
+            }
+        });
+    }
+
+    private cleanupLegacyUI() {
+        const ids = ['skill-tree-panel', 'loot-panel', 'shop-panel', 'inspect-panel', 'magic-hud'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        });
     }
 
     private chatInput!: HTMLInputElement;
 
+    // Helper to recreate Status Panel if missing
+    createStatusPanel() {
+        const panel = document.createElement('div');
+        panel.className = 'panel';
+        panel.id = 'status-panel';
+        panel.innerHTML = `
+            <div class="panel-header">Status</div>
+            <div class="status-row"><span>GP:</span> <span class="val" id="gold-val" style="color:#ffd700">0</span></div>
+            <div class="status-row"><span>Level:</span> <span class="val" id="level-val">1</span></div>
+            <div class="status-row"><span>XP:</span> <span class="val" id="xp-val">0/100</span></div>
+            <div class="status-row"><span>Health:</span> <span class="val" id="hp-val">100/100</span></div>
+            <div class="status-row"><span>Mana:</span> <span class="val" id="mana-val">50/50</span></div>
+            <div class="status-row"><span>Cap:</span> <span class="val" id="cap-val">400</span></div>
+        `;
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+            // Insert at top
+            sidebar.insertBefore(panel, sidebar.firstChild);
+        } else {
+            // No sidebar? Create basic container or append to body
+            document.body.appendChild(panel);
+            panel.style.position = 'absolute';
+            panel.style.top = '10px';
+            panel.style.right = '10px';
+        }
+    }
+
+    createOverlay(): HTMLElement {
+        const el = document.createElement('div');
+        el.id = 'box-overlay';
+        el.className = 'dialog-box hidden';
+        document.body.appendChild(el);
+        return el;
+    }
+    createText(): HTMLElement {
+        const el = document.createElement('p'); el.id = 'text';
+        const box = document.getElementById('dialogue-box') || document.body;
+        box.appendChild(el); return el;
+    }
+    createInspect(): HTMLElement {
+        const el = document.createElement('div');
+        el.id = 'inspect-panel'; el.className = 'hidden';
+        el.innerHTML = `<div id="inspect-name"></div><div id="inspect-desc"></div><div id="inspect-stats"></div>`;
+        document.body.appendChild(el); return el;
+    }
+
     createBag(): HTMLElement {
-        // Assume existing in HTML or create if missing (similar to others)
-        // For now, returning null/element as existing logic assumes it exists or creates it elsewhere?
-        // The original code accessed #backpack-panel directly. 
-        // Let's ensure it exists.
         let panel = document.getElementById('backpack-panel');
         if (!panel) {
             // Create Backpack Panel dynamically if missing
@@ -113,7 +203,7 @@ export class UIManager {
                 <div id="shop-buy-list" style="margin-bottom:10px;"></div>
                 <div style="font-size:12px; color:#aaa; margin-bottom:4px;">Selling (Backpack):</div>
                 <div id="shop-sell-list"></div>
-                <div style="margin-top:10px; text-align:center; font-size:12px; cursor:pointer;" onclick="document.getElementById('shop-panel').classList.add('hidden')">Close</div>
+                <div style="margin-top:10px; text-align:center; font-size:12px; cursor:pointer;" onclick="const el=document.getElementById('shop-panel'); el.classList.add('hidden'); el.style.display='none';">Close</div>
             `;
             const sidebar = document.getElementById('sidebar');
             if (sidebar) sidebar.appendChild(panel);
@@ -131,7 +221,7 @@ export class UIManager {
             panel.innerHTML = `
                 <div class="panel-header">Corpse Loot</div>
                 <div id="loot-grid" style="display:grid; grid-template-columns: repeat(5, 32px); gap: 4px; padding: 10px;"></div>
-                <div style="text-align:center; font-size:12px; cursor:pointer; margin-top:10px;" onclick="document.getElementById('loot-panel').classList.add('hidden')">Close</div>
+                <div style="text-align:center; font-size:12px; cursor:pointer; margin-top:10px;" onclick="const el=document.getElementById('loot-panel'); el.classList.add('hidden'); el.style.display='none';">Close</div>
             `;
             const sidebar = document.getElementById('sidebar');
             if (sidebar) sidebar.appendChild(panel);
@@ -160,16 +250,25 @@ export class UIManager {
         const p = document.createElement('div');
         p.id = 'skill-tree-panel';
         p.className = 'dialog-box hidden';
+        p.style.position = 'fixed'; // Fix: Ensure it's positioned so top/left work
         p.style.width = '200px';
         p.style.height = '180px';
         p.style.left = '50%';
         p.style.top = '50%';
         p.style.transform = 'translate(-50%, -50%)';
+        p.style.zIndex = '2000'; // Ensure it's on top
         p.style.display = 'none'; // Ensure hidden start
+        // Hardcoded Styles for Visibility
+        p.style.backgroundColor = '#1a1a1a';
+        p.style.border = '2px solid #aaa';
+        p.style.boxShadow = '0 0 20px #000';
+        p.style.color = '#fff';
+        p.style.padding = '8px';
+        p.style.borderRadius = '4px';
         p.innerHTML = `
             <div style="text-align:center; margin-bottom: 8px; border-bottom: 1px solid #555; padding-bottom:4px;">
                 <span class="dialog-title">Arcane Knowledge</span>
-                <div style="position:absolute; right:4px; top:4px; cursor:pointer;" onclick="document.getElementById('skill-tree-panel').style.display='none'">X</div>
+                <div style="position:absolute; right:4px; top:4px; cursor:pointer;" onclick="const el=document.getElementById('skill-tree-panel'); el.style.display='none';">X</div>
             </div>
             <div id="skill-points-display" style="text-align:center; color:#fd0; margin-bottom:8px;">Points: 0</div>
             <div id="skill-tree-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px;">
@@ -181,77 +280,128 @@ export class UIManager {
         this.skillTreePanel = p;
     }
 
-    toggleSkillTree(spells: SpellBook, points: SkillPoints) {
+
+
+    toggleSkillTree(book: SpellBook, points: SkillPoints, vocation: string, passives?: Passives, onUpgrade?: () => void) {
+        if (!this.skillTreePanel) this.createSkillTree();
+
+        // Fix: Ensure panel is actually in the DOM (handle detached reference)
+        if (!document.body.contains(this.skillTreePanel)) {
+            if (this.console) this.console.addSystemMessage("Debug: Re-attaching Skill Tree.");
+            document.body.appendChild(this.skillTreePanel);
+        }
+
         if (this.skillTreePanel.style.display === 'none') {
+            this.renderSkillTree(book, points, vocation, passives, onUpgrade);
+            // Force Visible Logic
+            this.skillTreePanel.style.zIndex = '2000'; // Normal High Z
             this.skillTreePanel.style.display = 'block';
-            this.renderSkillTree(spells, points);
+            this.skillTreePanel.classList.remove('hidden');
+
+            // Restore Nice Styles
+            this.skillTreePanel.className = 'dialog-box';
+            this.skillTreePanel.style.backgroundColor = ''; // Use class default (or inherited)
+            this.skillTreePanel.style.border = '';
+            this.skillTreePanel.style.boxShadow = '';
+            this.skillTreePanel.style.color = '';
+            this.skillTreePanel.style.padding = '';
+
+            // Ensure Position is still fixed (critical fix from earlier)
+            this.skillTreePanel.style.position = 'fixed';
+            this.skillTreePanel.style.left = '50%';
+            this.skillTreePanel.style.top = '50%';
+            this.skillTreePanel.style.transform = 'translate(-50%, -50%)';
+
+            // Diagnostics (Keep for verification, user can ignore)
+            if (this.console) this.console.addSystemMessage("Debug: Skill Tree Opened.");
         } else {
             this.skillTreePanel.style.display = 'none';
+            this.skillTreePanel.classList.add('hidden');
+            if (this.console) this.console.addSystemMessage("Debug: Tree CLOSED.");
         }
     }
 
-    renderSkillTree(book: SpellBook, points: SkillPoints) {
-        const grid = document.getElementById('skill-tree-grid')!;
-        grid.innerHTML = '';
+    renderSkillTree(book: SpellBook, points: SkillPoints, vocation: string, passives?: Passives, onUpgrade?: () => void) {
+        try {
+            const grid = document.getElementById('skill-tree-grid');
+            if (!grid) {
+                console.error("UI Error: skill-tree-grid not found!");
+                return;
+            }
+            grid.innerHTML = '';
 
-        const spells = [
-            { name: "Fireball", desc: "Burn foes", color: "#f80" },
-            { name: "Global Heal", desc: "Restore HP", color: "#0f0" },
-            { name: "Ice Shard", desc: "Freeze enemy", color: "#0ef" },
-            { name: "Chain Lightning", desc: "Zap multiple", color: "#ff0" }
-        ];
+            const pointsDisplay = document.getElementById('skill-points-display');
+            if (pointsDisplay) pointsDisplay.innerText = `Points: ${points.current}`;
 
-        spells.forEach(spell => {
-            const level = book.knownSpells.get(spell.name) || 0;
-            const learned = level > 0;
+            if (!passives) {
+                grid.innerHTML = '<div style="color:#aaa; text-align:center; grid-column:span 2;">No Passives Data</div>';
+                return;
+            }
 
-            const btn = document.createElement('div');
-            btn.style.border = learned ? `2px solid ${spell.color}` : '1px solid #444';
-            btn.style.background = learned ? '#222' : '#111';
-            btn.style.padding = '4px';
-            btn.style.cursor = 'pointer';
-            btn.style.opacity = learned ? '1' : '0.6';
+            // Define Passive Nodes
+            const nodes = [
+                { id: 'vitality', name: "Vitality", desc: "+10 Max HP", color: "#d00", val: passives.vitality },
+                { id: 'spirit', name: "Spirit", desc: "+10 Max Mana", color: "#00d", val: passives.spirit },
+                { id: 'agility', name: "Agility", desc: "+5 Speed", color: "#0d0", val: passives.agility },
+                { id: 'might', name: "Might", desc: "+2 Phys Dmg", color: "#fa0", val: passives.might }
+            ];
 
-            btn.innerHTML = `
-                <div style="color:${spell.color}; font-weight:bold;">${spell.name}</div>
-                <div style="font-size:10px; color:#ccc;">Lvl: ${level}</div>
-                <div style="font-size:9px; color:#888;">${spell.desc}</div>
-            `;
+            nodes.forEach(node => {
+                const btn = document.createElement('div');
+                btn.style.border = `2px solid ${node.color}`;
+                btn.style.background = '#222';
+                btn.style.padding = '8px';
+                btn.style.cursor = 'pointer';
+                btn.style.margin = '4px';
+                btn.style.textAlign = 'center';
 
-            // Click to Learn/Upgrade
-            btn.onclick = () => {
-                // Send Signal to Game (Hack via window or custom event ideally, but direct call for now?)
-                // We don't have ref to World here easily without callback.
-                // Let's emit a custom event
-                const event = new CustomEvent('skill-upgrade-request', { detail: { spell: spell.name } });
-                window.dispatchEvent(event);
-            };
+                btn.innerHTML = `
+                    <div style="color:${node.color}; font-weight:bold;">${node.name}</div>
+                    <div style="font-size:10px; color:#aaa;">Lvl ${node.val}</div>
+                    <div style="font-size:10px; color:#666;">${node.desc}</div>
+                `;
 
-            grid.appendChild(btn);
-        });
+                btn.onclick = () => {
+                    if (points.current > 0) {
+                        points.current--;
+                        (passives as any)[node.id]++; // Dynamic accessor
+                        if (pointsDisplay) pointsDisplay.innerText = `Points: ${points.current}`;
+                        this.renderSkillTree(book, points, vocation, passives, onUpgrade); // Re-render to update Level text
+                        if (onUpgrade) onUpgrade();
+                    } else {
+                        if (this.console) this.console.addSystemMessage("Not enough Skill Points.");
+                    }
+                };
 
-        document.getElementById('skill-points-display')!.innerText = `Available Points: ${points.current}`;
+                grid.appendChild(btn);
+            });
+
+            // Note: Removed old Spell Logic completely as requested
+
+        } catch (e) {
+            console.error("Render SkillTree Error:", e);
+        }
     }
 
     updateMagicHud(activeSpell: string) {
         if (!this.magicHudIcon) return;
         this.magicHudIcon.innerText = activeSpell.charAt(0).toUpperCase();
         let color = '#ccc';
-        if (activeSpell === 'Fireball') color = '#f80';
-        if (activeSpell === 'Global Heal') color = '#0f0';
-        if (activeSpell === 'Ice Shard') color = '#0ef';
-        if (activeSpell === 'Chain Lightning') color = '#ff0';
+        if (activeSpell === 'Fireball' || activeSpell === 'adori flam') color = '#f80';
+        if (activeSpell === 'Global Heal' || activeSpell === 'exura') color = '#0f0';
+        if (activeSpell === 'Ice Shard' || activeSpell === 'adori frigo') color = '#0ef';
+        if (activeSpell === 'Chain Lightning' || activeSpell === 'exevo gran vis lux') color = '#ff0';
         this.magicHudIcon.style.color = color;
         this.magicHudIcon.style.borderColor = color;
     }
 
     // Existing updateStatus update...
     updateStatus(hp: number, maxHp: number, mana: number, maxMana: number, capacity: number, gold: number, level: number, xp: number, nextXp: number, skills: any = null) {
-        this.hpVal.innerText = `${hp}/${maxHp}`;
-        this.manaVal.innerText = `${mana}/${maxMana}`;
-        this.capVal.innerText = capacity.toString();
-        this.levelVal.innerText = level.toString();
-        this.xpVal.innerText = `${xp}/${nextXp}`;
+        if (this.hpVal) this.hpVal.innerText = `${hp}/${maxHp}`;
+        if (this.manaVal) this.manaVal.innerText = `${mana}/${maxMana}`;
+        if (this.capVal) this.capVal.innerText = capacity.toString();
+        if (this.levelVal) this.levelVal.innerText = level.toString();
+        if (this.xpVal) this.xpVal.innerText = `${xp}/${nextXp}`;
 
         const goldEl = document.getElementById('gold-val');
         if (goldEl) goldEl.innerText = gold.toString();
@@ -315,8 +465,6 @@ export class UIManager {
 
     // Constructor Removed (Merged)
 
-    private chatInput!: HTMLInputElement;
-
     /*
     private createChatInput() {
         // ... Removed in favor of binding to #console-input
@@ -354,34 +502,61 @@ export class UIManager {
     inspectItem(item: any) {
         if (!item) return;
 
-        // Update Text FIRST
-        this.inspectName.innerText = item.name || "Unknown";
-        this.inspectDesc.innerText = item.description || "No description.";
-
+        // "Nuclear Option": Set InnerHTML directly to ensure content appears
+        // This bypasses potential stale references to child elements
+        const name = item.name || "Unknown";
+        const desc = item.description || "No description.";
         let stats = `Price: ${item.price}gp`;
         if (item.damage > 0) stats += ` | Dmg: ${item.damage}`;
-        this.inspectStats.innerText = stats;
 
-        // Then Show
+        this.inspectPanel.innerHTML = `
+            <div style="font-weight: bold; color: #ffd700; border-bottom: 1px solid #555; margin-bottom: 4px; padding-bottom: 2px;">${name}</div>
+            <div style="color: #ccc; font-style: italic; font-size: 12px; margin-bottom: 4px;">${desc}</div>
+            <div style="color: #0f0; font-size: 12px;">${stats}</div>
+        `;
+
+        // Show
         this.inspectPanel.classList.remove('hidden');
+        this.inspectPanel.style.display = 'block';
+        this.inspectPanel.style.zIndex = '6000';
+        this.inspectPanel.style.opacity = '1';
     }
 
     closeInspect() {
         this.inspectPanel.classList.add('hidden');
+        this.inspectPanel.style.display = 'none';
+    }
+
+    isShowing(): boolean {
+        // Returns true if any blocking UI is visible. Checks style.display as source of truth.
+        const dialogOpen = this.box.style.display !== 'none';
+        const skillsOpen = this.skillTreePanel && this.skillTreePanel.style.display !== 'none';
+        const shopOpen = this.shopPanel && this.shopPanel.style.display !== 'none';
+        const bagOpen = this.bagPanel && this.bagPanel.style.display !== 'none';
+        const inspectOpen = this.inspectPanel && this.inspectPanel.style.display !== 'none';
+
+        return dialogOpen || skillsOpen || shopOpen || bagOpen || inspectOpen;
     }
 
     toggleBag() {
-        this.bagPanel.classList.toggle('hidden');
+        if (this.bagPanel.style.display === 'none') {
+            this.bagPanel.style.display = 'block';
+            this.bagPanel.classList.remove('hidden');
+        } else {
+            this.bagPanel.style.display = 'none';
+            this.bagPanel.classList.add('hidden');
+        }
     }
 
     toggleShop(merchant: any, playerInv: Inventory, merchantId: number) {
-        if (this.shopPanel.classList.contains('hidden')) {
-            this.shopPanel.classList.remove('hidden');
+        if (this.shopPanel.classList.contains('hidden') || this.shopPanel.style.display === 'none') {
+            this.shopPanel.style.display = 'block';
             this.shopPanel.classList.remove('hidden');
             this.activeMerchantId = merchantId;
             this.currentMerchant = merchant;
             this.renderShop(merchant, playerInv);
         } else {
+            this.shopPanel.style.display = 'none';
             this.shopPanel.classList.add('hidden');
             this.activeMerchantId = null;
             this.currentMerchant = null;
@@ -462,20 +637,27 @@ export class UIManager {
         if (this.console) this.console.addSystemMessage(`Dialogue: ${message}`);
         this.text.innerText = message;
         this.box.classList.remove('hidden');
+        this.box.style.display = 'block';
     }
 
     hideDialogue() {
         this.box.classList.add('hidden');
+        this.box.style.display = 'none';
+
         this.shopPanel.classList.add('hidden');
-        if (this.lootPanel) this.lootPanel.classList.add('hidden');
+        this.shopPanel.style.display = 'none';
+
+        if (this.lootPanel) {
+            this.lootPanel.classList.add('hidden');
+            this.lootPanel.style.display = 'none';
+        }
+
         this.activeMerchantId = null;
         this.activeLootEntityId = null;
         this.closeInspect();
     }
 
-    isShowing(): boolean {
-        return !this.box.classList.contains('hidden') || !this.shopPanel.classList.contains('hidden');
-    }
+
 
     updateInventory(inv: Inventory, spriteSrc: string) {
         // Clear all slots
@@ -548,8 +730,18 @@ export class UIManager {
             slot.onmouseover = () => this.inspectItem(item);
             slot.onmouseleave = () => this.closeInspect();
 
-            // Equip Event
+            // Equip / Consume Event
             slot.onclick = () => {
+                // CONSUMABLE CHECK
+                if (item.slot === 'potion' || item.slot === 'food') {
+                    if (this.onConsume) {
+                        this.onConsume(item);
+                        // UI Update is handled by the caller or we can force it here?
+                        // Usually the caller will modify inventory and call updateInventory again.
+                        return;
+                    }
+                }
+
                 const targetSlot = item.slot;
 
                 // Check if slot is occupied

@@ -59,6 +59,63 @@ export function generateMap(width: number, height: number, seed: number): { widt
     // Spawn Player in Center
     entities.push({ type: 'player', x: centerX, y: centerY });
 
+    // --- FOREST GENERATION (Ring around town) ---
+    // Min Radius: Town Radius + 2 (12 tiles) - Closer to town
+    // Max Radius: 120 tiles (Cover effectively whole map since width/2 = 128)
+    const forestMinFn = 12;
+    const forestMaxFn = 120;
+
+    let treeCount = 0;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const dx = x - Math.floor(centerX / 32);
+            const dy = y - Math.floor(centerY / 32);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > forestMinFn && dist < forestMaxFn) {
+                // Forest Zone
+                // Reduced chance of trees (40% for more clearings)
+                if (rng.next() < 0.4) {
+                    // Don't overwrite walls or water easily, but let's just force wood for density
+                    if (data[y * width + x] === 16) { // If grass
+                        data[y * width + x] = 34; // TREE (Collision + Visual)
+                        treeCount++;
+                    }
+                }
+
+                // Spawn Wolves with clearing
+                if (rng.next() < 0.008 && data[y * width + x] === 16) { // Slightly more wolves
+                    entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'wolf', difficulty: 0.8 });
+                    // Create 3x3 clearing around enemy
+                    for (let cy = -1; cy <= 1; cy++) {
+                        for (let cx = -1; cx <= 1; cx++) {
+                            const tx = x + cx, ty = y + cy;
+                            if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
+                                if (data[ty * width + tx] === 34) data[ty * width + tx] = 16; // Remove tree
+                            }
+                        }
+                    }
+                }
+
+                // Spawn Orcs (further from town)
+                if (dist > 25 && rng.next() < 0.004 && data[y * width + x] === 16) {
+                    entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'orc', difficulty: 1.0 });
+                    // Create clearing
+                    for (let cy = -1; cy <= 1; cy++) {
+                        for (let cx = -1; cx <= 1; cx++) {
+                            const tx = x + cx, ty = y + cy;
+                            if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
+                                if (data[ty * width + tx] === 34) data[ty * width + tx] = 16;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    console.log(`[MapGen] Generated ${treeCount} trees in the Forest.`);
+
     // Helper: Generate House
     const generateHouse = (bx: number, by: number, w: number, h: number) => {
         const tx = Math.floor(bx / 32);
@@ -134,8 +191,66 @@ export function generateMap(width: number, height: number, seed: number): { widt
     // Village Entrance -> Level 1
     const l1OriginX = levelConfigs[0].ox;
     const l1OriginY = levelConfigs[0].oy;
+
+    // Move Crypt Deep South
     const villageStairsX = centerX;
-    const villageStairsY = centerY + 64;
+    const villageStairsY = centerY + (85 * 32); // 85 tiles south (Very far in 256x256 map)
+
+    // Carve Path from Town to Crypt
+    const startTileY = Math.floor((centerY + 10 * 32) / 32); // Town Edge
+    const endTileY = Math.floor(villageStairsY / 32);
+    const pathX = Math.floor(centerX / 32);
+
+    for (let y = startTileY; y <= endTileY; y++) {
+        // Main Path
+        data[y * width + pathX] = 23; // Stone Floor (Path)
+        data[y * width + pathX - 1] = 23; // Widen path
+        // Clear trees ONLY directly adjacent (Width 4 total clearing: Path 2 + Border 2)
+        // Previous was clearing +2 and -3. Let's keep it tight.
+        if (data[y * width + pathX + 1] === 34) data[y * width + pathX + 1] = 16;
+        if (data[y * width + pathX - 2] === 34) data[y * width + pathX - 2] = 16;
+
+        // Force Trees on the edge of the path to GUARANTEE visual forest
+        // Left side
+        if (rng.next() < 0.8) data[y * width + pathX - 3] = 34;
+        if (rng.next() < 0.5) data[y * width + pathX - 4] = 34;
+        // Right side
+        if (rng.next() < 0.8) data[y * width + pathX + 2] = 34;
+        if (rng.next() < 0.5) data[y * width + pathX + 3] = 34;
+    }
+
+    // --- MAUSOLEUM GENERATION ---
+    // A stone structure around the entrance
+    const mRadius = 4;
+    const mx = Math.floor(villageStairsX / 32);
+    const my = Math.floor(villageStairsY / 32);
+
+    for (let y = my - mRadius; y <= my + mRadius; y++) {
+        for (let x = mx - mRadius; x <= mx + mRadius; x++) {
+            // Floor
+            data[y * width + x] = 23; // Stone
+
+            // Columns / Walls (Perimeter)
+            if (Math.abs(x - mx) === mRadius || Math.abs(y - my) === mRadius) {
+                // Leave entrance gap on north side (y === my - mRadius, x near center)
+                if (y === my - mRadius && Math.abs(x - mx) <= 1) {
+                    // Entrance - keep as stone floor
+                    data[y * width + x] = 23;
+                } else {
+                    // Use Wall (17) for tall height
+                    data[y * width + x] = 17; // Wall with height
+                }
+            }
+        }
+    }
+
+    // Spawn Zombies around Mausoleum
+    for (let i = 0; i < 8; i++) {
+        // Random spot near Crypt
+        const ox = (Math.random() * 10 - 5) * 32;
+        const oy = (Math.random() * 10 - 5) * 32;
+        entities.push({ type: 'enemy', x: villageStairsX + ox, y: villageStairsY + oy, enemyType: 'zombie', difficulty: 0.5 });
+    }
 
     entities.push({
         type: 'teleporter', x: villageStairsX, y: villageStairsY,
@@ -143,7 +258,7 @@ export function generateMap(width: number, height: number, seed: number): { widt
     });
     entities.push({ type: 'teleporter', x: (l1OriginX + 2) * 32, y: (l1OriginY + 2) * 32, targetX: villageStairsX, targetY: villageStairsY + 48 });
 
-    data[Math.floor(villageStairsY / 32) * width + Math.floor(villageStairsX / 32)] = 19; // Wood floor mark
+    data[Math.floor(villageStairsY / 32) * width + Math.floor(villageStairsX / 32)] = 20; // Stairs Tile
 
     for (let i = 0; i < levels; i++) {
         const cfg = levelConfigs[i];

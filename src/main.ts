@@ -1,5 +1,5 @@
 import { World, InputHandler } from './engine';
-import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell } from './game';
+import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, consumeItem, safeZoneRegenSystem, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell, updateStatsFromPassives, AI } from './game';
 import { Vocation, lightingRenderSystem, LightSource, RemotePlayer, Sprite, SPRITES, spriteSheet, Velocity } from './game'; // Fix TS2552
 import { UIManager, ConsoleManager, CharacterCreation } from './ui';
 import { saveGame, loadGame } from './save';
@@ -47,6 +47,33 @@ class Game {
         this.console = new ConsoleManager();
         this.network = new NetworkManager();
         this.audio = new AudioController();
+
+        // Wire Consumable Callback
+        this.ui.onConsume = (item) => {
+            const playerEntity = this.world.query([PlayerControllable, Health])[0];
+            if (playerEntity !== undefined) {
+                const inv = this.world.getComponent(playerEntity, Inventory)!;
+                // Consume
+                if (consumeItem(this.world, playerEntity, item, this.audio, this.ui)) {
+                    // If success, remove from inventory (Storage or Equipped logic handled by UI mostly, but we should ensure sync)
+                    // UI's onclick already handles removal logic usually? 
+                    // No, UI onclick was just "Equip". WE need to remove it here if we want "use" logic.
+
+                    // Helper to find and remove ONE instance of this item
+                    // Since `item` is the object ref, we can find it in storage.
+                    const index = inv.storage.indexOf(item);
+                    if (index > -1) {
+                        inv.storage.splice(index, 1);
+                    } else {
+                        // Check equipped? Should not be equipped if in bag.
+                    }
+
+                    // Force Update UI
+                    this.ui.updateInventory(inv, spriteSheet.src);
+                }
+            }
+        };
+
 
         // Create PvP Indicator
         const pvpInd = document.createElement('div');
@@ -228,7 +255,6 @@ class Game {
 
         // Listen for Global Keys (Chat)
         window.addEventListener('keydown', (e) => {
-            console.log(`[Game] Key: ${e.key}`);
             if (e.key === 'Enter') {
                 e.preventDefault();
                 if (this.ui.isChatOpen()) {
@@ -331,53 +357,10 @@ class Game {
                     }
                 }
 
-                // Magic Hotkeys
-                const player = this.world.query([PlayerControllable, SpellBook, SkillPoints, ActiveSpell])[0];
-                if (player !== undefined) {
-                    const spells = this.world.getComponent(player, SpellBook)!;
-                    const points = this.world.getComponent(player, SkillPoints)!;
-                    const active = this.world.getComponent(player, ActiveSpell)!;
-                    const vocation = this.world.getComponent(player, Vocation);
-                    const vocName = vocation ? vocation.name.toLowerCase() : 'knight';
-
-                    if (e.code === 'KeyK') {
-                        this.ui.toggleSkillTree(spells, points, vocName);
-                    } else if (e.key === '1') {
-                        // Slot 1: Light Healing (All)
-                        active.spellName = 'exura';
-                        this.ui.updateMagicHud(active.spellName);
-                        this.console.addSystemMessage("Active: Light Healing (exura)");
-                    } else if (e.key === '2') {
-                        // Slot 2: Primary Attack
-                        if (vocName === 'mage') active.spellName = 'adori flam';
-                        else if (vocName === 'ranger') active.spellName = 'utito san';
-                        else active.spellName = 'exori'; // Knight
-
-                        this.ui.updateMagicHud(active.spellName);
-                        this.console.addSystemMessage(`Active: ${active.spellName}`);
-                    } else if (e.key === '3') {
-                        // Slot 3: Secondary Attack / Utility
-                        if (vocName === 'mage') active.spellName = 'adori frigo';
-                        else if (vocName === 'knight') active.spellName = 'exori mas';
-                        else active.spellName = 'exura'; // Fallback
-
-                        this.ui.updateMagicHud(active.spellName);
-                        this.console.addSystemMessage(`Active: ${active.spellName}`);
-                    } else if (e.key === '4') {
-                        // Slot 4: Ultimate / Strong
-                        if (vocName === 'mage') active.spellName = 'exevo gran vis lux';
-                        else if (vocName === 'knight') active.spellName = 'exura'; // Fallback
-                        else active.spellName = 'exura'; // Fallback
-
-                        this.ui.updateMagicHud(active.spellName);
-                        this.console.addSystemMessage(`Active: ${active.spellName}`);
-                    } else if (e.code === 'KeyR') {
-                        // Cast Active Spell (Incantation is stored in active.spellName)
-                        castSpell(this.world, this.ui, active.spellName, this.network);
-                    }
-                }
+                // Magic Hotkeys (Moved to magicSystem in game.ts)
+                // if (e.code === 'KeyK') { ... } REMOVED: Duplicate of magicSystem logic
             }
-        }, true); // Capture phase to prevent game inputs? Or check ui state in inputSystem?
+        }, true); // Capture phase
         // Better: InputHandler check ui.isChatOpen()
 
         // Attempt Login
@@ -388,7 +371,14 @@ class Game {
         try {
             // Generate Map Procedurally (Larger world for Crypt)
             // Use Global Seed from Server
-            const mapData = generateMap(128, 128, seed);
+            const mapData = generateMap(256, 256, seed);
+            console.log(`[Main] Map Generated. Entities: ${mapData.entities.length}.`);
+
+            // FORCE DEBUG TILE (Tree) next to spawn
+            const tileX = Math.floor(spawnX / 32) + 2;
+            const tileY = Math.floor(spawnY / 32);
+            mapData.data[tileY * 256 + tileX] = 34; // TREE (Test)
+            console.log(`[Debug] Forced Tree (ID 34) at ${tileX}, ${tileY}`);
 
             // Create Map Entity
             const mapEntity = this.world.createEntity();
@@ -422,6 +412,10 @@ class Game {
                         const torch = this.world.createEntity();
                         this.world.addComponent(torch, new Position(ent.x, ent.y));
                         this.world.addComponent(torch, new LightSource(48, '#ff5500', true));
+                    } else if (ent.type === 'static') {
+                        const s = this.world.createEntity();
+                        this.world.addComponent(s, new Position(ent.x, ent.y));
+                        this.world.addComponent(s, new Sprite(ent.sprite, ent.size));
                     }
                 }
             }
@@ -455,6 +449,9 @@ class Game {
                             pos.y = this.spawnY;
                             this.console.addSystemMessage("World Updated: Moved to new village.");
                         }
+
+                        // Recalculate stats
+                        updateStatsFromPassives(this.world, player);
                     }
                     this.console.addSystemMessage("Save Loaded.");
                     // Force Inventory Update
@@ -504,7 +501,11 @@ class Game {
 
     update(dt: number) {
         inputSystem(this.world, this.input);
-        autocloseSystem(this.world, this.ui);
+        inputSystem(this.world, this.input);
+        // autocloseSystem(this.world, this.ui); // DISABLED: Causing rapid open/close toggle loops
+
+        // Run Magic System always (to allow toggling UI/Skills)
+        magicSystem(this.world, this.input, this.ui);
 
         // System Updates
         if (!this.ui.isShowing()) {
@@ -514,7 +515,9 @@ class Game {
             itemPickupSystem(this.world, this.ui, this.audio, this.network);
             // Pass UI for console messages, and Network for PvP
             combatSystem(this.world, this.input, this.audio, this.ui, this.network, this.pvpEnabled);
+            // magicSystem moved out to allow toggling UI
             consumableSystem(this.world, this.input, this.ui);
+            safeZoneRegenSystem(this.world, dt, this.ui);
             decaySystem(this.world, dt);
             floatingTextSystem(this.world, dt);
             particleSystem(this.world, dt);
@@ -541,9 +544,11 @@ class Game {
                 }
             }
 
-            // Camera follows player
-            cameraSystem(this.world, this.mapWidthPixels, this.mapHeightPixels);
         }
+
+        // Camera follows player (Moved outside UI check)
+        cameraSystem(this.world, this.mapWidthPixels, this.mapHeightPixels);
+
         interactionSystem(this.world, this.input, this.ui);
 
         // UI Updates
@@ -599,6 +604,9 @@ class Game {
         // Draw Floating Text (UI overlay layer)
         textRenderSystem(this.world, this.ctx);
 
+        // Draw Minimap (top-right corner)
+        this.drawMinimap();
+
         // Draw debug text
         if (!this.ui.isShowing()) {
             this.ctx.fillStyle = '#fff';
@@ -610,6 +618,86 @@ class Game {
         }
     }
 
+    drawMinimap() {
+        const minimapCanvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
+        if (!minimapCanvas) return;
+        const mCtx = minimapCanvas.getContext('2d');
+        if (!mCtx) return;
+
+        const mapSize = minimapCanvas.width; // Use canvas size
+        const mapX = 0; // Draw at origin of minimap canvas
+        const mapY = 0;
+
+        // Get player position
+        const playerEntity = this.world.query([PlayerControllable, Position])[0];
+        if (!playerEntity) return;
+        const playerPos = this.world.getComponent(playerEntity, Position)!;
+
+        const scale = mapSize / this.mapWidthPixels; // Scale factor
+
+        // Clear minimap
+        mCtx.fillStyle = '#111';
+        mCtx.fillRect(0, 0, mapSize, mapSize);
+
+        // Draw terrain (simplified - just show tiles near player)
+        const mapEntities = this.world.query([TileMap]);
+        if (mapEntities.length > 0) {
+            const map = this.world.getComponent(mapEntities[0], TileMap)!;
+            const tileScale = mapSize / (map.width * map.tileSize) * map.tileSize;
+
+            // Only draw visible area (centered on player)
+            const viewRadius = 30; // tiles
+            const playerTileX = Math.floor(playerPos.x / map.tileSize);
+            const playerTileY = Math.floor(playerPos.y / map.tileSize);
+
+            for (let dy = -viewRadius; dy <= viewRadius; dy++) {
+                for (let dx = -viewRadius; dx <= viewRadius; dx++) {
+                    const tx = playerTileX + dx;
+                    const ty = playerTileY + dy;
+                    if (tx < 0 || tx >= map.width || ty < 0 || ty >= map.height) continue;
+
+                    const tileId = map.data[ty * map.width + tx];
+                    const mx = mapX + (tx * tileScale);
+                    const my = mapY + (ty * tileScale);
+
+                    // Color based on tile type
+                    if (tileId === 16) mCtx.fillStyle = '#2d5a1e'; // Grass
+                    else if (tileId === 17) mCtx.fillStyle = '#654'; // Wall
+                    else if (tileId === 18) mCtx.fillStyle = '#246'; // Water
+                    else if (tileId === 34) mCtx.fillStyle = '#1a4a1a'; // Tree
+                    else if (tileId === 23) mCtx.fillStyle = '#555'; // Stone
+                    else if (tileId === 19) mCtx.fillStyle = '#532'; // Wood
+                    else mCtx.fillStyle = '#333';
+
+                    mCtx.fillRect(mx, my, Math.max(1, tileScale), Math.max(1, tileScale));
+                }
+            }
+        }
+
+        // Draw enemies as red dots
+        const enemies = this.world.query([Position, AI]);
+        for (const eid of enemies) {
+            const ePos = this.world.getComponent(eid, Position)!;
+            const ex = mapX + (ePos.x * scale);
+            const ey = mapY + (ePos.y * scale);
+            if (ex >= mapX && ex <= mapX + mapSize && ey >= mapY && ey <= mapY + mapSize) {
+                mCtx.fillStyle = '#f00';
+                mCtx.fillRect(ex - 1, ey - 1, 3, 3);
+            }
+        }
+
+        // Draw player as white dot
+        const px = mapX + (playerPos.x * scale);
+        const py = mapY + (playerPos.y * scale);
+        mCtx.fillStyle = '#fff';
+        mCtx.fillRect(px - 2, py - 2, 5, 5);
+
+        // Border
+        mCtx.strokeStyle = '#666';
+        mCtx.lineWidth = 1;
+        mCtx.strokeRect(0, 0, mapSize, mapSize);
+    }
+
     loop(timestamp: number) {
         if (!this.running) return;
 
@@ -619,7 +707,7 @@ class Game {
         this.update(dt);
         this.render();
 
-        this.input.update();
+        // input.update(); // REMOVED: Duplicate call (called in update())
 
         requestAnimationFrame(this.loop);
     }

@@ -1,5 +1,5 @@
 import { World } from './engine';
-import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell } from './components';
+import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell, Passives } from './components';
 import { SPRITES } from './assets';
 
 import { UIManager } from './ui';
@@ -26,6 +26,12 @@ interface SaveData {
         knownSpells: Array<[string, number]>;
         skillPoints: number;
         activeSpell: string;
+    };
+    passives?: {
+        vitality: number;
+        spirit: number;
+        agility: number;
+        might: number;
     };
 }
 
@@ -92,6 +98,12 @@ export function saveGame(world: World, ui?: UIManager) {
             knownSpells: spells ? Array.from(spells.knownSpells.entries()) : [['Fireball', 1]],
             skillPoints: sp ? sp.current : 0,
             activeSpell: active ? active.spellName : 'Fireball'
+        },
+        passives: {
+            vitality: world.getComponent(playerEntity, Passives)?.vitality || 0,
+            spirit: world.getComponent(playerEntity, Passives)?.spirit || 0,
+            agility: world.getComponent(playerEntity, Passives)?.agility || 0,
+            might: world.getComponent(playerEntity, Passives)?.might || 0
         }
     };
 
@@ -215,21 +227,52 @@ export function loadGame(world: World, ui: UIManager): boolean {
             const spells = world.getComponent(playerEntity, SpellBook);
             if (spells) {
                 spells.knownSpells = new Map(data.magic.knownSpells);
+            } else {
+                const sb = new SpellBook();
+                sb.knownSpells = new Map(data.magic.knownSpells);
+                world.addComponent(playerEntity, sb);
             }
             const sp = world.getComponent(playerEntity, SkillPoints);
             if (sp) {
                 sp.current = data.magic.skillPoints;
+            } else {
+                world.addComponent(playerEntity, new SkillPoints(data.magic.skillPoints, 0));
             }
             const active = world.getComponent(playerEntity, ActiveSpell);
             if (active) {
                 active.spellName = data.magic.activeSpell;
+            } else {
+                world.addComponent(playerEntity, new ActiveSpell(data.magic.activeSpell));
             }
         } else {
             // New Magic System Default (Old Save)
             const spells = world.getComponent(playerEntity, SpellBook);
-            if (spells) spells.knownSpells.set("Fireball", 1);
+            if (spells && !spells.knownSpells.has("Fireball")) spells.knownSpells.set("Fireball", 1);
+            else if (!spells) world.addComponent(playerEntity, new SpellBook());
+
             const active = world.getComponent(playerEntity, ActiveSpell);
-            if (active) active.spellName = "Fireball";
+            if (!active) {
+                world.addComponent(playerEntity, new ActiveSpell("adori flam"));
+            }
+            // Fix: Add SkillPoints fallback for old saves
+            if (!world.getComponent(playerEntity, SkillPoints)) {
+                world.addComponent(playerEntity, new SkillPoints(0, 0));
+            }
+        }
+
+        // Restore Passives
+        if (data.passives) {
+            world.addComponent(playerEntity, new Passives(
+                data.passives.vitality,
+                data.passives.spirit,
+                data.passives.agility,
+                data.passives.might
+            ));
+        } else {
+            // New Passives Default (Old Save)
+            if (!world.getComponent(playerEntity, Passives)) {
+                world.addComponent(playerEntity, new Passives());
+            }
         }
 
         ui.updateStatus(hp.current, hp.max, 50, 50, 400, inv.gold, xp.level, xp.current, xp.next);

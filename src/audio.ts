@@ -139,6 +139,29 @@ export class AudioController {
         this.playTone(554, 'square', 0.2, now + 0.1);
         this.playTone(659, 'square', 0.4, now + 0.2);
     }
+
+    playDeath() {
+        if (!this.initialized) return;
+        // Sad/Dark Descending Tone
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 1.5);
+
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0, now + 1.5);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(now + 1.5);
+
+        // Low Noise Thud
+        this.playFootstep('stone'); // Re-use thud
+    }
     // --- New Immersive Audio Methods ---
 
     playFootstep(material: 'grass' | 'stone' | 'wood') {
