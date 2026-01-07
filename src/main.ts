@@ -1,5 +1,5 @@
 import { World, InputHandler } from './engine';
-import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, consumeItem, safeZoneRegenSystem, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell, updateStatsFromPassives, AI, Quest, QuestLog, QuestGiver, Interactable, Name } from './game';
+import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, uiControlSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, consumeItem, safeZoneRegenSystem, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell, updateStatsFromPassives, AI, Quest, QuestLog, QuestGiver, Interactable, Name } from './game';
 import { Vocation, lightingRenderSystem, LightSource, RemotePlayer, Sprite, SPRITES, spriteSheet, Velocity } from './game'; // Fix TS2552
 import { UIManager, ConsoleManager, CharacterCreation } from './ui';
 import { saveGame, loadGame } from './save';
@@ -533,7 +533,7 @@ class Game {
         magicSystem(this.world, this.input, this.ui);
 
         // Auto Close / Toggle System (ESC)
-        autocloseSystem(this.world, this.input, this.ui);
+        uiControlSystem(this.world, this.input, this.ui);
 
         // Always run movement (allow walking with bag open)
         movementSystem(this.world, dt, this.audio, this.network, this.ui);

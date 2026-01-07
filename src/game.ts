@@ -2437,7 +2437,7 @@ export function decaySystem(world: World, dt: number) {
     }
 }
 
-export function autocloseSystem(world: World, input: InputHandler, ui: UIManager) {
+export function uiControlSystem(world: World, input: InputHandler, ui: UIManager) {
     if (input.isJustPressed('KeyEscape')) {
         console.log("ESC Pressed - Closing UI");
 
