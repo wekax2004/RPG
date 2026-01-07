@@ -193,29 +193,44 @@ function drawPixelArt() {
     ctx.fillRect(96 + 7, r1 + 22, 18, 6);
     ctx.fillStyle = '#000'; ctx.fillRect(96 + 12, r1 + 18, 2, 2); ctx.fillRect(96 + 18, r1 + 18, 2, 2);
 
-    // 12: WOLF (Tibia-style - Grey fur, aggressive)
+    // 12: WOLF (Tibia-style - Detailed grey/brown fur, fierce)
     const wx = 128, wy = r1;
-    // Body (horizontal orientation for 4-legged)
-    ctx.fillStyle = '#6a6a6a'; ctx.fillRect(wx + 8, wy + 14, 18, 10);
-    // Fur texture
-    ctx.fillStyle = '#808080';
-    ctx.fillRect(wx + 10, wy + 15, 4, 3); ctx.fillRect(wx + 18, wy + 16, 4, 3);
-    // Head (left side, snout)
-    ctx.fillStyle = '#7a7a7a'; ctx.fillRect(wx + 2, wy + 12, 10, 10);
-    ctx.fillStyle = '#5a5a5a'; ctx.fillRect(wx + 2, wy + 18, 6, 4); // Snout
-    // Eyes
-    ctx.fillStyle = '#ffcc00'; ctx.fillRect(wx + 6, wy + 14, 2, 2);
-    // Teeth
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(wx + 3, wy + 20, 2, 2);
-    // Ears 
-    ctx.fillStyle = '#5a5a5a';
-    ctx.beginPath(); ctx.moveTo(wx + 6, wy + 12); ctx.lineTo(wx + 4, wy + 6); ctx.lineTo(wx + 10, wy + 12); ctx.fill();
-    // Legs (front and back)
-    ctx.fillStyle = '#6a6a6a';
-    ctx.fillRect(wx + 8, wy + 24, 3, 6); ctx.fillRect(wx + 14, wy + 24, 3, 6);
-    ctx.fillRect(wx + 20, wy + 24, 3, 6); ctx.fillRect(wx + 24, wy + 24, 3, 6);
-    // Tail
-    ctx.fillRect(wx + 26, wy + 12, 4, 4);
+    // Body (horizontal, 4-legged beast)
+    ctx.fillStyle = '#5a4a3a'; ctx.fillRect(wx + 6, wy + 12, 20, 12);
+    // Fur layers (light to dark for depth)
+    ctx.fillStyle = '#7a6a5a';
+    ctx.fillRect(wx + 8, wy + 13, 8, 4); ctx.fillRect(wx + 18, wy + 14, 6, 5);
+    ctx.fillStyle = '#8a7a6a';
+    ctx.fillRect(wx + 10, wy + 14, 4, 2); ctx.fillRect(wx + 20, wy + 16, 3, 2);
+    // Dark underbelly
+    ctx.fillStyle = '#3a2a1a'; ctx.fillRect(wx + 10, wy + 20, 12, 4);
+    // Head (fierce, angular)
+    ctx.fillStyle = '#6a5a4a'; ctx.fillRect(wx + 2, wy + 10, 10, 12);
+    // Snout (elongated)
+    ctx.fillStyle = '#4a3a2a'; ctx.fillRect(wx, wy + 16, 6, 6);
+    ctx.fillStyle = '#2a1a0a'; ctx.fillRect(wx, wy + 20, 4, 2); // Nose
+    // Eyes (fierce yellow)
+    ctx.fillStyle = '#ffaa00'; ctx.fillRect(wx + 6, wy + 12, 3, 2);
+    ctx.fillStyle = '#ff0000'; ctx.fillRect(wx + 7, wy + 12, 1, 1); // Pupil
+    // Teeth/fangs
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(wx + 1, wy + 20, 2, 3); ctx.fillRect(wx + 4, wy + 20, 2, 2);
+    // Ears (pointed)
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(wx + 3, wy + 6, 3, 5); ctx.fillRect(wx + 8, wy + 7, 3, 4);
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(wx + 4, wy + 7, 1, 3);
+    // Legs (muscular)
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(wx + 6, wy + 24, 4, 6); ctx.fillRect(wx + 12, wy + 24, 4, 6);
+    ctx.fillRect(wx + 20, wy + 24, 4, 6);
+    // Paws
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(wx + 5, wy + 29, 6, 2); ctx.fillRect(wx + 11, wy + 29, 6, 2);
+    ctx.fillRect(wx + 19, wy + 29, 6, 2);
+    // Tail (bushy)
+    ctx.fillStyle = '#6a5a4a'; ctx.fillRect(wx + 26, wy + 10, 5, 6);
+    ctx.fillStyle = '#4a3a2a'; ctx.fillRect(wx + 28, wy + 12, 3, 3);
 
     // 13: ZOMBIE (Tibia-style - Undead, tattered)
     const zx = 160, zy = r1;
@@ -243,16 +258,27 @@ function drawPixelArt() {
     // --- ROW 2: TERRAIN (16-23) ---
     const r2 = 64;
 
-    // 16: GRASS (Seamless Tibia-style)
-    // Base color - solid fill for seamless tiling
-    ctx.fillStyle = '#3d7a2e'; ctx.fillRect(0, r2, 32, 32);
-    // Subtle variation using small random patches (avoid edges for seamless)
-    ctx.fillStyle = '#4d8a3e';
-    ctx.fillRect(6, r2 + 6, 4, 3); ctx.fillRect(16, r2 + 12, 5, 4);
-    ctx.fillRect(8, r2 + 22, 4, 3); ctx.fillRect(20, r2 + 8, 4, 3);
-    // Darker patches away from edges
-    ctx.fillStyle = '#2d6a1e';
-    ctx.fillRect(12, r2 + 16, 3, 3); ctx.fillRect(22, r2 + 20, 3, 3);
+    // 16: GRASS (Rich Tibia-style with dirt and grass blades)
+    // Base dark green
+    ctx.fillStyle = '#2d5a1e'; ctx.fillRect(0, r2, 32, 32);
+    // Mid green patches
+    ctx.fillStyle = '#3d7a2e';
+    ctx.fillRect(2, r2 + 2, 8, 6); ctx.fillRect(14, r2 + 4, 10, 8);
+    ctx.fillRect(4, r2 + 14, 12, 10); ctx.fillRect(20, r2 + 18, 10, 8);
+    // Light green highlights (grass blades)
+    ctx.fillStyle = '#5d9a4e';
+    ctx.fillRect(4, r2 + 3, 2, 4); ctx.fillRect(10, r2 + 6, 2, 3);
+    ctx.fillRect(18, r2 + 8, 2, 4); ctx.fillRect(6, r2 + 16, 2, 4);
+    ctx.fillRect(14, r2 + 20, 2, 3); ctx.fillRect(24, r2 + 22, 2, 4);
+    // Dirt/brown patches (like in Tibia grass)
+    ctx.fillStyle = '#5a4a2a';
+    ctx.fillRect(24, r2 + 6, 4, 3); ctx.fillRect(8, r2 + 26, 5, 3);
+    ctx.fillStyle = '#4a3a1a';
+    ctx.fillRect(25, r2 + 7, 2, 2); ctx.fillRect(9, r2 + 27, 3, 2);
+    // Small dark shadows between grass
+    ctx.fillStyle = '#1a4a0e';
+    ctx.fillRect(12, r2 + 10, 2, 2); ctx.fillRect(22, r2 + 14, 2, 2);
+    ctx.fillRect(6, r2 + 22, 2, 2);
 
     // 17: WALL (Tibia-style - Single tile, no tall extension to avoid overwriting Row 1)
     const wallX = 32;
@@ -351,39 +377,46 @@ function drawPixelArt() {
     ctx.fillStyle = '#542'; ctx.beginPath(); ctx.arc(32 + 16, r4y + 16, 4, 0, Math.PI * 2); ctx.fill(); // Boss
     ctx.strokeStyle = '#431'; ctx.lineWidth = 2; ctx.stroke();
 
-    // 34: TREE (Tall Sprite - 32x64)
-    // We draw across Row 4 (Base) and Row 3 (Top) visually?
-    // No, standard is Top-Left.
-    // So we draw at Row 4 (Y=128) and extend DOWN? Or UP?
-    // Sprite Slot 34 is the "Source".
-    // If we want the tree to be logically at "Base", the sprite usually starts there.
-    // Let's settle: Source Rect will be 32x64.
-    // We draw the tree in the canvas at 64, 128 (Row 4, Col 2).
-    // And it extends to 64, 192.
-    // Ensuring we don't overwrite anything there.
-
-    // Draw Grass Backing? 
-    // No, we will handle this in render system by drawing grass under the tree tile.
-
-    // Draw Tree
+    // 34: TREE (Tall Sprite - 32x64, Rich Tibia-style foliage)
     const tx = 64;
     const ty = 128; // Row 4
 
-    // Trunk (Base)
-    ctx.fillStyle = '#532'; ctx.fillRect(tx + 12, ty + 48, 8, 16);
+    // Trunk (Base) with bark texture
+    ctx.fillStyle = '#4a2a1a'; ctx.fillRect(tx + 11, ty + 46, 10, 18);
+    ctx.fillStyle = '#5a3a2a'; ctx.fillRect(tx + 13, ty + 48, 3, 14);
+    ctx.fillStyle = '#3a1a0a'; ctx.fillRect(tx + 18, ty + 50, 2, 10);
 
-    // Foliage (Tall Cone)
-    // Bottom Tier
-    ctx.fillStyle = '#141';
-    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 20); ctx.lineTo(tx + 30, ty + 50); ctx.lineTo(tx + 2, ty + 50); ctx.fill();
+    // Shadow on ground
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(tx + 16, ty + 62, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
 
-    // Mid Tier
-    ctx.fillStyle = '#282';
-    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 5); ctx.lineTo(tx + 26, ty + 35); ctx.lineTo(tx + 6, ty + 35); ctx.fill();
+    // Foliage (Layered, leafy appearance)
+    // Bottom tier - darkest
+    ctx.fillStyle = '#1a5a1a';
+    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 24); ctx.lineTo(tx + 30, ty + 52); ctx.lineTo(tx + 2, ty + 52); ctx.fill();
+    // Add leaf clusters
+    ctx.fillStyle = '#2a6a2a';
+    ctx.fillRect(tx + 6, ty + 42, 6, 6); ctx.fillRect(tx + 20, ty + 44, 6, 5);
+    ctx.fillRect(tx + 12, ty + 38, 8, 6);
 
-    // Top Tier
-    ctx.fillStyle = '#4b4';
-    ctx.beginPath(); ctx.moveTo(tx + 16, ty - 10); ctx.lineTo(tx + 22, ty + 15); ctx.lineTo(tx + 10, ty + 15); ctx.fill();
+    // Mid tier
+    ctx.fillStyle = '#2a7a2a';
+    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 10); ctx.lineTo(tx + 28, ty + 38); ctx.lineTo(tx + 4, ty + 38); ctx.fill();
+    // Leaf texture
+    ctx.fillStyle = '#3a8a3a';
+    ctx.fillRect(tx + 8, ty + 28, 5, 5); ctx.fillRect(tx + 18, ty + 26, 6, 5);
+    ctx.fillRect(tx + 12, ty + 20, 6, 6);
+
+    // Top tier - brightest (sun-facing)
+    ctx.fillStyle = '#3a9a3a';
+    ctx.beginPath(); ctx.moveTo(tx + 16, ty - 4); ctx.lineTo(tx + 24, ty + 18); ctx.lineTo(tx + 8, ty + 18); ctx.fill();
+    // Highlight leaves
+    ctx.fillStyle = '#5aba5a';
+    ctx.fillRect(tx + 12, ty + 4, 4, 4); ctx.fillRect(tx + 16, ty + 8, 4, 4);
+
+    // Dark shadow details
+    ctx.fillStyle = '#0a4a0a';
+    ctx.fillRect(tx + 6, ty + 44, 2, 3); ctx.fillRect(tx + 24, ty + 40, 2, 4);
 
     spriteSheet.src = canvas.toDataURL();
 }
