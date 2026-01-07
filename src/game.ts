@@ -46,9 +46,9 @@ export function inputSystem(world: World, input: InputHandler) {
         // Unstuck
         if (input.isDown('KeyU')) {
             const pos = world.getComponent(id, Position)!;
-            // Teleport to Center
-            pos.x = 4096;
-            pos.y = 4096;
+            // Teleport to Center (Map is 128*32=4096, center ~2048)
+            pos.x = 2048;
+            pos.y = 2048;
         }
 
         // Debug: Home / Stairs
@@ -57,11 +57,11 @@ export function inputSystem(world: World, input: InputHandler) {
             // InputHandler has justPressed
             if (input.isJustPressed('KeyH')) {
                 const pos = world.getComponent(id, Position)!;
-                // New Map Center is 128x32 = 4096
-                pos.x = 4096;
-                pos.y = 4096 + 32; // Just below center
+                // New Map Center is 128x32 = 4096 / 2 = 2048
+                pos.x = 2048;
+                pos.y = 2048;
                 console.log("Teleported to Village Center.");
-                spawnFloatingText(world, 4096, 4096 + 32, "↓↓ DUNGEON ↓↓", '#ff00ff');
+                spawnFloatingText(world, 2048, 2048, "↓↓ VILLAGE ↓↓", '#ff00ff');
             }
         }
     }
