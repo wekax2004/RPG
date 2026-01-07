@@ -107,11 +107,9 @@ export class UIManager {
         // Global Mouse Tracking for Tooltip
         document.addEventListener('mousemove', (e) => {
             if (this.inspectPanel && this.inspectPanel.style.display !== 'none') {
-                const x = e.clientX + 15;
-                const y = e.clientY + 15;
+                const x = Math.min(e.clientX + 15, window.innerWidth - 220);
+                const y = Math.min(e.clientY + 15, window.innerHeight - 150);
 
-                // Boundary check to keep in screen
-                // Simple clamp not needed if body is overflow hidden, but good UX
                 this.inspectPanel.style.left = `${x}px`;
                 this.inspectPanel.style.top = `${y}px`;
             }
@@ -513,6 +511,7 @@ export class UIManager {
         const desc = item.description || "No description.";
         let stats = `Price: ${item.price}gp`;
         if (item.damage > 0) stats += ` | Dmg: ${item.damage}`;
+        if (item.defense > 0) stats += ` | Def: ${item.defense}`;
 
         this.inspectPanel.innerHTML = `
             <div style="font-weight: bold; color: #ffd700; border-bottom: 1px solid #555; margin-bottom: 4px; padding-bottom: 2px;">${name}</div>
@@ -747,12 +746,13 @@ export class UIManager {
 
             // Equip / Consume Event
             slot.onclick = () => {
+                // Prevent equipping non-equippables
+                if (item.slot === 'none' || item.slot === 'currency') return;
+
                 // CONSUMABLE CHECK
-                if (item.slot === 'potion' || item.slot === 'food') {
+                if (item.slot === 'potion' || item.slot === 'food' || item.slot === 'consumable') {
                     if (this.onConsume) {
                         this.onConsume(item);
-                        // UI Update is handled by the caller or we can force it here?
-                        // Usually the caller will modify inventory and call updateInventory again.
                         return;
                     }
                 }
