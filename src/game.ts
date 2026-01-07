@@ -1142,31 +1142,7 @@ export function textRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
         ctx.fillRect(drawX, drawY, part.size, part.size);
     }
     ctx.globalAlpha = 1.0;
-    const playerEntity = world.query([QuestLog])[0];
-    if (playerEntity !== undefined) {
-        const qLog = world.getComponent(playerEntity, QuestLog)!;
-        if (qLog.questId) {
-            // Reset opacity in case floating text loop changed it
-            ctx.globalAlpha = 1.0;
-            const msg = qLog.completed
-                ? `Quest: Return to Villager`
-                : `Quest: Kill ${qLog.targetType} (${qLog.progress}/${qLog.targetCount})`;
-
-            ctx.textAlign = 'left';
-            ctx.font = '16px "VT323", monospace';
-
-            // Background Box
-            const width = ctx.measureText(msg).width;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(4, 60, width + 12, 20);
-
-            // Text with Shadow
-            ctx.fillStyle = '#000';
-            ctx.fillText(msg, 11, 75);
-            ctx.fillStyle = '#FFD700'; // Gold
-            ctx.fillText(msg, 10, 74);
-        }
-    }
+    // Quest display now handled by Quest Log UI panel (press Q)
     ctx.restore();
 }
 
