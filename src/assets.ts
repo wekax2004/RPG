@@ -399,10 +399,21 @@ function drawPixelArt() {
     ctx.fillStyle = '#f80'; ctx.beginPath(); ctx.arc(160 + 16, r3 + 16, 12, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(160 + 16, r3 + 16, 8, 0, Math.PI * 2); ctx.fill();
 
-    // 30: TOWER SHIELD (Metal) - Was Generic
-    ctx.fillStyle = '#889'; ctx.fillRect(192 + 8, r3 + 4, 16, 24); // Plate
-    ctx.strokeStyle = '#bbe'; ctx.lineWidth = 2; ctx.strokeRect(192 + 8, r3 + 4, 16, 24); // Rim
-    ctx.fillStyle = '#445'; ctx.fillRect(192 + 14, r3 + 8, 4, 16); // Cross detail
+    // 30: IRON ARMOR / CHESTPLATE (Use for generic Armor icon)
+    // Silvery chestplate shape
+    ctx.fillStyle = '#889';
+    ctx.beginPath();
+    ctx.moveTo(192 + 8, r3 + 4);
+    ctx.lineTo(192 + 24, r3 + 4); // Shoulders
+    ctx.lineTo(192 + 22, r3 + 26); // Waist
+    ctx.lineTo(192 + 10, r3 + 26);
+    ctx.fill();
+    // Shinier highlight
+    ctx.fillStyle = '#ccd';
+    ctx.fillRect(192 + 12, r3 + 8, 8, 8); // Breastplate shine
+    // Trim
+    ctx.strokeStyle = '#556'; ctx.lineWidth = 1;
+    ctx.strokeRect(192 + 8, r3 + 4, 16, 22);
 
     // 31: WOODEN SWORD
     ctx.fillStyle = '#b85';
