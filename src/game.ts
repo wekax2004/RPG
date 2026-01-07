@@ -1411,16 +1411,28 @@ export function createMerchant(world: World, x: number, y: number) {
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Sprite(SPRITES.NPC, 32));
     world.addComponent(e, new Interactable("Open Shop"));
+    world.addComponent(e, new Name("Merchant"));
     const merch = new Merchant();
-    merch.items.push(new Item("Health Potion", "potion", SPRITES.POTION, 20, 50));
-    merch.items.push(new Item("Mana Potion", "potion", SPRITES.POTION, 0, 50));
-    merch.items.push(new Item("Wooden Shield", "lhand", SPRITES.WOODEN_SHIELD, 2, 50));
-    merch.items.push(new Item("Iron Sword", "rhand", SPRITES.SWORD, 15, 150));
-    merch.items.push(new Item("Tower Shield", "lhand", SPRITES.SHIELD, 5, 200));
-    merch.items.push(new Item("Noble Sword", "rhand", SPRITES.NOBLE_SWORD, 25, 400));
+
+    // Basic Starter Items (Common only)
+
+    // Potions
+    merch.items.push(new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'));
+    merch.items.push(new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
+
+    // Basic Weapons
+    merch.items.push(new Item('rhand', 'Wooden Sword', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common'));
+    merch.items.push(new Item('rhand', 'Wooden Club', SPRITES.CLUB, 4, 15, 'Heavy branch', 'club', 'common', 2, 0, 0));
+    merch.items.push(new Item('rhand', 'Hand Axe', SPRITES.AXE, 7, 25, 'Woodcutter\'s tool', 'axe', 'common'));
+
+    // Basic Armor
+    merch.items.push(new Item('lhand', 'Wooden Shield', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3, 0, 0));
+    merch.items.push(new Item('body', 'Leather Armor', SPRITES.KNIGHT, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0));
+
     world.addComponent(e, merch);
     return e;
 }
+
 
 export function createTeleporter(world: World, x: number, y: number, targetX: number, targetY: number) {
     const e = world.createEntity();
