@@ -2233,25 +2233,24 @@ const DROP_TABLES: Record<string, { item: Item, chance: number }[]> = {
         { item: ITEM_DB.skullHelm, chance: 0.30 },
         { item: ITEM_DB.manaPotion, chance: 0.40 },
     ],
+    necromancer: [
+        { item: ITEM_DB.skullHelm, chance: 0.20 },
+        { item: ITEM_DB.boneSword, chance: 0.30 },
+        { item: ITEM_DB.manaPotion, chance: 0.50 },
+        { item: ITEM_DB.demonBlade, chance: 0.05 }, // Epic drop
     ],
-necromancer: [
-    { item: ITEM_DB.skullHelm, chance: 0.20 },
-    { item: ITEM_DB.boneSword, chance: 0.30 },
-    { item: ITEM_DB.manaPotion, chance: 0.50 },
-    { item: ITEM_DB.demonBlade, chance: 0.05 }, // Epic drop
-],
     // --- BOSSES ---
     warlord: [
         { item: ITEM_DB.nobleSword, chance: 1.0 }, // Guaranteed!
         { item: ITEM_DB.plateArmor, chance: 0.50 },
         { item: ITEM_DB.executionerAxe, chance: 0.30 },
     ],
-        boss: [
-            { item: ITEM_DB.demonBlade, chance: 0.80 },
-            { item: ITEM_DB.dragonShield, chance: 0.50 },
-            { item: ITEM_DB.crownOfKings, chance: 0.20 },
-            { item: ITEM_DB.morningStar, chance: 0.40 },
-        ],
+    boss: [
+        { item: ITEM_DB.demonBlade, chance: 0.80 },
+        { item: ITEM_DB.dragonShield, chance: 0.50 },
+        { item: ITEM_DB.crownOfKings, chance: 0.20 },
+        { item: ITEM_DB.morningStar, chance: 0.40 },
+    ],
 };
 
 export function generateLoot(enemyType: string = "orc"): Item[] {
