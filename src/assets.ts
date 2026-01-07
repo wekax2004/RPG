@@ -575,6 +575,21 @@ function drawPixelArt() {
     ctx.fillStyle = '#22f'; ctx.beginPath(); ctx.arc(mpx + 16, mpy + 20, 8, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillRect(mpx + 14, mpy + 10, 4, 6); // Cork
 
+    // 47: MEAT (Raw Steak)
+    const mtx = 224; const mty = r5y;
+    ctx.fillStyle = '#d44'; ctx.beginPath();
+    ctx.moveTo(mtx + 6, mty + 10); ctx.lineTo(mtx + 26, mty + 8);
+    ctx.lineTo(mtx + 24, mty + 22); ctx.lineTo(mtx + 8, mty + 20); ctx.fill();
+    ctx.fillStyle = '#faa'; ctx.fillRect(mtx + 10, mty + 12, 12, 4); // Marbling
+
+    // 48: ROTTEN MEAT (Green Steak) - Row 6
+    const r6y = 192;
+    const rmx = 0; const rmy = r6y;
+    ctx.fillStyle = '#686'; ctx.beginPath();
+    ctx.moveTo(rmx + 6, rmy + 10); ctx.lineTo(rmx + 26, rmy + 8);
+    ctx.lineTo(rmx + 24, rmy + 22); ctx.lineTo(rmx + 8, rmy + 20); ctx.fill();
+    ctx.fillStyle = '#464'; ctx.fillRect(rmx + 10, rmy + 12, 12, 4); // Mold
+
     spriteSheet.src = canvas.toDataURL();
 }
 
@@ -608,7 +623,7 @@ export const SPRITES = {
     SPIDER: 42,
     BANDIT: 43,
 
-    MAX: 47,
+    MAX: 49,
     NECROMANCER: 45,
 
     // Environment
@@ -637,6 +652,8 @@ export const SPRITES = {
     ARMOR: 44,
 
     MANA_POTION: 46,
+    MEAT: 47,
+    ROTTEN_MEAT: 48,
 
     // Other
     KNIGHT: 30,

@@ -489,6 +489,20 @@ class Game {
                             localStorage.setItem('retro-rpg-migration-5', 'true');
                             this.console.addSystemMessage("NOTICE: Inventory Reset to fix corruption.");
                         }
+
+                        // Migration 6: Fix Wrong Sprites (Gold/Meat)
+                        if (!localStorage.getItem('retro-rpg-migration-6')) {
+                            const fixItem = (item: Item) => {
+                                if (item.name === 'Wolf Meat') item.uIndex = SPRITES.MEAT;
+                                if (item.name === 'Rotten Flesh') item.uIndex = SPRITES.ROTTEN_MEAT;
+                                if (item.name === 'Gold Coin') item.uIndex = SPRITES.COIN;
+                            };
+                            inv.items.forEach(fixItem);
+                            inv.storage.forEach(fixItem);
+
+                            localStorage.setItem('retro-rpg-migration-6', 'true');
+                            this.console.addSystemMessage("Updated Item Sprites.");
+                        }
                     }
                     this.console.addSystemMessage("Save Loaded.");
                     // Force Inventory Update

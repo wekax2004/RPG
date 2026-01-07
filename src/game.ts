@@ -2137,8 +2137,8 @@ export function updateStatsFromPassives(world: World, playerEntity: number) {
 // Predefined Items Database - Each item has FIXED stats and rarity
 const ITEM_DB = {
     // --- CONSUMABLES ---
-    wolfMeat: new Item('consumable', 'Wolf Meat', SPRITES.POTION, 0, 5, 'Raw meat', 'none', 'common'),
-    rottenFlesh: new Item('consumable', 'Rotten Flesh', SPRITES.POTION, 0, 2, 'Disgusting', 'none', 'common'),
+    wolfMeat: new Item('consumable', 'Wolf Meat', SPRITES.MEAT, 0, 5, 'Raw meat', 'none', 'common'),
+    rottenFlesh: new Item('consumable', 'Rotten Flesh', SPRITES.ROTTEN_MEAT, 0, 2, 'Disgusting', 'none', 'common'),
     healthPotion: new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'),
     manaPotion: new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'),
 
@@ -2270,7 +2270,7 @@ export function generateLoot(enemyType: string = "orc"): Item[] {
                     enemyType.includes('warlord') ? 100 :
                         enemyType.includes('boss') ? 200 : 15;
         const gold = Math.floor(baseGold * (0.5 + Math.random()));
-        items.push(new Item('currency', 'Gold Coin', SPRITES.POTION, gold));
+        items.push(new Item('currency', 'Gold Coin', SPRITES.COIN, gold));
     }
 
     // Get drop table for this enemy type
