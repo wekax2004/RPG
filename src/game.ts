@@ -534,7 +534,7 @@ export function aiSystem(world: World, dt: number) {
 
 
 
-export function movementSystem(world: World, dt: number, audio: AudioController, network?: NetworkManager) {
+export function movementSystem(world: World, dt: number, audio: AudioController, network?: NetworkManager, ui?: any) {
     const entities = world.query([Position, Velocity]);
 
     const mapEntity = world.query([TileMap])[0];

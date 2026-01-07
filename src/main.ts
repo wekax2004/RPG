@@ -513,7 +513,7 @@ class Game {
         if (!this.ui.isShowing()) {
             aiSystem(this.world, dt);
             interactionSystem(this.world, this.input, this.ui);
-            movementSystem(this.world, dt, this.audio, this.network);
+            movementSystem(this.world, dt, this.audio, this.network, this.ui);
             itemPickupSystem(this.world, this.ui, this.audio, this.network);
             // Pass UI for console messages, and Network for PvP
             combatSystem(this.world, this.input, this.audio, this.ui, this.network, this.pvpEnabled);
