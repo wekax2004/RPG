@@ -119,7 +119,8 @@ export class UIManager {
     }
 
     private cleanupLegacyUI() {
-        const ids = ['skill-tree-panel', 'loot-panel', 'shop-panel', 'inspect-panel', 'magic-hud'];
+        // Only remove elements that are NOT in static HTML
+        const ids = ['skill-tree-panel', 'loot-panel', 'magic-hud'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.remove();
