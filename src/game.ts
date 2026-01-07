@@ -2058,91 +2058,111 @@ export function updateStatsFromPassives(world: World, playerEntity: number) {
     }
 }
 
+// Predefined Items Database - Each item has FIXED stats and rarity
+const ITEM_DB = {
+    // Common items (white)
+    wolfMeat: new Item('consumable', 'Wolf Meat', SPRITES.POTION, 0, 5, 'Raw meat', 'none', 'common'),
+    rottenFlesh: new Item('consumable', 'Rotten Flesh', SPRITES.POTION, 0, 2, 'Disgusting', 'none', 'common'),
+    healthPotion: new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'),
+    manaPotion: new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'),
+    wolfPelt: new Item('body', 'Wolf Pelt', SPRITES.KNIGHT, 0, 15, 'Warm fur armor', 'none', 'common', 3, 0, 0),
+    rustySword: new Item('rhand', 'Rusty Sword', SPRITES.SWORD, 5, 10, 'Corroded blade', 'sword', 'common'),
+
+    // Uncommon items (green)
+    boneSword: new Item('rhand', 'Bone Sword', SPRITES.WOODEN_SWORD, 10, 25, 'Made from bones', 'sword', 'uncommon'),
+    skullHelm: new Item('head', 'Skull Helm', SPRITES.KNIGHT, 0, 35, 'Creepy but effective', 'none', 'uncommon', 5, 0, 0),
+    ironSword: new Item('rhand', 'Iron Sword', SPRITES.SWORD, 12, 40, 'Standard weapon', 'sword', 'uncommon'),
+    leatherArmor: new Item('body', 'Leather Armor', SPRITES.KNIGHT, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0),
+
+    // Rare items (blue)
+    orcAxe: new Item('rhand', 'Orc Axe', SPRITES.SWORD, 18, 80, 'Heavy orcish weapon', 'axe', 'rare'),
+    orcArmor: new Item('body', 'Orc Armor', SPRITES.KNIGHT, 0, 100, 'Crude but sturdy', 'none', 'rare', 10, 15, 0),
+    orcShield: new Item('lhand', 'Orc Shield', SPRITES.WOODEN_SHIELD, 0, 70, 'Battered shield', 'none', 'rare', 8, 0, 0),
+    steelSword: new Item('rhand', 'Steel Sword', SPRITES.SWORD, 20, 120, 'Well-crafted blade', 'sword', 'rare'),
+
+    // Epic items (purple)  
+    demonBlade: new Item('rhand', 'Demon Blade', SPRITES.SWORD, 35, 300, 'Burns with hellfire', 'sword', 'epic', 0, 0, 20),
+    plateArmor: new Item('body', 'Plate Armor', SPRITES.KNIGHT, 0, 400, 'Heavy knight armor', 'none', 'epic', 20, 30, 0),
+    dragonShield: new Item('lhand', 'Dragon Shield', SPRITES.WOODEN_SHIELD, 0, 350, 'Scales of a dragon', 'none', 'epic', 15, 20, 10),
+
+    // Legendary items (orange)
+    nobleSword: new Item('rhand', 'Noble Sword', SPRITES.NOBLE_SWORD, 50, 500, 'A weapon of ancient power', 'sword', 'legendary', 0, 50, 20),
+    crownOfKings: new Item('head', 'Crown of Kings', SPRITES.KNIGHT, 0, 800, 'Worn by legends', 'none', 'legendary', 10, 100, 50),
+};
+
+// Enemy drop tables - defines which items each enemy can drop and their chances
+const DROP_TABLES: Record<string, { item: Item, chance: number }[]> = {
+    wolf: [
+        { item: ITEM_DB.wolfMeat, chance: 0.30 },
+        { item: ITEM_DB.wolfPelt, chance: 0.15 },
+    ],
+    skeleton: [
+        { item: ITEM_DB.boneSword, chance: 0.10 },
+        { item: ITEM_DB.skullHelm, chance: 0.08 },
+        { item: ITEM_DB.healthPotion, chance: 0.20 },
+    ],
+    orc: [
+        { item: ITEM_DB.orcAxe, chance: 0.05 },
+        { item: ITEM_DB.orcArmor, chance: 0.03 },
+        { item: ITEM_DB.orcShield, chance: 0.04 },
+        { item: ITEM_DB.manaPotion, chance: 0.15 },
+        { item: ITEM_DB.healthPotion, chance: 0.15 },
+    ],
+    zombie: [
+        { item: ITEM_DB.rottenFlesh, chance: 0.40 },
+        { item: ITEM_DB.rustySword, chance: 0.10 },
+    ],
+    warlord: [
+        { item: ITEM_DB.nobleSword, chance: 1.0 }, // Guaranteed!
+        { item: ITEM_DB.plateArmor, chance: 0.50 },
+    ],
+    boss: [
+        { item: ITEM_DB.demonBlade, chance: 0.80 },
+        { item: ITEM_DB.dragonShield, chance: 0.50 },
+        { item: ITEM_DB.crownOfKings, chance: 0.20 },
+    ],
+};
+
 export function generateLoot(enemyType: string = "orc"): Item[] {
     const items: Item[] = [];
 
-    // Roll for rarity
-    const rarityRoll = Math.random();
-    let rarity: ItemRarity = 'common';
-    if (rarityRoll < 0.01) rarity = 'legendary'; // 1%
-    else if (rarityRoll < 0.05) rarity = 'epic'; // 4%
-    else if (rarityRoll < 0.15) rarity = 'rare'; // 10%
-    else if (rarityRoll < 0.35) rarity = 'uncommon'; // 20%
-    // else common (65%)
-
-    const multiplier = RARITY_MULTIPLIERS[rarity];
-    const rarityPrefix = rarity === 'common' ? '' : rarity.charAt(0).toUpperCase() + rarity.slice(1) + ' ';
-
-    // Gold drop (50% chance)
+    // Gold drop (50% chance, amount varies by enemy)
     if (Math.random() < 0.5) {
-        const baseGold = enemyType === 'wolf' ? 5 : enemyType === 'skeleton' ? 10 : enemyType === 'orc' ? 20 : enemyType.includes('warlord') ? 100 : 15;
+        const baseGold = enemyType === 'wolf' ? 5 :
+            enemyType === 'skeleton' ? 10 :
+                enemyType === 'orc' ? 20 :
+                    enemyType.includes('warlord') ? 100 :
+                        enemyType.includes('boss') ? 200 : 15;
         const gold = Math.floor(baseGold * (0.5 + Math.random()));
         items.push(new Item('currency', 'Gold Coin', SPRITES.POTION, gold));
     }
 
-    // Boss guaranteed legendary
-    if (enemyType.includes('warlord') || enemyType.includes('boss')) {
-        const baseDmg = Math.floor(30 * RARITY_MULTIPLIERS['legendary']);
-        items.push(new Item('rhand', 'Legendary Noble Sword', SPRITES.NOBLE_SWORD, baseDmg, 500, 'A weapon of ancient power', 'sword', 'legendary', 0, 50, 20));
-        return items;
-    }
+    // Get drop table for this enemy type
+    let dropTable = DROP_TABLES[enemyType];
 
-    // Item drop chance based on enemy
-    const dropChance = enemyType === 'wolf' ? 0.15 : enemyType === 'skeleton' ? 0.25 : enemyType === 'orc' ? 0.30 : 0.20;
+    // Check for boss/warlord in name
+    if (!dropTable && enemyType.includes('warlord')) dropTable = DROP_TABLES['warlord'];
+    if (!dropTable && enemyType.includes('boss')) dropTable = DROP_TABLES['boss'];
+    if (!dropTable) dropTable = DROP_TABLES['orc']; // Fallback
 
-    if (Math.random() < dropChance) {
-        // Determine item type
-        const itemRoll = Math.random();
-
-        if (enemyType === 'wolf') {
-            // Wolf drops
-            if (itemRoll < 0.5) {
-                items.push(new Item('consumable', 'Wolf Meat', SPRITES.POTION, 0, 5, 'Raw meat'));
-            } else {
-                const def = Math.floor(3 * multiplier);
-                items.push(new Item('body', `${rarityPrefix}Wolf Pelt`, SPRITES.KNIGHT, 0, 15 * multiplier, 'Warm fur armor', 'none', rarity, def, 0, 0));
-            }
-        } else if (enemyType === 'skeleton') {
-            // Skeleton drops
-            if (itemRoll < 0.4) {
-                const dmg = Math.floor(8 * multiplier);
-                items.push(new Item('rhand', `${rarityPrefix}Bone Sword`, SPRITES.WOODEN_SWORD, dmg, 20 * multiplier, 'Made from bones', 'sword', rarity));
-            } else if (itemRoll < 0.7) {
-                const def = Math.floor(4 * multiplier);
-                items.push(new Item('head', `${rarityPrefix}Skull Helm`, SPRITES.KNIGHT, 0, 25 * multiplier, 'Creepy but effective', 'none', rarity, def, 0, 0));
-            } else {
-                items.push(new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores health'));
-            }
-        } else if (enemyType === 'orc') {
-            // Orc drops
-            if (itemRoll < 0.3) {
-                const dmg = Math.floor(15 * multiplier);
-                items.push(new Item('rhand', `${rarityPrefix}Orc Axe`, SPRITES.SWORD, dmg, 40 * multiplier, 'Heavy orcish weapon', 'axe', rarity));
-            } else if (itemRoll < 0.5) {
-                const def = Math.floor(6 * multiplier);
-                items.push(new Item('body', `${rarityPrefix}Orc Armor`, SPRITES.KNIGHT, 0, 50 * multiplier, 'Crude but sturdy', 'none', rarity, def, 10, 0));
-            } else if (itemRoll < 0.7) {
-                const def = Math.floor(5 * multiplier);
-                items.push(new Item('lhand', `${rarityPrefix}Orc Shield`, SPRITES.WOODEN_SHIELD, 0, 35 * multiplier, 'Battered shield', 'none', rarity, def, 0, 0));
-            } else {
-                items.push(new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores mana'));
-            }
-        } else if (enemyType === 'zombie') {
-            // Zombie drops
-            if (itemRoll < 0.5) {
-                items.push(new Item('consumable', 'Rotten Flesh', SPRITES.POTION, 0, 2, 'Disgusting'));
-            } else {
-                const dmg = Math.floor(5 * multiplier);
-                items.push(new Item('rhand', `${rarityPrefix}Rusty Sword`, SPRITES.SWORD, dmg, 10 * multiplier, 'Corroded blade', 'sword', rarity));
-            }
-        } else {
-            // Default drops
-            if (Math.random() < 0.5) {
-                const dmg = Math.floor(10 * multiplier);
-                items.push(new Item('rhand', `${rarityPrefix}Iron Sword`, SPRITES.SWORD, dmg, 30 * multiplier, 'Standard weapon', 'sword', rarity));
-            } else {
-                items.push(new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores health'));
-            }
+    // Roll for each item in the drop table
+    for (const drop of dropTable) {
+        if (Math.random() < drop.chance) {
+            // Clone the item so each drop is a new instance
+            const item = new Item(
+                drop.item.slot,
+                drop.item.name,
+                drop.item.uIndex,
+                drop.item.damage,
+                drop.item.price,
+                drop.item.description,
+                drop.item.weaponType,
+                drop.item.rarity,
+                drop.item.defense,
+                drop.item.bonusHp,
+                drop.item.bonusMana
+            );
+            items.push(item);
         }
     }
 
