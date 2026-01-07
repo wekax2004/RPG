@@ -528,11 +528,12 @@ class Game {
 
     update(dt: number) {
         inputSystem(this.world, this.input);
-        inputSystem(this.world, this.input);
-        // autocloseSystem(this.world, this.ui); // DISABLED: Causing rapid open/close toggle loops
 
         // Run Magic System always (to allow toggling UI/Skills)
         magicSystem(this.world, this.input, this.ui);
+
+        // Auto Close / Toggle System (ESC)
+        autocloseSystem(this.world, this.input, this.ui);
 
         // Always run movement (allow walking with bag open)
         movementSystem(this.world, dt, this.audio, this.network, this.ui);

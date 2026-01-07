@@ -2436,3 +2436,23 @@ export function decaySystem(world: World, dt: number) {
         }
     }
 }
+
+export function autocloseSystem(world: World, input: InputHandler, ui: UIManager) {
+    if (input.isJustPressed('KeyEscape')) {
+        console.log("ESC Pressed - Closing UI");
+
+        // Hide All Panels
+        ui.shopPanel.classList.add('hidden');
+        ui.bagPanel.classList.add('hidden');
+        ui.lootPanel.classList.add('hidden');
+
+        // Reset State
+        ui.currentMerchant = null;
+        ui.activeMerchantId = null;
+        ui.activeLootEntityId = null;
+
+        // Close Inspection
+        const inspectPanel = document.getElementById('inspect-panel');
+        if (inspectPanel) inspectPanel.classList.add('hidden');
+    }
+}
