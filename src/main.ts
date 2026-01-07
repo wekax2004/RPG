@@ -455,10 +455,9 @@ class Game {
                         // Migration 3: Fix Broken Sprites (Legacy Save Data)
                         const inv = this.world.getComponent(player, Inventory);
                         if (inv) {
-                            for (const item of inv.items) {
+                            for (const [_, item] of inv.items) {
                                 if (item.name === "Tower Shield") {
                                     item.uIndex = SPRITES.WOODEN_SHIELD; // 33
-                                    // Or remove it? Let's just fix the sprite.
                                 }
                                 if (item.uIndex === SPRITES.KNIGHT || item.uIndex === 0) {
                                     // If it's Armor, update to new Armor Sprite
@@ -472,7 +471,7 @@ class Game {
 
 
                         // Migration 5: Reset Corrupted Inventory
-                        if (!localStorage.getItem('retro-rpg-migration-5')) {
+                        if (inv && !localStorage.getItem('retro-rpg-migration-5')) {
                             inv.items.clear();
                             inv.storage = [];
                             inv.gold = 100;
@@ -491,7 +490,7 @@ class Game {
                         }
 
                         // Migration 6: Fix Wrong Sprites (Gold/Meat)
-                        if (!localStorage.getItem('retro-rpg-migration-6')) {
+                        if (inv && !localStorage.getItem('retro-rpg-migration-6')) {
                             const fixItem = (item: Item) => {
                                 if (item.name === 'Wolf Meat') item.uIndex = SPRITES.MEAT;
                                 if (item.name === 'Rotten Flesh') item.uIndex = SPRITES.ROTTEN_MEAT;
@@ -505,7 +504,7 @@ class Game {
                         }
 
                         // Migration 7: Fix Swapped Name/Slot (Undo ITEM_DB corruption)
-                        if (!localStorage.getItem('retro-rpg-migration-7')) {
+                        if (inv && !localStorage.getItem('retro-rpg-migration-7')) {
                             const validSlots = ['rhand', 'lhand', 'body', 'head', 'legs', 'feet', 'consumable', 'currency', 'food', 'potion'];
                             const fixSwap = (item: Item) => {
                                 // Check if name is actually a slot (corruption from reversed arguments)

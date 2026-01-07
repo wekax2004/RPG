@@ -11,7 +11,7 @@ export class UIManager {
     private capVal: HTMLElement;
     private levelVal: HTMLElement;
     private xpVal: HTMLElement;
-    private bagPanel: HTMLElement;
+    public bagPanel: HTMLElement;
     private bagGrid: HTMLElement;
 
     // Shop
@@ -34,6 +34,8 @@ export class UIManager {
     private skillsPanel!: HTMLElement;
     private skillTreePanel!: HTMLElement;
     private magicHudIcon!: HTMLElement;
+
+    public onConsume?: (item: any) => void;
 
     constructor() {
         this.cleanupLegacyUI(); // Fix: Remove duplicates from previous runs

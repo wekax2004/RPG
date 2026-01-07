@@ -146,10 +146,10 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                                             if (playerInv) playerInv.gold += quest.reward.gold;
                                             if (playerXp) {
                                                 playerXp.current += quest.reward.xp;
-                                                if (playerXp.current >= playerXp.toNext) {
+                                                if (playerXp.current >= playerXp.next) {
                                                     playerXp.level++;
-                                                    playerXp.current -= playerXp.toNext;
-                                                    playerXp.toNext = Math.floor(playerXp.toNext * 1.5);
+                                                    playerXp.current -= playerXp.next;
+                                                    playerXp.next = Math.floor(playerXp.next * 1.5);
                                                 }
                                             }
                                             if ((ui as any).console) {
@@ -301,31 +301,27 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                 world.addComponent(playerEntity, qLog);
             }
 
-            if (!qLog.questId) {
-                // Accept Quest
-                qLog.questId = qGiver.questId;
-                qLog.targetType = qGiver.targetType;
-                qLog.targetCount = qGiver.count;
-                qLog.progress = 0;
-                qLog.completed = false;
-                ui.showDialogue(qGiver.startText);
-            } else if (qLog.questId === qGiver.questId) {
-                if (qLog.completed) {
-                    // Complete Logic
-                    ui.showDialogue(qGiver.completeText);
-                    // Give Reward
-                    const inv = world.getComponent(playerEntity, Inventory)!;
-                    inv.gold += 100;
-                    // Reset or finish
-                    qLog.questId = ""; // Clear quest for now
+            if (qGiver.availableQuests.length > 0) {
+                const questTemplate = qGiver.availableQuests[0];
+                const existing = qLog.quests.find(q => q.id === questTemplate.id);
+
+                if (!existing) {
+                    // Accept
+                    // TypeScript hack: define proper Quest object structure matching interface
+                    const newQuest = { ...questTemplate, current: 0, completed: false, turnedIn: false };
+                    qLog.quests.push(newQuest);
+                    ui.showDialogue("Objective: " + newQuest.name);
+                } else if (existing.completed && !existing.turnedIn) {
+                    // Turn In active via dialogue interaction (fallback)
+                    existing.turnedIn = true;
+                    qLog.completedQuestIds.push(existing.id);
+                    ui.showDialogue("Thank you!");
+                    const inv = world.getComponent(playerEntity, Inventory);
+                    if (inv) inv.gold += existing.reward.gold;
                 } else {
-                    ui.showDialogue(qGiver.progressText);
+                    ui.showDialogue("Progress: " + existing.current + "/" + existing.required);
                 }
-            } else {
-                ui.showDialogue("I am busy properly.");
             }
-        } else {
-            ui.showDialogue(interact.message);
         }
     }
 }
@@ -1618,7 +1614,7 @@ export function consumeItem(world: World, entity: number, item: Item, audio: Aud
             const old = hp.current;
             hp.current = Math.min(hp.max, hp.current + 50);
             if (ui.console) ui.console.sendMessage(`You drank a Health Potion (+${hp.current - old} HP).`);
-            audio.playPowerUp();
+            audio.playLevelUp();
             consumed = true;
         }
     } else if (item.name === "Mana Potion") {
@@ -1626,7 +1622,7 @@ export function consumeItem(world: World, entity: number, item: Item, audio: Aud
             const old = mana.current;
             mana.current = Math.min(mana.max, mana.current + 50);
             if (ui.console) ui.console.sendMessage(`You drank a Mana Potion (+${mana.current - old} MP).`);
-            audio.playPowerUp();
+            audio.playLevelUp();
             consumed = true;
         }
     }
@@ -1738,276 +1734,275 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
 
+    } else if (spellKey === 'adori flam') {
         // ADORI FLAM: Fireball
-        if (spellKey === 'adori flam') {
-            if (!canCast(['mage'])) return;
+        if (!canCast(['mage'])) return;
 
-            if (mana.current >= 20) {
-                mana.current -= 20;
-                const pId = world.createEntity();
-                world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
+        if (mana.current >= 20) {
+            mana.current -= 20;
+            const pId = world.createEntity();
+            world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
 
-                // Aiming
-                const targetComp = world.getComponent(playerEntity, Target);
-                let vx = facing.x * 150;
-                let vy = facing.y * 150;
+            // Aiming
+            const targetComp = world.getComponent(playerEntity, Target);
+            let vx = facing.x * 150;
+            let vy = facing.y * 150;
 
-                if (targetComp) {
-                    const targetPos = world.getComponent(targetComp.targetId, Position);
-                    if (targetPos) {
-                        const dx = (targetPos.x + 8) - (pos.x + 8);
-                        const dy = (targetPos.y + 8) - (pos.y + 8);
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        if (dist > 0) {
-                            vx = (dx / dist) * 150;
-                            vy = (dy / dist) * 150;
-                        }
-                    } else {
-                        world.removeComponent(playerEntity, Target);
+            if (targetComp) {
+                const targetPos = world.getComponent(targetComp.targetId, Position);
+                if (targetPos) {
+                    const dx = (targetPos.x + 8) - (pos.x + 8);
+                    const dy = (targetPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        vx = (dx / dist) * 150;
+                        vy = (dy / dist) * 150;
                     }
+                } else {
+                    world.removeComponent(playerEntity, Target);
                 }
-
-                world.addComponent(pId, new Velocity(vx, vy));
-                world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8));
-
-                // New Scaling: Magic Level Primary
-                const magicLevel = skills ? skills.magic.level : 0;
-                const dmg = 30 + (magicLevel * 5); // 5 DMG per Magic Level
-                world.addComponent(pId, new Projectile(dmg, 1.0, 'player'));
-
-                if (console) console.addSystemMessage("adori flam!");
-            } else {
-                if (console) console.addSystemMessage("Not enough Mana!");
-                spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
             }
 
-        } else if (spellKey === 'adori frigo') {
-            // ICE SHARD (Mage Only)
-            if (!canCast(['mage'])) return;
+            world.addComponent(pId, new Velocity(vx, vy));
+            world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8));
 
-            if (mana.current >= 15) {
-                mana.current -= 15;
-                const pId = world.createEntity();
-                world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
+            // New Scaling: Magic Level Primary
+            const magicLevel = skills ? skills.magic.level : 0;
+            const dmg = 30 + (magicLevel * 5); // 5 DMG per Magic Level
+            world.addComponent(pId, new Projectile(dmg, 1.0, 'player'));
 
-                const targetComp = world.getComponent(playerEntity, Target);
-                let vx = facing.x * 200;
-                let vy = facing.y * 200;
-                if (targetComp) {
-                    const targetPos = world.getComponent(targetComp.targetId, Position);
-                    if (targetPos) {
-                        const dx = (targetPos.x + 8) - (pos.x + 8);
-                        const dy = (targetPos.y + 8) - (pos.y + 8);
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        if (dist > 0) { vx = (dx / dist) * 200; vy = (dy / dist) * 200; }
-                    }
+            if (console) console.addSystemMessage("adori flam!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+
+    } else if (spellKey === 'adori frigo') {
+        // ICE SHARD (Mage Only)
+        if (!canCast(['mage'])) return;
+
+        if (mana.current >= 15) {
+            mana.current -= 15;
+            const pId = world.createEntity();
+            world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
+
+            const targetComp = world.getComponent(playerEntity, Target);
+            let vx = facing.x * 200;
+            let vy = facing.y * 200;
+            if (targetComp) {
+                const targetPos = world.getComponent(targetComp.targetId, Position);
+                if (targetPos) {
+                    const dx = (targetPos.x + 8) - (pos.x + 8);
+                    const dy = (targetPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) { vx = (dx / dist) * 200; vy = (dy / dist) * 200; }
                 }
-
-                world.addComponent(pId, new Velocity(vx, vy));
-                world.addComponent(pId, new Sprite(SPRITES.SPARKLE, 8)); // Visual
-
-                // New Scaling: Magic Level Primary
-                const magicLevel = skills ? skills.magic.level : 0;
-                const dmg = 20 + (magicLevel * 4);
-                world.addComponent(pId, new Projectile(dmg, 1.0, 'player_ice'));
-
-                if (console) console.addSystemMessage("adori frigo!");
-            } else {
-                if (console) console.addSystemMessage("Not enough Mana!");
-                spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
             }
 
-        } else if (spellKey === 'exori') {
-            // HEAVY STRIKE (Knight Only)
-            if (!canCast(['knight'])) return;
+            world.addComponent(pId, new Velocity(vx, vy));
+            world.addComponent(pId, new Sprite(SPRITES.SPARKLE, 8)); // Visual
 
-            if (mana.current >= 20) {
-                mana.current -= 20;
-                const shake = world.createEntity();
-                world.addComponent(shake, new ScreenShake(0.3, 3));
+            // New Scaling: Magic Level Primary
+            const magicLevel = skills ? skills.magic.level : 0;
+            const dmg = 20 + (magicLevel * 4);
+            world.addComponent(pId, new Projectile(dmg, 1.0, 'player_ice'));
 
-                const targetX = pos.x + (facing.x * 16);
-                const targetY = pos.y + (facing.y * 16);
+            if (console) console.addSystemMessage("adori frigo!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
 
-                const enemies = world.query([Health, Position, Name]);
-                let hit = false;
+    } else if (spellKey === 'exori') {
+        // HEAVY STRIKE (Knight Only)
+        if (!canCast(['knight'])) return;
+
+        if (mana.current >= 20) {
+            mana.current -= 20;
+            const shake = world.createEntity();
+            world.addComponent(shake, new ScreenShake(0.3, 3));
+
+            const targetX = pos.x + (facing.x * 16);
+            const targetY = pos.y + (facing.y * 16);
+
+            const enemies = world.query([Health, Position, Name]);
+            let hit = false;
+            for (const eId of enemies) {
+                if (world.getComponent(eId, PlayerControllable)) continue;
+                const ePos = world.getComponent(eId, Position)!;
+                const dx = (targetX + 8) - (ePos.x + 8);
+                const dy = (targetY + 8) - (ePos.y + 8);
+                if (Math.abs(dx) < 16 && Math.abs(dy) < 16) {
+                    const eHp = world.getComponent(eId, Health)!;
+                    const swordSkill = skills ? skills.sword.level : 10;
+                    const dmg = 30 + (swordSkill * 3); // Stronger for Knight
+                    eHp.current -= dmg;
+                    spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ff0000');
+                    hit = true;
+                    if (eHp.current <= 0) {
+                        const nameComp = world.getComponent(eId, Name);
+                        const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
+                        const loot = generateLoot(enemyType);
+                        createCorpse(world, ePos.x, ePos.y, loot);
+                        world.removeEntity(eId);
+                    }
+                }
+            }
+            if (console) console.addSystemMessage("exori!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+
+    } else if (spellKey === 'exori mas') {
+        // WHIRLWIND (Knight Only)
+        if (!canCast(['knight'])) return;
+
+        if (mana.current >= 40) {
+            mana.current -= 40;
+            const shake = world.createEntity();
+            world.addComponent(shake, new ScreenShake(0.2, 4));
+
+            const enemies = world.query([Health, Position, Name]);
+            let hitCount = 0;
+            const range = 24;
+
+            for (const eId of enemies) {
+                if (world.getComponent(eId, PlayerControllable)) continue;
+                const ePos = world.getComponent(eId, Position)!;
+                const dx = (pos.x + 8) - (ePos.x + 8);
+                const dy = (pos.y + 8) - (ePos.y + 8);
+                if (Math.abs(dx) <= range && Math.abs(dy) <= range) {
+                    const eHp = world.getComponent(eId, Health)!;
+                    const swordSkill = skills ? skills.sword.level : 10;
+                    const dmg = 50 + (swordSkill * 4);
+                    eHp.current -= dmg;
+                    spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ff0000');
+                    hitCount++;
+                    if (eHp.current <= 0) {
+                        const nameComp = world.getComponent(eId, Name);
+                        const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
+                        const loot = generateLoot(enemyType);
+                        createCorpse(world, ePos.x, ePos.y, loot);
+                        world.removeEntity(eId);
+                    }
+                }
+            }
+            if (console) console.addSystemMessage(`exori mas: ${hitCount} hits!`);
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
+
+    } else if (spellKey === 'exevo gran vis lux') {
+        // CHAIN LIGHTNING (Mage Only)
+        // Note: Renamed from 'chain lightning' / 'exevo vis' logic
+        if (!canCast(['mage'])) return;
+
+        if (mana.current >= 60) {
+            mana.current -= 60;
+
+            const spellLvl = getLevel('exevo gran vis lux');
+            const magicLevel = skills ? skills.magic.level : 1;
+            const baseDmg = 40 + (magicLevel * 3) + (spellLvl * 5); // Stronger
+
+            // Chain Logic (Copied from previous impl, but refined)
+            const enemies = world.query([Health, Position, Name]);
+            let currentPos = { x: pos.x, y: pos.y };
+            let excludeIds = new Set<number>();
+            let jumps = 4;
+            let hits = 0;
+
+            for (let i = 0; i < jumps; i++) {
+                let closestId = -1;
+                let closestDist = 150;
+
                 for (const eId of enemies) {
+                    if (excludeIds.has(eId)) continue;
                     if (world.getComponent(eId, PlayerControllable)) continue;
+
                     const ePos = world.getComponent(eId, Position)!;
-                    const dx = (targetX + 8) - (ePos.x + 8);
-                    const dy = (targetY + 8) - (ePos.y + 8);
-                    if (Math.abs(dx) < 16 && Math.abs(dy) < 16) {
-                        const eHp = world.getComponent(eId, Health)!;
-                        const swordSkill = skills ? skills.sword.level : 10;
-                        const dmg = 30 + (swordSkill * 3); // Stronger for Knight
-                        eHp.current -= dmg;
-                        spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ff0000');
-                        hit = true;
-                        if (eHp.current <= 0) {
-                            const nameComp = world.getComponent(eId, Name);
-                            const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
-                            const loot = generateLoot(enemyType);
-                            createCorpse(world, ePos.x, ePos.y, loot);
-                            world.removeEntity(eId);
-                        }
+                    const dx = ePos.x - currentPos.x;
+                    const dy = ePos.y - currentPos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestId = eId;
                     }
                 }
-                if (console) console.addSystemMessage("exori!");
-            } else {
-                if (console) console.addSystemMessage("Not enough Mana!");
-                spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
-            }
 
-        } else if (spellKey === 'exori mas') {
-            // WHIRLWIND (Knight Only)
-            if (!canCast(['knight'])) return;
+                if (closestId !== -1) {
+                    excludeIds.add(closestId);
+                    const ePos = world.getComponent(closestId, Position)!;
 
-            if (mana.current >= 40) {
-                mana.current -= 40;
-                const shake = world.createEntity();
-                world.addComponent(shake, new ScreenShake(0.2, 4));
-
-                const enemies = world.query([Health, Position, Name]);
-                let hitCount = 0;
-                const range = 24;
-
-                for (const eId of enemies) {
-                    if (world.getComponent(eId, PlayerControllable)) continue;
-                    const ePos = world.getComponent(eId, Position)!;
-                    const dx = (pos.x + 8) - (ePos.x + 8);
-                    const dy = (pos.y + 8) - (ePos.y + 8);
-                    if (Math.abs(dx) <= range && Math.abs(dy) <= range) {
-                        const eHp = world.getComponent(eId, Health)!;
-                        const swordSkill = skills ? skills.sword.level : 10;
-                        const dmg = 50 + (swordSkill * 4);
-                        eHp.current -= dmg;
-                        spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ff0000');
-                        hitCount++;
-                        if (eHp.current <= 0) {
-                            const nameComp = world.getComponent(eId, Name);
-                            const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
-                            const loot = generateLoot(enemyType);
-                            createCorpse(world, ePos.x, ePos.y, loot);
-                            world.removeEntity(eId);
-                        }
+                    // Particles
+                    const chunks = 5;
+                    for (let p = 0; p < chunks; p++) {
+                        const t = p / chunks;
+                        const lx = currentPos.x + (ePos.x - currentPos.x) * t;
+                        const ly = currentPos.y + (ePos.y - currentPos.y) * t;
+                        const part = world.createEntity();
+                        world.addComponent(part, new Position(lx + 4, ly + 4));
+                        world.addComponent(part, new Particle(0.3, 0.3, '#ff0', 2, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10));
                     }
+
+                    const eHp = world.getComponent(closestId, Health)!;
+                    const dmg = Math.floor(baseDmg * (1.0 - (i * 0.15)));
+                    eHp.current -= dmg;
+                    spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ffff00');
+                    hits++;
+
+                    if (eHp.current <= 0) {
+                        const nameComp = world.getComponent(closestId, Name);
+                        const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
+                        const loot = generateLoot(enemyType);
+                        createCorpse(world, ePos.x, ePos.y, loot);
+                        world.removeEntity(closestId);
+                    }
+                    currentPos = { x: ePos.x, y: ePos.y };
+                } else {
+                    break;
                 }
-                if (console) console.addSystemMessage(`exori mas: ${hitCount} hits!`);
-            } else {
-                if (console) console.addSystemMessage("Not enough Mana!");
-                spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
             }
+            if (console) console.addSystemMessage(`exevo gran vis lux: ${hits} hits!`);
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
+        }
 
-        } else if (spellKey === 'exevo gran vis lux') {
-            // CHAIN LIGHTNING (Mage Only)
-            // Note: Renamed from 'chain lightning' / 'exevo vis' logic
-            if (!canCast(['mage'])) return;
+    } else if (spellKey === 'utito san') {
+        // PRECISION SHOT (Ranger Only)
+        if (!canCast(['ranger'])) return;
 
-            if (mana.current >= 60) {
-                mana.current -= 60;
+        if (mana.current >= 20) {
+            mana.current -= 20;
+            const pId = world.createEntity();
+            world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
 
-                const spellLvl = getLevel('exevo gran vis lux');
-                const magicLevel = skills ? skills.magic.level : 1;
-                const baseDmg = 40 + (magicLevel * 3) + (spellLvl * 5); // Stronger
-
-                // Chain Logic (Copied from previous impl, but refined)
-                const enemies = world.query([Health, Position, Name]);
-                let currentPos = { x: pos.x, y: pos.y };
-                let excludeIds = new Set<number>();
-                let jumps = 4;
-                let hits = 0;
-
-                for (let i = 0; i < jumps; i++) {
-                    let closestId = -1;
-                    let closestDist = 150;
-
-                    for (const eId of enemies) {
-                        if (excludeIds.has(eId)) continue;
-                        if (world.getComponent(eId, PlayerControllable)) continue;
-
-                        const ePos = world.getComponent(eId, Position)!;
-                        const dx = ePos.x - currentPos.x;
-                        const dy = ePos.y - currentPos.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-
-                        if (dist < closestDist) {
-                            closestDist = dist;
-                            closestId = eId;
-                        }
-                    }
-
-                    if (closestId !== -1) {
-                        excludeIds.add(closestId);
-                        const ePos = world.getComponent(closestId, Position)!;
-
-                        // Particles
-                        const chunks = 5;
-                        for (let p = 0; p < chunks; p++) {
-                            const t = p / chunks;
-                            const lx = currentPos.x + (ePos.x - currentPos.x) * t;
-                            const ly = currentPos.y + (ePos.y - currentPos.y) * t;
-                            const part = world.createEntity();
-                            world.addComponent(part, new Position(lx + 4, ly + 4));
-                            world.addComponent(part, new Particle(0.3, 0.3, '#ff0', 2, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10));
-                        }
-
-                        const eHp = world.getComponent(closestId, Health)!;
-                        const dmg = Math.floor(baseDmg * (1.0 - (i * 0.15)));
-                        eHp.current -= dmg;
-                        spawnFloatingText(world, ePos.x, ePos.y - 10, `${dmg}`, '#ffff00');
-                        hits++;
-
-                        if (eHp.current <= 0) {
-                            const nameComp = world.getComponent(closestId, Name);
-                            const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
-                            const loot = generateLoot(enemyType);
-                            createCorpse(world, ePos.x, ePos.y, loot);
-                            world.removeEntity(closestId);
-                        }
-                        currentPos = { x: ePos.x, y: ePos.y };
-                    } else {
-                        break;
-                    }
+            // Aiming
+            const targetComp = world.getComponent(playerEntity, Target);
+            let vx = facing.x * 250;
+            let vy = facing.y * 250;
+            if (targetComp) {
+                const targetPos = world.getComponent(targetComp.targetId, Position);
+                if (targetPos) {
+                    const dx = (targetPos.x + 8) - (pos.x + 8);
+                    const dy = (targetPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) { vx = (dx / dist) * 250; vy = (dy / dist) * 250; }
                 }
-                if (console) console.addSystemMessage(`exevo gran vis lux: ${hits} hits!`);
-            } else {
-                if (console) console.addSystemMessage("Not enough Mana!");
-                spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
             }
+            world.addComponent(pId, new Velocity(vx, vy));
+            world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8));
+            const distSkill = skills ? skills.distance.level : 10;
+            const dmg = 40 + (distSkill * 3);
+            world.addComponent(pId, new Projectile(dmg, 0.8, 'player'));
 
-        } else if (spellKey === 'utito san') {
-            // PRECISION SHOT (Ranger Only)
-            if (!canCast(['ranger'])) return;
-
-            if (mana.current >= 20) {
-                mana.current -= 20;
-                const pId = world.createEntity();
-                world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
-
-                // Aiming
-                const targetComp = world.getComponent(playerEntity, Target);
-                let vx = facing.x * 250;
-                let vy = facing.y * 250;
-                if (targetComp) {
-                    const targetPos = world.getComponent(targetComp.targetId, Position);
-                    if (targetPos) {
-                        const dx = (targetPos.x + 8) - (pos.x + 8);
-                        const dy = (targetPos.y + 8) - (pos.y + 8);
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        if (dist > 0) { vx = (dx / dist) * 250; vy = (dy / dist) * 250; }
-                    }
-                }
-                world.addComponent(pId, new Velocity(vx, vy));
-                world.addComponent(pId, new Sprite(SPRITES.FIREBALL, 8));
-                const distSkill = skills ? skills.distance.level : 10;
-                const dmg = 40 + (distSkill * 3);
-                world.addComponent(pId, new Projectile(dmg, 0.8, 'player'));
-
-                if (console) console.addSystemMessage("utito san!");
-            } else {
-                if (console) console.addSystemMessage("Not enough Mana!");
-                spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
-            }
+            if (console) console.addSystemMessage("utito san!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+            spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
     }
 }
@@ -2111,10 +2106,14 @@ export function updateStatsFromPassives(world: World, playerEntity: number) {
     const xp = world.getComponent(playerEntity, Experience);
     const level = (xp && !isNaN(xp.level)) ? xp.level : 1;
 
-    const startHp = (voc.startHp && !isNaN(voc.startHp)) ? voc.startHp : 100;
-    const hpGain = (voc.hpGain && !isNaN(voc.hpGain)) ? voc.hpGain : 10;
-    const startMana = (voc.startMana && !isNaN(voc.startMana)) ? voc.startMana : 10;
-    const manaGain = (voc.manaGain && !isNaN(voc.manaGain)) ? voc.manaGain : 5;
+    const vocKey = (voc && voc.name) ? voc.name.toLowerCase() : 'knight';
+    const vocData = VOCATIONS[vocKey] || VOCATIONS['knight'];
+
+    const startHp = vocData.startHp;
+    const startMana = vocData.startMana;
+    // hpGain/manaGain are on the component instance (if modified/custom) or we could use vocData
+    const hpGain = (voc && voc.hpGain) ? voc.hpGain : vocData.hpGain;
+    const manaGain = (voc && voc.manaGain) ? voc.manaGain : vocData.manaGain;
 
     const baseHp = startHp + ((level - 1) * hpGain);
     const baseMana = startMana + ((level - 1) * manaGain);

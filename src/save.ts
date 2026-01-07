@@ -13,11 +13,8 @@ interface SaveData {
         gold: number;
     };
     quest: {
-        questId: string | null;
-        targetType: string | null;
-        progress: number;
-        targetCount: number;
-        completed: boolean;
+        quests: any[];
+        completedQuestIds: string[];
     };
     experience: { current: number, next: number, level: number };
     mana: { current: number, max: number };
@@ -83,11 +80,8 @@ export function saveGame(world: World, ui?: UIManager) {
             gold: inv.gold
         },
         quest: {
-            questId: quest.questId,
-            targetType: quest.targetType,
-            progress: quest.progress,
-            targetCount: quest.targetCount,
-            completed: quest.completed
+            quests: quest.quests,
+            completedQuestIds: quest.completedQuestIds
         },
         experience: {
             current: xp ? xp.current : 0,
@@ -178,7 +172,7 @@ export function loadGame(world: World, ui: UIManager): boolean {
         data.inventory.items.forEach((i: any) => {
             // Fix Sprite IDs (Migration)
             if (i.name === "Wooden Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
-            else if (i.name === "Tower Shield") i.uIndex = SPRITES.SHIELD;
+            else if (i.name === "Tower Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
             else if (i.name === "Wooden Sword") i.uIndex = SPRITES.WOODEN_SWORD;
             else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
             else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
@@ -190,7 +184,7 @@ export function loadGame(world: World, ui: UIManager): boolean {
         data.inventory.storage.forEach((i: any) => {
             // Fix Sprite IDs (Migration)
             if (i.name === "Wooden Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
-            else if (i.name === "Tower Shield") i.uIndex = SPRITES.SHIELD;
+            else if (i.name === "Tower Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
             else if (i.name === "Wooden Sword") i.uIndex = SPRITES.WOODEN_SWORD;
             else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
             else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
@@ -201,11 +195,15 @@ export function loadGame(world: World, ui: UIManager): boolean {
 
         // Restore Quest
         const quest = world.getComponent(playerEntity, QuestLog)!;
-        quest.questId = data.quest.questId || "";
-        quest.targetType = data.quest.targetType || "";
-        quest.progress = data.quest.progress;
-        quest.targetCount = data.quest.targetCount;
-        quest.completed = data.quest.completed;
+        // Check for new format vs legacy
+        if ((data.quest as any).quests) {
+            quest.quests = (data.quest as any).quests;
+            quest.completedQuestIds = (data.quest as any).completedQuestIds || [];
+        } else {
+            // Legacy Fallback (Clear active, tough luck)
+            quest.quests = [];
+            quest.completedQuestIds = [];
+        }
 
         // Restore Experience
         const xp = world.getComponent(playerEntity, Experience)!;

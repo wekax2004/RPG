@@ -30,7 +30,7 @@ function drawPixelArt() {
         pantsColor: string,
         helmetColor: string | null,
         capeColor: string | null,
-        weaponType: 'sword' | 'staff' | 'bow' | 'none' = 'none'
+        weaponType: 'sword' | 'staff' | 'bow' | 'dagger' | 'none' = 'none'
     ) => {
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -92,6 +92,11 @@ function drawPixelArt() {
             ctx.fillRect(bx + 26, by + 4, 2, 24);
             ctx.fillStyle = '#0ff'; // Orb
             ctx.fillRect(bx + 25, by + 2, 4, 4);
+        } else if (weaponType === 'dagger') {
+            ctx.fillStyle = '#aaa'; // Blade
+            ctx.fillRect(bx + 26, by + 16, 2, 8);
+            ctx.fillStyle = '#531'; // Hilt
+            ctx.fillRect(bx + 25, by + 22, 4, 2);
         }
     };
 
