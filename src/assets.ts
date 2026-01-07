@@ -558,13 +558,7 @@ function drawPixelArt() {
     ctx.strokeRect(arx + 8, ary + 4, 16, 22);
 
     // 42: NECROMANCER (Dark Mage)
-    // 41: ARMOR (Iron Plate)
-    const arx = 128; const ary = r5y;
-    // Same as 30 but maybe distinct? Let's copy 30 for now or make it gold?
-    // Let's make it distinct - Iron Plate with Red Cape
-    ctx.fillStyle = '#889'; ctx.fillRect(arx + 6, ary + 6, 20, 22);
-    ctx.fillStyle = '#a00'; ctx.fillRect(arx + 8, ary + 8, 16, 18); // Inner
-    ctx.fillStyle = '#ccd'; ctx.fillRect(arx + 10, ary + 10, 12, 6); // Shine
+
 
     // 42: NECROMANCER (Dark Mage)
     const nmx = 160; const nmy = r5y;
