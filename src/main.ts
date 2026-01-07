@@ -509,11 +509,14 @@ class Game {
         // Run Magic System always (to allow toggling UI/Skills)
         magicSystem(this.world, this.input, this.ui);
 
+        // Always run movement (allow walking with bag open)
+        movementSystem(this.world, dt, this.audio, this.network, this.ui);
+
         // System Updates
         if (!this.ui.isShowing()) {
             aiSystem(this.world, dt);
             interactionSystem(this.world, this.input, this.ui);
-            movementSystem(this.world, dt, this.audio, this.network, this.ui);
+            // movementSystem moved out
             itemPickupSystem(this.world, this.ui, this.audio, this.network);
             // Pass UI for console messages, and Network for PvP
             combatSystem(this.world, this.input, this.audio, this.ui, this.network, this.pvpEnabled);
