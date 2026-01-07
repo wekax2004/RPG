@@ -104,6 +104,7 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                         // Execute Interaction
                         const lootable = world.getComponent(id, Lootable);
                         const merchant = world.getComponent(id, Merchant);
+                        const questGiver = world.getComponent(id, QuestGiver);
 
                         if (lootable) {
                             const playerInv = world.getComponent(player, Inventory)!;
@@ -116,6 +117,71 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                             ui.renderShop(merchant, playerInv);
                             ui.shopPanel.classList.remove('hidden');
                             clickedInteractable = true;
+                        } else if (questGiver) {
+                            // Quest Interaction
+                            const playerQLog = world.getComponent(player, QuestLog);
+                            const playerInv = world.getComponent(player, Inventory);
+                            const playerXp = world.getComponent(player, Experience);
+
+                            if (playerQLog) {
+                                // Check for quests to turn in
+                                for (const quest of playerQLog.quests) {
+                                    if (quest.completed && !quest.turnedIn) {
+                                        // Find matching quest in giver
+                                        const giverQuest = questGiver.availableQuests.find(q => q.id === quest.id);
+                                        if (giverQuest) {
+                                            quest.turnedIn = true;
+                                            playerQLog.completedQuestIds.push(quest.id);
+                                            // Remove from active
+                                            playerQLog.quests = playerQLog.quests.filter(q => q.id !== quest.id);
+                                            // Give rewards
+                                            if (playerInv) playerInv.gold += quest.reward.gold;
+                                            if (playerXp) {
+                                                playerXp.current += quest.reward.xp;
+                                                if (playerXp.current >= playerXp.toNext) {
+                                                    playerXp.level++;
+                                                    playerXp.current -= playerXp.toNext;
+                                                    playerXp.toNext = Math.floor(playerXp.toNext * 1.5);
+                                                }
+                                            }
+                                            if ((ui as any).console) {
+                                                (ui as any).console.addSystemMessage(`Quest Complete: "${quest.name}"!`);
+                                                (ui as any).console.addSystemMessage(`Reward: ${quest.reward.gold} gold, ${quest.reward.xp} XP`);
+                                            }
+                                            clickedInteractable = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                // Check for new quests to accept
+                                if (!clickedInteractable) {
+                                    for (const quest of questGiver.availableQuests) {
+                                        // Check if already have or completed this quest
+                                        const hasQuest = playerQLog.quests.some(q => q.id === quest.id);
+                                        const completedQuest = playerQLog.completedQuestIds.includes(quest.id);
+                                        if (!hasQuest && !completedQuest) {
+                                            // Accept quest (deep copy to player)
+                                            const newQuest = { ...quest, current: 0, completed: false, turnedIn: false };
+                                            playerQLog.quests.push(newQuest);
+                                            if ((ui as any).console) {
+                                                (ui as any).console.addSystemMessage(`New Quest: "${quest.name}"`);
+                                                (ui as any).console.addSystemMessage(quest.description);
+                                            }
+                                            clickedInteractable = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                // Already have all quests from this giver
+                                if (!clickedInteractable) {
+                                    const npcNameComp = world.getComponent(id, Name);
+                                    const npcName = npcNameComp ? npcNameComp.value : "NPC";
+                                    if ((ui as any).console) (ui as any).console.addSystemMessage(`${npcName}: "Check back later."`);
+                                    clickedInteractable = true;
+                                }
+                            }
                         }
                     } else {
                         if ((ui as any).console) (ui as any).console.addSystemMessage("Too far away.");
@@ -775,12 +841,18 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
                     const enemyName = nameComp ? nameComp.value : "Enemy";
                     if ((ui as any).console) (ui as any).console.sendMessage(`${enemyName} died.`);
 
+                    // Quest Progress Tracking
                     const qLog = world.getComponent(playerEntity, QuestLog);
-                    if (qLog && qLog.questId && !qLog.completed && qLog.targetType === enemyName) {
-                        qLog.progress++;
-                        if ((ui as any).console) (ui as any).console.sendMessage(`Quest: ${qLog.progress}/${qLog.targetCount} ${enemyName}s`);
-                        if (qLog.progress >= qLog.targetCount) {
-                            if ((ui as any).console) (ui as any).console.addSystemMessage("Quest Objective Complete! Return to villager.");
+                    if (qLog) {
+                        for (const quest of qLog.quests) {
+                            if (!quest.completed && quest.type === 'kill' && quest.target.toLowerCase() === enemyName.toLowerCase()) {
+                                quest.current++;
+                                if ((ui as any).console) (ui as any).console.sendMessage(`Quest "${quest.name}": ${quest.current}/${quest.required} ${quest.target}s`);
+                                if (quest.current >= quest.required) {
+                                    quest.completed = true;
+                                    if ((ui as any).console) (ui as any).console.addSystemMessage(`Quest Complete! Return to turn in "${quest.name}"`);
+                                }
+                            }
                         }
                     }
 

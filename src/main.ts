@@ -1,5 +1,5 @@
 import { World, InputHandler } from './engine';
-import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, consumeItem, safeZoneRegenSystem, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell, updateStatsFromPassives, AI } from './game';
+import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, autocloseSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, consumeItem, safeZoneRegenSystem, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell, updateStatsFromPassives, AI, Quest, QuestLog, QuestGiver, Interactable, Name } from './game';
 import { Vocation, lightingRenderSystem, LightSource, RemotePlayer, Sprite, SPRITES, spriteSheet, Velocity } from './game'; // Fix TS2552
 import { UIManager, ConsoleManager, CharacterCreation } from './ui';
 import { saveGame, loadGame } from './save';
@@ -416,6 +416,8 @@ class Game {
                         const s = this.world.createEntity();
                         this.world.addComponent(s, new Position(ent.x, ent.y));
                         this.world.addComponent(s, new Sprite(ent.sprite, ent.size));
+                    } else if (ent.type === 'quest_npc') {
+                        this.createQuestNPC(ent.x, ent.y, ent.name, ent.quests);
                     }
                 }
             }
@@ -581,10 +583,57 @@ class Game {
                 xpComp ? xpComp.next : 100,
                 skills
             );
+
+            // Update Quest Panel
+            const qLog = this.world.getComponent(playerEntity, QuestLog);
+            if (qLog) {
+                this.updateQuestPanel(qLog);
+            }
+
+            // Q key to toggle quest panel
+            if (this.input.isJustPressed('KeyQ')) {
+                const questPanel = document.getElementById('quest-panel');
+                if (questPanel) {
+                    questPanel.classList.toggle('hidden');
+                }
+            }
         }
 
         // Clear justPressed state
         this.input.update();
+    }
+
+    updateQuestPanel(qLog: QuestLog) {
+        const questList = document.getElementById('quest-list');
+        if (!questList) return;
+
+        questList.innerHTML = '';
+
+        if (qLog.quests.length === 0) {
+            questList.innerHTML = '<div class="quest-empty" style="color: #888; padding: 8px; text-align: center;">No active quests</div>';
+            return;
+        }
+
+        for (const quest of qLog.quests) {
+            const questDiv = document.createElement('div');
+            questDiv.className = `quest-item${quest.completed ? ' quest-completed' : ''}`;
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'quest-name';
+            nameDiv.textContent = quest.name;
+
+            const progressDiv = document.createElement('div');
+            progressDiv.className = 'quest-progress';
+            if (quest.completed) {
+                progressDiv.textContent = '✓ Complete - Return to NPC';
+            } else {
+                progressDiv.textContent = `${quest.current}/${quest.required} ${quest.target}s`;
+            }
+
+            questDiv.appendChild(nameDiv);
+            questDiv.appendChild(progressDiv);
+            questList.appendChild(questDiv);
+        }
     }
 
     render() {
@@ -696,6 +745,16 @@ class Game {
         mCtx.strokeStyle = '#666';
         mCtx.lineWidth = 1;
         mCtx.strokeRect(0, 0, mapSize, mapSize);
+    }
+
+    createQuestNPC(x: number, y: number, name: string, quests: Quest[]) {
+        const e = this.world.createEntity();
+        this.world.addComponent(e, new Position(x, y));
+        this.world.addComponent(e, new Sprite(SPRITES.NPC, 32));
+        this.world.addComponent(e, new Name(name));
+        this.world.addComponent(e, new Interactable(`Talk to ${name}`));
+        this.world.addComponent(e, new QuestGiver(quests, name));
+        return e;
     }
 
     loop(timestamp: number) {

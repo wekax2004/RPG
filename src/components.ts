@@ -98,22 +98,29 @@ export class Name {
     constructor(public value: string) { }
 }
 
+// Quest System Types
+export interface Quest {
+    id: string;
+    name: string;
+    description: string;
+    type: 'kill' | 'fetch';
+    target: string; // Enemy type name or item name
+    required: number;
+    current: number;
+    reward: { gold: number; xp: number; items?: string[] };
+    completed: boolean;
+    turnedIn: boolean;
+}
+
 export class QuestLog {
-    questId: string = "";
-    targetType: string = "";
-    targetCount: number = 0;
-    progress: number = 0;
-    completed: boolean = false;
+    public quests: Quest[] = [];
+    public completedQuestIds: string[] = [];
 }
 
 export class QuestGiver {
     constructor(
-        public questId: string,
-        public targetType: string,
-        public count: number,
-        public startText: string,
-        public progressText: string,
-        public completeText: string
+        public availableQuests: Quest[],
+        public name: string = "Quest Giver"
     ) { }
 }
 
@@ -227,3 +234,4 @@ export class Passives {
         public might: number = 0     // +Damage (Physical)
     ) { }
 }
+

@@ -145,6 +145,73 @@ export function generateMap(width: number, height: number, seed: number): { widt
     generateHouse(centerX - 192, centerY - 32, 5, 5);
     entities.push({ type: 'npc', x: centerX - 128, y: centerY + 32, text: "Beware the deep woods..." });
 
+    // Quest NPCs
+    // Hunter NPC - Wolf quest
+    entities.push({
+        type: 'quest_npc',
+        x: centerX + 32,
+        y: centerY + 64,
+        name: "Hunter Gorn",
+        quests: [
+            {
+                id: "wolf_menace",
+                name: "Wolf Menace",
+                description: "Kill 5 wolves that threaten our village.",
+                type: "kill",
+                target: "Wolf",
+                required: 5,
+                current: 0,
+                reward: { gold: 50, xp: 100 },
+                completed: false,
+                turnedIn: false
+            }
+        ]
+    });
+
+    // Guard NPC - Orc quest
+    entities.push({
+        type: 'quest_npc',
+        x: centerX - 32,
+        y: centerY + 64,
+        name: "Guard Captain",
+        quests: [
+            {
+                id: "orc_patrol",
+                name: "Orc Patrol",
+                description: "Kill 3 orcs scouts in the deep forest.",
+                type: "kill",
+                target: "Orc",
+                required: 3,
+                current: 0,
+                reward: { gold: 100, xp: 200 },
+                completed: false,
+                turnedIn: false
+            }
+        ]
+    });
+
+    // Priest NPC - Crypt quest (near Mausoleum)
+    entities.push({
+        type: 'quest_npc',
+        x: centerX,
+        y: centerY + 96,
+        name: "Father Marcus",
+        quests: [
+            {
+                id: "crypt_cleansing",
+                name: "Crypt Cleansing",
+                description: "Descend into the Crypt and destroy 10 Skeletons.",
+                type: "kill",
+                target: "Skeleton",
+                required: 10,
+                current: 0,
+                reward: { gold: 150, xp: 300 },
+                completed: false,
+                turnedIn: false
+            }
+        ]
+    });
+
     // Spawn Boss (Orc Warlord) Camp
     // Place far from center
     const bossDist = 20 * 32;
