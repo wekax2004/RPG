@@ -47,8 +47,8 @@ export function inputSystem(world: World, input: InputHandler) {
         if (input.isDown('KeyU')) {
             const pos = world.getComponent(id, Position)!;
             // Teleport to Center (Map is 128*32=4096, center ~2048)
-            pos.x = 2048;
-            pos.y = 2048;
+            pos.x = 4096;
+            pos.y = 4096;
         }
 
         // Debug: Home / Stairs
@@ -57,11 +57,11 @@ export function inputSystem(world: World, input: InputHandler) {
             // InputHandler has justPressed
             if (input.isJustPressed('KeyH')) {
                 const pos = world.getComponent(id, Position)!;
-                // New Map Center is 128x32 = 4096 / 2 = 2048
-                pos.x = 2048;
-                pos.y = 2048;
+                // New Map Center is 128x32 = 4096
+                pos.x = 4096;
+                pos.y = 4096;
                 console.log("Teleported to Village Center.");
-                spawnFloatingText(world, 2048, 2048, "↓↓ VILLAGE ↓↓", '#ff00ff');
+                spawnFloatingText(world, 4096, 4096, "↓↓ VILLAGE ↓↓", '#ff00ff');
             }
         }
     }
@@ -108,11 +108,14 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                         const merchant = world.getComponent(id, Merchant);
                         const questGiver = world.getComponent(id, QuestGiver);
 
+                        console.log("Interaction Check:", id, "Lootable:", !!lootable, "Merchant:", !!merchant, "Quest:", !!questGiver);
+
                         if (lootable) {
                             const playerInv = world.getComponent(player, Inventory)!;
                             ui.openLoot(lootable, id, playerInv);
                             clickedInteractable = true;
                         } else if (merchant) {
+                            console.log("Opening Shop UI...");
                             const playerInv = world.getComponent(player, Inventory)!;
                             ui.currentMerchant = merchant;
                             ui.activeMerchantId = id;

@@ -469,6 +469,14 @@ class Game {
                             }
                         }
 
+                        // Migration 4: Fix Teleport / Lost Players
+                        // If player is stuck around 2048 (old center guess), move to 4096
+                        if (Math.abs(pos.x - 2048) < 200 && Math.abs(pos.y - 2048) < 200) {
+                            pos.x = 4096;
+                            pos.y = 4096;
+                            this.console.addSystemMessage("Saved you from the void! Moved to Village.");
+                        }
+
                         // Recalculate stats
                         updateStatsFromPassives(this.world, player);
                     }
