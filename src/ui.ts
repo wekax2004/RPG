@@ -583,6 +583,7 @@ export class UIManager {
             div.onmouseleave = () => this.closeInspect();
 
             div.onclick = () => {
+                console.log(`[Shop] Buy Click: ${item.name} (${item.price}gp) vs Player Gold: ${playerInv.gold}`);
                 if (playerInv.gold >= item.price) {
                     playerInv.gold -= item.price;
                     // Add copy of item to player
@@ -599,6 +600,7 @@ export class UIManager {
                     this.renderShop(merchant, playerInv);
                     this.updateInventory(playerInv, spriteSheet.src);
                 } else {
+                    console.log("[Shop] Not enough gold");
                     if (this.console) this.console.sendMessage("Not enough gold!");
                 }
             };
@@ -620,6 +622,7 @@ export class UIManager {
             div.onmouseleave = () => this.closeInspect();
 
             div.onclick = () => {
+                console.log(`[Shop] Sell Click: ${item.name} for ${sellPrice}gp`);
                 playerInv.gold += sellPrice;
                 playerInv.storage.splice(index, 1);
                 if (this.console) this.console.sendMessage(`Sold ${item.name}.`);
