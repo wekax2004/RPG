@@ -503,6 +503,26 @@ class Game {
                             localStorage.setItem('retro-rpg-migration-6', 'true');
                             this.console.addSystemMessage("Updated Item Sprites.");
                         }
+
+                        // Migration 7: Fix Swapped Name/Slot (Undo ITEM_DB corruption)
+                        if (!localStorage.getItem('retro-rpg-migration-7')) {
+                            const validSlots = ['rhand', 'lhand', 'body', 'head', 'legs', 'feet', 'consumable', 'currency', 'food', 'potion'];
+                            const fixSwap = (item: Item) => {
+                                // Check if name is actually a slot (corruption from reversed arguments)
+                                if (validSlots.includes(item.name) && !validSlots.includes(item.slot)) {
+                                    const oldName = item.name;
+                                    item.name = item.slot;
+                                    item.slot = oldName;
+                                }
+                                // Ensure defense is present and number
+                                if (item.defense === undefined) item.defense = 0;
+                            };
+                            inv.items.forEach(fixSwap);
+                            inv.storage.forEach(fixSwap);
+
+                            localStorage.setItem('retro-rpg-migration-7', 'true');
+                            this.console.addSystemMessage("Fixed Invalid Items (Migration 7).");
+                        }
                     }
                     this.console.addSystemMessage("Save Loaded.");
                     // Force Inventory Update

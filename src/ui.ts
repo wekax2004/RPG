@@ -505,6 +505,9 @@ export class UIManager {
     inspectItem(item: any) {
         if (!item) return;
 
+        // Debug: Check item structure
+        console.log("Inspect Item:", item, "Def:", item.defense);
+
         // "Nuclear Option": Set InnerHTML directly to ensure content appears
         // This bypasses potential stale references to child elements
         const name = item.name || "Unknown";

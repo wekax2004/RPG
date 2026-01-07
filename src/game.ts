@@ -2137,61 +2137,61 @@ export function updateStatsFromPassives(world: World, playerEntity: number) {
 // Predefined Items Database - Each item has FIXED stats and rarity
 const ITEM_DB = {
     // --- CONSUMABLES ---
-    wolfMeat: new Item('consumable', 'Wolf Meat', SPRITES.MEAT, 0, 5, 'Raw meat', 'none', 'common'),
-    rottenFlesh: new Item('consumable', 'Rotten Flesh', SPRITES.ROTTEN_MEAT, 0, 2, 'Disgusting', 'none', 'common'),
-    healthPotion: new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'),
-    manaPotion: new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'),
+    wolfMeat: new Item('Wolf Meat', 'consumable', SPRITES.MEAT, 0, 5, 'Raw meat', 'none', 'common'),
+    rottenFlesh: new Item('Rotten Flesh', 'consumable', SPRITES.ROTTEN_MEAT, 0, 2, 'Disgusting', 'none', 'common'),
+    healthPotion: new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'),
+    manaPotion: new Item('Mana Potion', 'consumable', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'),
 
     // --- ARMOR ---
-    leatherArmor: new Item('body', 'Leather Armor', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0),
-    wolfPelt: new Item('body', 'Wolf Pelt', SPRITES.ARMOR, 0, 15, 'Warm fur armor', 'none', 'common', 3, 0, 0),
-    orcArmor: new Item('body', 'Orc Armor', SPRITES.ARMOR, 0, 100, 'Crude but sturdy', 'none', 'rare', 10, 15, 0),
-    plateArmor: new Item('body', 'Plate Armor', SPRITES.ARMOR, 0, 400, 'Heavy knight armor', 'none', 'epic', 20, 30, 0),
-    skullHelm: new Item('head', 'Skull Helm', SPRITES.ARMOR, 0, 35, 'Creepy but effective', 'none', 'uncommon', 5, 0, 0),
-    crownOfKings: new Item('head', 'Crown of Kings', SPRITES.ARMOR, 0, 800, 'Worn by legends', 'none', 'legendary', 10, 100, 50),
-    orcShield: new Item('lhand', 'Orc Shield', SPRITES.WOODEN_SHIELD, 0, 70, 'Battered shield', 'none', 'rare', 8, 0, 0),
-    dragonShield: new Item('lhand', 'Dragon Shield', SPRITES.WOODEN_SHIELD, 0, 350, 'Scales of a dragon', 'none', 'epic', 15, 20, 10),
+    leatherArmor: new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0),
+    wolfPelt: new Item('Wolf Pelt', 'body', SPRITES.ARMOR, 0, 15, 'Warm fur armor', 'none', 'common', 3, 0, 0),
+    orcArmor: new Item('Orc Armor', 'body', SPRITES.ARMOR, 0, 100, 'Crude but sturdy', 'none', 'rare', 10, 15, 0),
+    plateArmor: new Item('Plate Armor', 'body', SPRITES.ARMOR, 0, 400, 'Heavy knight armor', 'none', 'epic', 20, 30, 0),
+    skullHelm: new Item('Skull Helm', 'head', SPRITES.ARMOR, 0, 35, 'Creepy but effective', 'none', 'uncommon', 5, 0, 0),
+    crownOfKings: new Item('Crown of Kings', 'head', SPRITES.ARMOR, 0, 800, 'Worn by legends', 'none', 'legendary', 10, 100, 50),
+    orcShield: new Item('Orc Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 70, 'Battered shield', 'none', 'rare', 8, 0, 0),
+    dragonShield: new Item('Dragon Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 350, 'Scales of a dragon', 'none', 'epic', 15, 20, 10),
 
     // --- WEAPONS: SWORDS (Balanced Dmg/Spd) ---
     // Common
-    rustySword: new Item('rhand', 'Rusty Sword', SPRITES.SWORD, 5, 10, 'Old and dull', 'sword', 'common'),
-    woodenSword: new Item('rhand', 'Wooden Sword', SPRITES.WOODEN_SWORD, 3, 5, 'Training weapon', 'sword', 'common'),
+    rustySword: new Item('Rusty Sword', 'rhand', SPRITES.SWORD, 5, 10, 'Old and dull', 'sword', 'common'),
+    woodenSword: new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 5, 'Training weapon', 'sword', 'common'),
     // Uncommon
-    ironSword: new Item('rhand', 'Iron Sword', SPRITES.SWORD, 12, 40, 'Standard soldier blade', 'sword', 'uncommon'),
-    boneSword: new Item('rhand', 'Bone Sword', SPRITES.WOODEN_SWORD, 10, 25, 'Sharpened bone', 'sword', 'uncommon'),
+    ironSword: new Item('Iron Sword', 'rhand', SPRITES.SWORD, 12, 40, 'Standard soldier blade', 'sword', 'uncommon'),
+    boneSword: new Item('Bone Sword', 'rhand', SPRITES.WOODEN_SWORD, 10, 25, 'Sharpened bone', 'sword', 'uncommon'),
     // Rare
-    steelSword: new Item('rhand', 'Steel Sword', SPRITES.SWORD, 20, 120, 'Finely crafted', 'sword', 'rare'),
+    steelSword: new Item('Steel Sword', 'rhand', SPRITES.SWORD, 20, 120, 'Finely crafted', 'sword', 'rare'),
     // Epic
-    demonBlade: new Item('rhand', 'Demon Blade', SPRITES.SWORD, 35, 300, 'Burns with hellfire', 'sword', 'epic', 0, 0, 20),
+    demonBlade: new Item('Demon Blade', 'rhand', SPRITES.SWORD, 35, 300, 'Burns with hellfire', 'sword', 'epic', 0, 0, 20),
     // Legendary
-    nobleSword: new Item('rhand', 'Noble Sword', SPRITES.NOBLE_SWORD, 50, 500, 'Hero\'s weapon', 'sword', 'legendary', 5, 50, 20),
+    nobleSword: new Item('Noble Sword', 'rhand', SPRITES.NOBLE_SWORD, 50, 500, 'Hero\'s weapon', 'sword', 'legendary', 5, 50, 20),
 
     // --- WEAPONS: AXES (High Dmg, Low Def) ---
     // Common
-    handAxe: new Item('rhand', 'Hand Axe', SPRITES.AXE, 7, 15, 'Woodcutter\'s tool', 'axe', 'common'),
+    handAxe: new Item('Hand Axe', 'rhand', SPRITES.AXE, 7, 15, 'Woodcutter\'s tool', 'axe', 'common'),
     // Uncommon
-    battleAxe: new Item('rhand', 'Battle Axe', SPRITES.AXE, 16, 50, 'Heavy chopper', 'axe', 'uncommon'),
-    orcAxe: new Item('rhand', 'Orc Axe', SPRITES.AXE, 18, 80, 'Brutal weapon', 'axe', 'rare'),
+    battleAxe: new Item('Battle Axe', 'rhand', SPRITES.AXE, 16, 50, 'Heavy chopper', 'axe', 'uncommon'),
+    orcAxe: new Item('Orc Axe', 'rhand', SPRITES.AXE, 18, 80, 'Brutal weapon', 'axe', 'rare'),
     // Rare
-    warAxe: new Item('rhand', 'War Axe', SPRITES.AXE, 28, 150, 'Crushes armor', 'axe', 'rare'),
+    warAxe: new Item('War Axe', 'rhand', SPRITES.AXE, 28, 150, 'Crushes armor', 'axe', 'rare'),
     // Epic
-    executionerAxe: new Item('rhand', 'Executioner Axe', SPRITES.AXE, 45, 350, 'Decapitating force', 'axe', 'epic'),
+    executionerAxe: new Item('Executioner Axe', 'rhand', SPRITES.AXE, 45, 350, 'Decapitating force', 'axe', 'epic'),
 
     // --- WEAPONS: CLUBS (Modest Dmg, +Defense) ---
     // Common
-    woodenClub: new Item('rhand', 'Wooden Club', SPRITES.CLUB, 4, 8, 'Heavy branch', 'club', 'common', 2, 0, 0),
+    woodenClub: new Item('Wooden Club', 'rhand', SPRITES.CLUB, 4, 8, 'Heavy branch', 'club', 'common', 2, 0, 0),
     // Uncommon
-    mace: new Item('rhand', 'Iron Mace', SPRITES.CLUB, 10, 45, 'Spiked bludgeon', 'club', 'uncommon', 4, 0, 0),
+    mace: new Item('Iron Mace', 'rhand', SPRITES.CLUB, 10, 45, 'Spiked bludgeon', 'club', 'uncommon', 4, 0, 0),
     // Rare
-    warhammer: new Item('rhand', 'Warhammer', SPRITES.CLUB, 18, 130, 'Heavy impact', 'club', 'rare', 8, 0, 0),
+    warhammer: new Item('Warhammer', 'rhand', SPRITES.CLUB, 18, 130, 'Heavy impact', 'club', 'rare', 8, 0, 0),
     // Epic
-    morningStar: new Item('rhand', 'Morning Star', SPRITES.CLUB, 30, 320, 'Crushes skulls', 'club', 'epic', 12, 0, 0),
+    morningStar: new Item('Morning Star', 'rhand', SPRITES.CLUB, 30, 320, 'Crushes skulls', 'club', 'epic', 12, 0, 0),
 
     // --- DEEP FOREST ITEMS ---
-    bearFur: new Item('body', 'Bear Fur', SPRITES.ARMOR, 0, 80, 'Thick and warm', 'none', 'uncommon', 5, 20, 0),
-    spiderSilk: new Item('consumable', 'Spider Silk', SPRITES.WEB, 0, 15, 'Strong sticky thread', 'none', 'common'),
-    venomDagger: new Item('rhand', 'Venom Dagger', SPRITES.SWORD, 14, 150, 'Drips with poison', 'sword', 'rare'), // TODO: Add poison logic
-    banditHood: new Item('head', 'Bandit Hood', SPRITES.ARMOR, 0, 60, 'Hides your face', 'none', 'uncommon', 3, 0, 0)
+    bearFur: new Item('Bear Fur', 'body', SPRITES.ARMOR, 0, 80, 'Thick and warm', 'none', 'uncommon', 5, 20, 0),
+    spiderSilk: new Item('Spider Silk', 'consumable', SPRITES.WEB, 0, 15, 'Strong sticky thread', 'none', 'common'),
+    venomDagger: new Item('Venom Dagger', 'rhand', SPRITES.SWORD, 14, 150, 'Drips with poison', 'sword', 'rare'), // TODO: Add poison logic
+    banditHood: new Item('Bandit Hood', 'head', SPRITES.ARMOR, 0, 60, 'Hides your face', 'none', 'uncommon', 3, 0, 0)
 };
 
 // Enemy drop tables - defines which items each enemy can drop and their chances
