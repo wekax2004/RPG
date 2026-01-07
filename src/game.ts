@@ -1477,17 +1477,17 @@ export function createMerchant(world: World, x: number, y: number) {
     // Basic Starter Items (Common only)
 
     // Potions
-    merch.items.push(new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'));
-    merch.items.push(new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
+    merch.items.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'));
+    merch.items.push(new Item('Mana Potion', 'consumable', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
 
     // Basic Weapons
-    merch.items.push(new Item('rhand', 'Wooden Sword', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common'));
-    merch.items.push(new Item('rhand', 'Wooden Club', SPRITES.CLUB, 4, 15, 'Heavy branch', 'club', 'common', 2, 0, 0));
-    merch.items.push(new Item('rhand', 'Hand Axe', SPRITES.AXE, 7, 25, 'Woodcutter\'s tool', 'axe', 'common'));
+    merch.items.push(new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common'));
+    merch.items.push(new Item('Wooden Club', 'rhand', SPRITES.CLUB, 4, 15, 'Heavy branch', 'club', 'common', 2, 0, 0));
+    merch.items.push(new Item('Hand Axe', 'rhand', SPRITES.AXE, 7, 25, 'Woodcutter\'s tool', 'axe', 'common'));
 
     // Basic Armor
-    merch.items.push(new Item('lhand', 'Wooden Shield', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3, 0, 0));
-    merch.items.push(new Item('body', 'Leather Armor', SPRITES.KNIGHT, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0));
+    merch.items.push(new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3, 0, 0));
+    merch.items.push(new Item('Leather Armor', 'body', SPRITES.KNIGHT, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0));
 
     world.addComponent(e, merch);
     return e;
