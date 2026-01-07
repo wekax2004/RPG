@@ -546,6 +546,17 @@ function drawPixelArt() {
     ctx.strokeStyle = '#556'; ctx.lineWidth = 1;
     ctx.strokeRect(arx + 8, ary + 4, 16, 22);
 
+    // 42: NECROMANCER (Dark Mage)
+    const ncx = 160; const ncy = r5y;
+    drawHumanoid(ncx, ncy, '#db9', '#213', '#415', null, '#102', 'staff');
+    // Skull Mask
+    ctx.fillStyle = '#ddd';
+    ctx.fillRect(ncx + 11, ncy + 5, 10, 8);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(ncx + 12, ncy + 7, 2, 2); ctx.fillRect(ncx + 17, ncy + 7, 2, 2); // Eyes
+    // Glowing Staff
+    ctx.fillStyle = '#f0f'; ctx.fillRect(ncx + 25, ncy + 2, 4, 4);
+
     spriteSheet.src = canvas.toDataURL();
 }
 
@@ -579,6 +590,9 @@ export const SPRITES = {
     SPIDER: 39,
     BANDIT: 40,
 
+    MAX: 43,
+    NECROMANCER: 42,
+
     // Environment
     GRASS: 16,
     WALL: 17,
@@ -605,7 +619,7 @@ export const SPRITES = {
     ARMOR: 41,
 
     // Other
-    KNIGHT: 30, // Using Shield as "Knight" icon for armor for now? Or keep it generic map icon
+    KNIGHT: 30,
 
     // Effects
     FIREBALL: 29,
@@ -613,6 +627,3 @@ export const SPRITES = {
     BLOOD: 29,
     GRAVE: 22
 };
-
-// Generate Sprites on Load
-drawPixelArt();

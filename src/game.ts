@@ -1398,6 +1398,18 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
         world.addComponent(e, new Name("Zombie"));
     } else if (type === "slime") {
         world.addComponent(e, new Sprite(SPRITES.SLIME, 32));
+        world.addComponent(e, new AI(25));
+        world.addComponent(e, new Health(15 * hpScale, 15 * hpScale));
+        world.addComponent(e, new Name("Slime"));
+    } else if (type === "necromancer") {
+        // BOSS
+        world.addComponent(e, new Sprite(SPRITES.NECROMANCER, 32));
+        world.addComponent(e, new AI(20)); // Caster logic
+        world.addComponent(e, new Health(300 * hpScale, 300 * hpScale)); // Tanky
+        world.addComponent(e, new Name("Necromancer"));
+        // Make him bigger via scale? No component for that yet. 
+        // Just rely on stats.
+    } else if (type === "bear") {
         world.addComponent(e, new AI(10)); // Slow
         world.addComponent(e, new Health(100 * hpScale, 100 * hpScale)); // Tanky
         world.addComponent(e, new Name("Slime"));
@@ -2215,20 +2227,33 @@ const DROP_TABLES: Record<string, { item: Item, chance: number }[]> = {
         { item: ITEM_DB.banditHood, chance: 0.15 },
         { item: ITEM_DB.leatherArmor, chance: 0.10 },
         { item: ITEM_DB.ironSword, chance: 0.10 },
+        { item: ITEM_DB.ironSword, chance: 0.10 },
         { item: ITEM_DB.healthPotion, chance: 0.25 },
     ],
+    crypt_keeper: [
+        { item: ITEM_DB.boneSword, chance: 0.50 },
+        { item: ITEM_DB.skullHelm, chance: 0.30 },
+        { item: ITEM_DB.manaPotion, chance: 0.40 },
+    ],
+    ],
+necromancer: [
+    { item: ITEM_DB.skullHelm, chance: 0.20 },
+    { item: ITEM_DB.boneSword, chance: 0.30 },
+    { item: ITEM_DB.manaPotion, chance: 0.50 },
+    { item: ITEM_DB.demonBlade, chance: 0.05 }, // Epic drop
+],
     // --- BOSSES ---
     warlord: [
         { item: ITEM_DB.nobleSword, chance: 1.0 }, // Guaranteed!
         { item: ITEM_DB.plateArmor, chance: 0.50 },
         { item: ITEM_DB.executionerAxe, chance: 0.30 },
     ],
-    boss: [
-        { item: ITEM_DB.demonBlade, chance: 0.80 },
-        { item: ITEM_DB.dragonShield, chance: 0.50 },
-        { item: ITEM_DB.crownOfKings, chance: 0.20 },
-        { item: ITEM_DB.morningStar, chance: 0.40 },
-    ],
+        boss: [
+            { item: ITEM_DB.demonBlade, chance: 0.80 },
+            { item: ITEM_DB.dragonShield, chance: 0.50 },
+            { item: ITEM_DB.crownOfKings, chance: 0.20 },
+            { item: ITEM_DB.morningStar, chance: 0.40 },
+        ],
 };
 
 export function generateLoot(enemyType: string = "orc"): Item[] {

@@ -307,16 +307,21 @@ export function generateMap(width: number, height: number, seed: number): { widt
     entities.push({ type: 'enemy', x: bx + 64, y: by + 64, enemyType: 'orc' });
 
     // --- CRYPT GENERATION (Multi-Level) ---
-    const levels = 3;
+    const levels = 6;
 
-    // Level 1: (80, 80)
-    // Level 2: (40, 80)
-    // Level 3: (10, 80) [Boss Layer]
+    // Use distinct areas for each floor to avoid overlap
+    // Map Width = 256. 
+    // We can arrange them in a grid:
+    // Row 1 (y=80): L1(20), L2(60), L3(100), L4(140)
+    // Row 2 (y=120): L5(20), L6(60) [Boss]
 
     const levelConfigs = [
-        { ox: 80, oy: 80, w: 30, h: 30, density: 15, mobs: ['ghost', 'slime'] },
-        { ox: 40, oy: 80, w: 30, h: 30, density: 20, mobs: ['ghost', 'ghost', 'slime', 'skeleton'] }, // Harder
-        { ox: 10, oy: 80, w: 30, h: 30, density: 10, mobs: ['ghost', 'slime'] } // Boss Room
+        { ox: 20, oy: 80, w: 30, h: 30, density: 15, mobs: ['ghost', 'slime'] },
+        { ox: 60, oy: 80, w: 30, h: 30, density: 20, mobs: ['ghost', 'skeleton'] },
+        { ox: 100, oy: 80, w: 30, h: 30, density: 25, mobs: ['skeleton', 'zombie'] },
+        { ox: 140, oy: 80, w: 30, h: 30, density: 30, mobs: ['skeleton', 'zombie', 'ghost'] },
+        { ox: 20, oy: 120, w: 30, h: 30, density: 35, mobs: ['skeleton', 'ghost'] }, // Hard
+        { ox: 60, oy: 120, w: 20, h: 20, density: 5, mobs: ['skeleton'] } // Boss Room (Small, focused)
     ];
 
     // Village Entrance -> Level 1
@@ -439,10 +444,16 @@ export function generateMap(width: number, height: number, seed: number): { widt
             data[Math.floor(downY / 32) * width + Math.floor(downX / 32)] = 20;
         }
 
-        // Enemies
+        // Enemies / Bosses
         if (i === levels - 1) {
-            // BOSS ROOM
-            entities.push({ type: 'boss', x: (ox + cfg.w / 2) * 32, y: (oy + cfg.h / 2) * 32 });
+            // BOSS ROOM - Spawn Necromancer
+            entities.push({ type: 'enemy', x: (ox + cfg.w / 2) * 32, y: (oy + cfg.h / 2) * 32, enemyType: 'necromancer', difficulty: 2.0 });
+            // Add some elite guards
+            entities.push({ type: 'enemy', x: (ox + cfg.w / 2 - 2) * 32, y: (oy + cfg.h / 2 + 2) * 32, enemyType: 'skeleton', difficulty: 1.5 });
+            entities.push({ type: 'enemy', x: (ox + cfg.w / 2 + 2) * 32, y: (oy + cfg.h / 2 + 2) * 32, enemyType: 'skeleton', difficulty: 1.5 });
+        } else if (i === 2) {
+            // MINI-BOSS: Crypt Keeper (Level 3)
+            entities.push({ type: 'enemy', x: (ox + cfg.w / 2) * 32, y: (oy + cfg.h / 2) * 32, enemyType: 'crypt_keeper', difficulty: 1.5 });
         }
 
         // Mobs
