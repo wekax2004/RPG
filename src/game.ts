@@ -121,6 +121,9 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                             ui.activeMerchantId = id;
                             ui.renderShop(merchant, playerInv);
                             ui.shopPanel.classList.remove('hidden');
+                            ui.shopPanel.style.display = 'flex'; // Force visibility
+                            ui.shopPanel.style.zIndex = '10000'; // Force on top
+                            console.log("Forced Shop Visible");
                             clickedInteractable = true;
                         } else if (questGiver) {
                             // Quest Interaction
