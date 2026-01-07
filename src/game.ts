@@ -584,10 +584,13 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
 
             // Update Position
             // --- DEEP FOREST UNLOCK CHECK ---
-            const cx = 2048; const cy = 2048;
-            const dist = Math.sqrt((nextX - cx) ** 2 + (nextY - cy) ** 2);
+            const cx = map ? (map.width * map.tileSize) / 2 : 2048;
+            const cy = map ? (map.height * map.tileSize) / 2 : 2048;
+            const currentDist = Math.sqrt((pos.x - cx) ** 2 + (pos.y - cy) ** 2);
+            const nextDist = Math.sqrt((nextX - cx) ** 2 + (nextY - cy) ** 2);
 
-            if (dist > 1550) {
+            // Limit 1550 (approx 50 tiles)
+            if (nextDist > 1550) {
                 const qLog = world.getComponent(id, QuestLog);
                 let unlocked = false;
                 if (qLog) {
@@ -596,8 +599,16 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                 }
 
                 if (!unlocked) {
-                    if ((ui as any).console) (ui as any).console.addSystemMessage("The Deep Forest is too dangerous! Complete 'Wolf Menace' first.");
-                    continue; // Block movement
+                    // Critical Fix: Allow moving BACK towards safety
+                    // If we are already out (currentDist > 1550) and trying to go further (nextDist > currentDist), block.
+                    // If we are inside and trying to go out, block.
+
+                    if (currentDist <= 1550 || nextDist > currentDist) {
+                        if ((ui as any).console && Math.random() < 0.02) {
+                            (ui as any).console.addSystemMessage("The Deep Forest is too dangerous! Complete 'Wolf Menace' first.");
+                        }
+                        continue; // Block movement
+                    }
                 }
             }
 
