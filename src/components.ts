@@ -45,6 +45,25 @@ export class Interactable {
     constructor(public message: string) { }
 }
 
+// Item Rarity System
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+
+export const RARITY_COLORS: Record<ItemRarity, string> = {
+    common: '#ffffff',
+    uncommon: '#00ff00',
+    rare: '#0088ff',
+    epic: '#aa00ff',
+    legendary: '#ff8800'
+};
+
+export const RARITY_MULTIPLIERS: Record<ItemRarity, number> = {
+    common: 1.0,
+    uncommon: 1.15,
+    rare: 1.30,
+    epic: 1.50,
+    legendary: 2.0
+};
+
 export class Item {
     constructor(
         public name: string,
@@ -53,7 +72,11 @@ export class Item {
         public damage: number = 0,
         public price: number = 10,
         public description: string = "",
-        public weaponType: string = "sword"
+        public weaponType: string = "sword",
+        public rarity: ItemRarity = 'common',
+        public defense: number = 0,
+        public bonusHp: number = 0,
+        public bonusMana: number = 0
     ) { }
 }
 

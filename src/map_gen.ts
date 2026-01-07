@@ -145,6 +145,34 @@ export function generateMap(width: number, height: number, seed: number): { widt
     generateHouse(centerX - 192, centerY - 32, 5, 5);
     entities.push({ type: 'npc', x: centerX - 128, y: centerY + 32, text: "Beware the deep woods..." });
 
+    // Ambient Town NPCs - Make the village feel alive!
+    const ambientMessages = [
+        "Nice weather today!",
+        "Have you seen the wolves lately?",
+        "The merchant has new wares...",
+        "I used to be an adventurer like you.",
+        "Stay safe out there!",
+        "The crypt gives me chills...",
+        "Did you hear about the orcs?",
+        "Welcome to our village!"
+    ];
+
+    // Place ambient NPCs around the village
+    const ambientPositions = [
+        { x: centerX - 64, y: centerY - 32 },
+        { x: centerX + 96, y: centerY - 48 },
+        { x: centerX - 96, y: centerY + 48 },
+        { x: centerX + 48, y: centerY - 64 },
+        { x: centerX - 32, y: centerY - 80 },
+        { x: centerX + 128, y: centerY + 64 }
+    ];
+
+    for (let i = 0; i < ambientPositions.length; i++) {
+        const pos = ambientPositions[i];
+        const msg = ambientMessages[i % ambientMessages.length];
+        entities.push({ type: 'npc', x: pos.x, y: pos.y, text: msg, name: `Villager` });
+    }
+
     // Quest NPCs
     // Hunter NPC - Wolf quest
     entities.push({

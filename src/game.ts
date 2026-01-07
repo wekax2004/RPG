@@ -11,7 +11,7 @@ import {
     Item, Inventory, Health, Camera, Particle, ScreenShake, FloatingText, Name, QuestLog,
     QuestGiver, Facing, Projectile, Mana, Experience, Merchant, Skill, Skills, Vocation,
     VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable,
-    SpellBook, SkillPoints, ActiveSpell, StatusEffect, Passives
+    SpellBook, SkillPoints, ActiveSpell, StatusEffect, Passives, ItemRarity, RARITY_MULTIPLIERS, RARITY_COLORS
 } from './components';
 import { NetworkManager } from './network';
 
@@ -2061,32 +2061,89 @@ export function updateStatsFromPassives(world: World, playerEntity: number) {
 export function generateLoot(enemyType: string = "orc"): Item[] {
     const items: Item[] = [];
 
-    // Gold (Currency)
+    // Roll for rarity
+    const rarityRoll = Math.random();
+    let rarity: ItemRarity = 'common';
+    if (rarityRoll < 0.01) rarity = 'legendary'; // 1%
+    else if (rarityRoll < 0.05) rarity = 'epic'; // 4%
+    else if (rarityRoll < 0.15) rarity = 'rare'; // 10%
+    else if (rarityRoll < 0.35) rarity = 'uncommon'; // 20%
+    // else common (65%)
+
+    const multiplier = RARITY_MULTIPLIERS[rarity];
+    const rarityPrefix = rarity === 'common' ? '' : rarity.charAt(0).toUpperCase() + rarity.slice(1) + ' ';
+
+    // Gold drop (50% chance)
     if (Math.random() < 0.5) {
-        const gold = Math.floor(Math.random() * 20) + 5;
-        // Construct Item manually since we aren't spawning entity
-        // Item(slot, name, uIndex, damage/price)
-        // Gold needs a slot? 'currency'.
-        items.push(new Item('currency', 'Gold Coin', SPRITES.POTION, gold)); // Using POTION sprite for now as placeholder
+        const baseGold = enemyType === 'wolf' ? 5 : enemyType === 'skeleton' ? 10 : enemyType === 'orc' ? 20 : enemyType.includes('warlord') ? 100 : 15;
+        const gold = Math.floor(baseGold * (0.5 + Math.random()));
+        items.push(new Item('currency', 'Gold Coin', SPRITES.POTION, gold));
     }
 
-    if (enemyType.includes("warlord")) {
-        items.push(new Item("rhand", "Noble Sword", SPRITES.NOBLE_SWORD, 25));
+    // Boss guaranteed legendary
+    if (enemyType.includes('warlord') || enemyType.includes('boss')) {
+        const baseDmg = Math.floor(30 * RARITY_MULTIPLIERS['legendary']);
+        items.push(new Item('rhand', 'Legendary Noble Sword', SPRITES.NOBLE_SWORD, baseDmg, 500, 'A weapon of ancient power', 'sword', 'legendary', 0, 50, 20));
         return items;
     }
 
-    const rand = Math.random();
-    if (rand < 0.1) {
-        if (enemyType === "skeleton") {
-            items.push(new Item("rhand", "Wooden Sword", SPRITES.WOODEN_SWORD, 8));
-        } else if (enemyType === "wolf") {
-            // wolf loot?
+    // Item drop chance based on enemy
+    const dropChance = enemyType === 'wolf' ? 0.15 : enemyType === 'skeleton' ? 0.25 : enemyType === 'orc' ? 0.30 : 0.20;
+
+    if (Math.random() < dropChance) {
+        // Determine item type
+        const itemRoll = Math.random();
+
+        if (enemyType === 'wolf') {
+            // Wolf drops
+            if (itemRoll < 0.5) {
+                items.push(new Item('consumable', 'Wolf Meat', SPRITES.POTION, 0, 5, 'Raw meat'));
+            } else {
+                const def = Math.floor(3 * multiplier);
+                items.push(new Item('body', `${rarityPrefix}Wolf Pelt`, SPRITES.KNIGHT, 0, 15 * multiplier, 'Warm fur armor', 'none', rarity, def, 0, 0));
+            }
+        } else if (enemyType === 'skeleton') {
+            // Skeleton drops
+            if (itemRoll < 0.4) {
+                const dmg = Math.floor(8 * multiplier);
+                items.push(new Item('rhand', `${rarityPrefix}Bone Sword`, SPRITES.WOODEN_SWORD, dmg, 20 * multiplier, 'Made from bones', 'sword', rarity));
+            } else if (itemRoll < 0.7) {
+                const def = Math.floor(4 * multiplier);
+                items.push(new Item('head', `${rarityPrefix}Skull Helm`, SPRITES.KNIGHT, 0, 25 * multiplier, 'Creepy but effective', 'none', rarity, def, 0, 0));
+            } else {
+                items.push(new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores health'));
+            }
+        } else if (enemyType === 'orc') {
+            // Orc drops
+            if (itemRoll < 0.3) {
+                const dmg = Math.floor(15 * multiplier);
+                items.push(new Item('rhand', `${rarityPrefix}Orc Axe`, SPRITES.SWORD, dmg, 40 * multiplier, 'Heavy orcish weapon', 'axe', rarity));
+            } else if (itemRoll < 0.5) {
+                const def = Math.floor(6 * multiplier);
+                items.push(new Item('body', `${rarityPrefix}Orc Armor`, SPRITES.KNIGHT, 0, 50 * multiplier, 'Crude but sturdy', 'none', rarity, def, 10, 0));
+            } else if (itemRoll < 0.7) {
+                const def = Math.floor(5 * multiplier);
+                items.push(new Item('lhand', `${rarityPrefix}Orc Shield`, SPRITES.WOODEN_SHIELD, 0, 35 * multiplier, 'Battered shield', 'none', rarity, def, 0, 0));
+            } else {
+                items.push(new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores mana'));
+            }
+        } else if (enemyType === 'zombie') {
+            // Zombie drops
+            if (itemRoll < 0.5) {
+                items.push(new Item('consumable', 'Rotten Flesh', SPRITES.POTION, 0, 2, 'Disgusting'));
+            } else {
+                const dmg = Math.floor(5 * multiplier);
+                items.push(new Item('rhand', `${rarityPrefix}Rusty Sword`, SPRITES.SWORD, dmg, 10 * multiplier, 'Corroded blade', 'sword', rarity));
+            }
         } else {
-            if (Math.random() < 0.5) items.push(new Item("rhand", "Iron Sword", SPRITES.SWORD, 15));
-            else items.push(new Item("lhand", "Wooden Shield", SPRITES.WOODEN_SHIELD, 0));
+            // Default drops
+            if (Math.random() < 0.5) {
+                const dmg = Math.floor(10 * multiplier);
+                items.push(new Item('rhand', `${rarityPrefix}Iron Sword`, SPRITES.SWORD, dmg, 30 * multiplier, 'Standard weapon', 'sword', rarity));
+            } else {
+                items.push(new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores health'));
+            }
         }
-    } else if (rand < 0.4) {
-        items.push(new Item("consumable", "Health Potion", SPRITES.POTION, 0));
     }
 
     return items;
