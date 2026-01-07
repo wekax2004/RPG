@@ -604,12 +604,12 @@ export const SPRITES = {
     GHOST: 10,
     SLIME: 11,
     ZOMBIE: 13,
-    BEAR: 38,
-    SPIDER: 39,
-    BANDIT: 40,
+    BEAR: 41,
+    SPIDER: 42,
+    BANDIT: 43,
 
-    MAX: 44,
-    NECROMANCER: 42,
+    MAX: 47,
+    NECROMANCER: 45,
 
     // Environment
     GRASS: 16,
@@ -623,7 +623,7 @@ export const SPRITES = {
     MOSSY: 24,
     DARK: 25,
     TREE: 34,
-    PINE_TREE: 37,
+    PINE_TREE: 40,
 
     // Items
     SWORD: 26,
@@ -634,9 +634,9 @@ export const SPRITES = {
     NOBLE_SWORD: 32,
     AXE: 35,
     CLUB: 36,
-    ARMOR: 41,
+    ARMOR: 44,
 
-    MANA_POTION: 43,
+    MANA_POTION: 46,
 
     // Other
     KNIGHT: 30,
