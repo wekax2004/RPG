@@ -529,6 +529,23 @@ function drawPixelArt() {
     ctx.fillStyle = '#a22';
     ctx.fillRect(bdx + 11, bdy + 8, 10, 4);
 
+    // 41: ARMOR / CHESTPLATE (New specific icon)
+    const arx = 128; const ary = r5y;
+    // Silvery chestplate shape
+    ctx.fillStyle = '#889';
+    ctx.beginPath();
+    ctx.moveTo(arx + 8, ary + 4);
+    ctx.lineTo(arx + 24, ary + 4); // Shoulders
+    ctx.lineTo(arx + 22, ary + 26); // Waist
+    ctx.lineTo(arx + 10, ary + 26);
+    ctx.fill();
+    // Shinier highlight
+    ctx.fillStyle = '#ccd';
+    ctx.fillRect(arx + 12, ary + 8, 8, 8); // Breastplate shine
+    // Trim
+    ctx.strokeStyle = '#556'; ctx.lineWidth = 1;
+    ctx.strokeRect(arx + 8, ary + 4, 16, 22);
+
     spriteSheet.src = canvas.toDataURL();
 }
 
@@ -585,6 +602,7 @@ export const SPRITES = {
     NOBLE_SWORD: 32,
     AXE: 35,
     CLUB: 36,
+    ARMOR: 41,
 
     // Other
     KNIGHT: 30, // Using Shield as "Knight" icon for armor for now? Or keep it generic map icon

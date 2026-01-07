@@ -2127,12 +2127,12 @@ const ITEM_DB = {
     manaPotion: new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'),
 
     // --- ARMOR ---
-    leatherArmor: new Item('body', 'Leather Armor', SPRITES.KNIGHT, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0),
-    wolfPelt: new Item('body', 'Wolf Pelt', SPRITES.KNIGHT, 0, 15, 'Warm fur armor', 'none', 'common', 3, 0, 0),
-    orcArmor: new Item('body', 'Orc Armor', SPRITES.KNIGHT, 0, 100, 'Crude but sturdy', 'none', 'rare', 10, 15, 0),
-    plateArmor: new Item('body', 'Plate Armor', SPRITES.KNIGHT, 0, 400, 'Heavy knight armor', 'none', 'epic', 20, 30, 0),
-    skullHelm: new Item('head', 'Skull Helm', SPRITES.KNIGHT, 0, 35, 'Creepy but effective', 'none', 'uncommon', 5, 0, 0),
-    crownOfKings: new Item('head', 'Crown of Kings', SPRITES.KNIGHT, 0, 800, 'Worn by legends', 'none', 'legendary', 10, 100, 50),
+    leatherArmor: new Item('body', 'Leather Armor', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0),
+    wolfPelt: new Item('body', 'Wolf Pelt', SPRITES.ARMOR, 0, 15, 'Warm fur armor', 'none', 'common', 3, 0, 0),
+    orcArmor: new Item('body', 'Orc Armor', SPRITES.ARMOR, 0, 100, 'Crude but sturdy', 'none', 'rare', 10, 15, 0),
+    plateArmor: new Item('body', 'Plate Armor', SPRITES.ARMOR, 0, 400, 'Heavy knight armor', 'none', 'epic', 20, 30, 0),
+    skullHelm: new Item('head', 'Skull Helm', SPRITES.ARMOR, 0, 35, 'Creepy but effective', 'none', 'uncommon', 5, 0, 0),
+    crownOfKings: new Item('head', 'Crown of Kings', SPRITES.ARMOR, 0, 800, 'Worn by legends', 'none', 'legendary', 10, 100, 50),
     orcShield: new Item('lhand', 'Orc Shield', SPRITES.WOODEN_SHIELD, 0, 70, 'Battered shield', 'none', 'rare', 8, 0, 0),
     dragonShield: new Item('lhand', 'Dragon Shield', SPRITES.WOODEN_SHIELD, 0, 350, 'Scales of a dragon', 'none', 'epic', 15, 20, 10),
 
@@ -2172,10 +2172,10 @@ const ITEM_DB = {
     morningStar: new Item('rhand', 'Morning Star', SPRITES.CLUB, 30, 320, 'Crushes skulls', 'club', 'epic', 12, 0, 0),
 
     // --- DEEP FOREST ITEMS ---
-    bearFur: new Item('body', 'Bear Fur', SPRITES.KNIGHT, 0, 80, 'Thick and warm', 'none', 'uncommon', 5, 20, 0),
+    bearFur: new Item('body', 'Bear Fur', SPRITES.ARMOR, 0, 80, 'Thick and warm', 'none', 'uncommon', 5, 20, 0),
     spiderSilk: new Item('consumable', 'Spider Silk', SPRITES.WEB, 0, 15, 'Strong sticky thread', 'none', 'common'),
     venomDagger: new Item('rhand', 'Venom Dagger', SPRITES.SWORD, 14, 150, 'Drips with poison', 'sword', 'rare'), // TODO: Add poison logic
-    banditHood: new Item('head', 'Bandit Hood', SPRITES.KNIGHT, 0, 60, 'Hides your face', 'none', 'uncommon', 3, 0, 0)
+    banditHood: new Item('head', 'Bandit Hood', SPRITES.ARMOR, 0, 60, 'Hides your face', 'none', 'uncommon', 3, 0, 0)
 };
 
 // Enemy drop tables - defines which items each enemy can drop and their chances
