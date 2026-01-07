@@ -1095,17 +1095,21 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
         const isInteractable = world.getComponent(id, Interactable);
         if (nameComp && (isQuestGiver || isInteractable) && !isPlayer) {
             const nameX = Math.floor(pos.x - camX + sprite.size / 2);
-            const nameY = Math.floor(pos.y - camY) - 8;
+            const nameY = Math.floor(pos.y - camY) - 6;
 
-            ctx.font = '10px "VT323", monospace';
+            ctx.font = 'bold 12px "VT323", monospace';
             ctx.textAlign = 'center';
             const textWidth = ctx.measureText(nameComp.value).width;
 
-            // Background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fillRect(nameX - textWidth / 2 - 2, nameY - 8, textWidth + 4, 10);
+            // Background (solid black for better contrast)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(nameX - textWidth / 2 - 3, nameY - 11, textWidth + 6, 14);
 
-            // Name text (gold color for quest givers, white for others)
+            // Text shadow
+            ctx.fillStyle = '#000';
+            ctx.fillText(nameComp.value, nameX + 1, nameY + 1);
+
+            // Name text (gold for quest givers, white for others)
             ctx.fillStyle = isQuestGiver ? '#ffd700' : '#ffffff';
             ctx.fillText(nameComp.value, nameX, nameY);
         }
