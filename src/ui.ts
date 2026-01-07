@@ -582,6 +582,8 @@ export class UIManager {
             div.onmouseover = () => this.inspectItem(item);
             div.onmouseleave = () => this.closeInspect();
 
+            console.log(`[Shop Render] ${item.name} ID: ${item.uIndex} Price: ${item.price}`);
+
             div.onclick = () => {
                 console.log(`[Shop] Buy Click: ${item.name} (${item.price}gp) vs Player Gold: ${playerInv.gold}`);
                 if (playerInv.gold >= item.price) {
