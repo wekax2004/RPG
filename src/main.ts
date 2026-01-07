@@ -469,16 +469,26 @@ class Game {
                             }
                         }
 
-                        // Migration 4: Fix Teleport / Lost Players
-                        // If player is stuck around 2048 (old center guess), move to 4096
-                        if (Math.abs(pos.x - 2048) < 200 && Math.abs(pos.y - 2048) < 200) {
-                            pos.x = 4096;
-                            pos.y = 4096;
-                            this.console.addSystemMessage("Saved you from the void! Moved to Village.");
-                        }
 
-                        // Recalculate stats
-                        updateStatsFromPassives(this.world, player);
+
+                        // Migration 5: Reset Corrupted Inventory
+                        if (!localStorage.getItem('retro-rpg-migration-5')) {
+                            inv.items.clear();
+                            inv.storage = [];
+                            inv.gold = 100;
+
+                            // Starter Gear
+                            inv.items.set('rhand', new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common'));
+                            inv.items.set('lhand', new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3));
+                            inv.items.set('body', new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6));
+
+                            // Potions
+                            inv.storage.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'));
+                            inv.storage.push(new Item('Mana Potion', 'consumable', SPRITES.MANA_POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
+
+                            localStorage.setItem('retro-rpg-migration-5', 'true');
+                            this.console.addSystemMessage("NOTICE: Inventory Reset to fix corruption.");
+                        }
                     }
                     this.console.addSystemMessage("Save Loaded.");
                     // Force Inventory Update
