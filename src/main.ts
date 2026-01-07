@@ -452,6 +452,23 @@ class Game {
                             this.console.addSystemMessage("World Updated: Moved to new village.");
                         }
 
+                        // Migration 3: Fix Broken Sprites (Legacy Save Data)
+                        const inv = this.world.getComponent(player, Inventory);
+                        if (inv) {
+                            for (const item of inv.items) {
+                                if (item.name === "Tower Shield") {
+                                    item.uIndex = SPRITES.WOODEN_SHIELD; // 33
+                                    // Or remove it? Let's just fix the sprite.
+                                }
+                                if (item.uIndex === SPRITES.KNIGHT || item.uIndex === 0) {
+                                    // If it's Armor, update to new Armor Sprite
+                                    if (item.slot === 'body' || item.slot === 'head') {
+                                        item.uIndex = SPRITES.ARMOR; // 41
+                                    }
+                                }
+                            }
+                        }
+
                         // Recalculate stats
                         updateStatsFromPassives(this.world, player);
                     }
