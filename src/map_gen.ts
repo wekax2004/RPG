@@ -146,32 +146,24 @@ export function generateMap(width: number, height: number, seed: number): { widt
     entities.push({ type: 'npc', x: centerX - 128, y: centerY + 32, text: "Beware the deep woods..." });
 
     // Ambient Town NPCs - Make the village feel alive!
-    const ambientMessages = [
-        "Nice weather today!",
-        "Have you seen the wolves lately?",
-        "The merchant has new wares...",
-        "I used to be an adventurer like you.",
-        "Stay safe out there!",
-        "The crypt gives me chills...",
-        "Did you hear about the orcs?",
-        "Welcome to our village!"
-    ];
+    // --- Manual NPC Placement ---
 
-    // Place ambient NPCs around the village
-    const ambientPositions = [
-        { x: centerX - 64, y: centerY - 32 },
-        { x: centerX + 96, y: centerY - 48 },
-        { x: centerX - 96, y: centerY + 48 },
-        { x: centerX + 48, y: centerY - 64 },
-        { x: centerX - 32, y: centerY - 80 },
-        { x: centerX + 128, y: centerY + 64 }
-    ];
+    // 1. Town Guards (Sprite 5) - Placing them at the 4 cardinal gates
+    const gateDist = (townRadius * 32) - 32; // Just inside the wall
+    entities.push({ type: 'npc', x: centerX, y: centerY - gateDist, text: "Keep an eye on the forest line.", name: "North Guard", sprite: 5 });
+    entities.push({ type: 'npc', x: centerX, y: centerY + gateDist, text: "Orcs have been spotted south.", name: "South Guard", sprite: 5 });
+    entities.push({ type: 'npc', x: centerX - gateDist, y: centerY, text: "The woods are deep and dark.", name: "West Guard", sprite: 5 });
+    entities.push({ type: 'npc', x: centerX + gateDist, y: centerY, text: "Watch your step traveller.", name: "East Guard", sprite: 5 });
 
-    for (let i = 0; i < ambientPositions.length; i++) {
-        const pos = ambientPositions[i];
-        const msg = ambientMessages[i % ambientMessages.length];
-        entities.push({ type: 'npc', x: pos.x, y: pos.y, text: msg, name: `Villager` });
-    }
+    // 2. Ambient Villagers (Sprite 3) - Placing them near houses and center
+    // Near Merchant House (East)
+    entities.push({ type: 'npc', x: centerX + 128, y: centerY + 128, text: "The merchant has new stock today.", name: "Shopper", sprite: 3 });
+    // Near Residential House (West)
+    entities.push({ type: 'npc', x: centerX - 128, y: centerY + 128, text: "My husband is out hunting wolves.", name: "Villager", sprite: 3 });
+    // Town Center / Well area
+    entities.push({ type: 'npc', x: centerX - 32, y: centerY - 64, text: "Beautiful day, isn't it?", name: "Old Man", sprite: 3 });
+    entities.push({ type: 'npc', x: centerX + 32, y: centerY + 32, text: "I wish I could cast spells...", name: "Boy", sprite: 3 });
+
 
     // Quest NPCs
     // Hunter NPC - Wolf quest

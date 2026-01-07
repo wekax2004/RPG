@@ -399,7 +399,7 @@ class Game {
                     } else if (ent.type === 'enemy') {
                         createEnemy(this.world, ent.x, ent.y, ent.enemyType, ent.difficulty || 1.0);
                     } else if (ent.type === 'npc') {
-                        createNPC(this.world, ent.x, ent.y, ent.text);
+                        createNPC(this.world, ent.x, ent.y, ent.text, ent.name, ent.sprite);
                     } else if (ent.type === 'merchant') {
                         createMerchant(this.world, ent.x, ent.y);
                     } else if (ent.type === 'item') {

@@ -1392,13 +1392,17 @@ export function createBoss(world: World, x: number, y: number) {
     return e;
 }
 
-export function createNPC(world: World, x: number, y: number, text: string) {
+export function createNPC(world: World, x: number, y: number, text: string, name: string = "Villager", spriteIndex: number = SPRITES.NPC) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
-    world.addComponent(e, new Sprite(SPRITES.NPC, 32));
+    world.addComponent(e, new Sprite(spriteIndex, 32));
+    world.addComponent(e, new Name(name));
     world.addComponent(e, new Interactable(text));
-    world.addComponent(e, new QuestGiver("Kill Warlord", "Orc Warlord", 1, "The Orc Warlord threatens us! Slay him!", "Have you killed the Warlord?", "The Warlord is dead! We are saved!"));
+
+    // Add simple wandering AI for villagers? 
+    // For now, static to keep them in place as requested (guarding gates etc)
+
     return e;
 }
 
