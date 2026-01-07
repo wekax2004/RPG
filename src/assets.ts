@@ -451,16 +451,72 @@ function drawPixelArt() {
     ctx.fillRect(tx + 6, ty + 26, 6, 6); ctx.fillRect(tx + 18, ty + 24, 7, 6);
     ctx.fillRect(tx + 11, ty + 18, 8, 7);
 
-    // Top tier - slightly brighter but still blue-green
-    ctx.fillStyle = '#2a7a6a';
-    ctx.beginPath(); ctx.moveTo(tx + 16, ty - 6); ctx.lineTo(tx + 25, ty + 16); ctx.lineTo(tx + 7, ty + 16); ctx.fill();
-    // Highlight leaves (teal tint)
     ctx.fillStyle = '#3a9a8a';
     ctx.fillRect(tx + 11, ty + 2, 5, 5); ctx.fillRect(tx + 16, ty + 6, 5, 5);
 
     // Dark shadow details
     ctx.fillStyle = '#0a2a1a';
     ctx.fillRect(tx + 4, ty + 42, 3, 4); ctx.fillRect(tx + 24, ty + 38, 3, 5);
+
+    // 36: CLUB (Row 4, Col 4 - 128, 128)
+    const cx = 128; const cy = 128;
+    // Handle
+    ctx.fillStyle = '#864'; ctx.fillRect(cx + 14, cy + 16, 4, 14);
+    // Head (Spiked)
+    ctx.fillStyle = '#642'; ctx.fillRect(cx + 10, cy + 4, 12, 12);
+    // Spikes
+    ctx.fillStyle = '#bbb';
+    ctx.fillRect(cx + 8, cy + 8, 2, 4); ctx.fillRect(cx + 22, cy + 8, 2, 4);
+    ctx.fillRect(cx + 14, cy + 2, 4, 2);
+
+    // --- ROW 5: DEEP FOREST (37-44) ---
+    const r5y = 160;
+
+    // 37: PINE TREE (Dark Forest)
+    const ptx = 0; const pty = r5y;
+    // Trunk
+    ctx.fillStyle = '#3a2a1a'; ctx.fillRect(ptx + 12, pty + 48, 8, 16);
+    // Foliage (Dark Pine Needle layers)
+    ctx.fillStyle = '#1a3a1a'; // Darkest bottom
+    ctx.beginPath(); ctx.moveTo(ptx + 4, pty + 50); ctx.lineTo(ptx + 28, pty + 50); ctx.lineTo(ptx + 16, pty + 20); ctx.fill();
+    ctx.fillStyle = '#2a4a2a'; // Mid
+    ctx.beginPath(); ctx.moveTo(ptx + 6, pty + 36); ctx.lineTo(ptx + 26, pty + 36); ctx.lineTo(ptx + 16, pty + 10); ctx.fill();
+    ctx.fillStyle = '#3a5a3a'; // Top
+    ctx.beginPath(); ctx.moveTo(ptx + 8, pty + 22); ctx.lineTo(ptx + 24, pty + 22); ctx.lineTo(ptx + 16, pty + 0); ctx.fill();
+
+    // 38: BEAR (Brown, bulky)
+    const bx = 32; const by = r5y;
+    ctx.fillStyle = '#5a3a1a'; // Fur
+    ctx.fillRect(bx + 4, by + 10, 24, 16); // Body
+    ctx.fillRect(bx + 6, by + 2, 12, 10); // Head
+    ctx.fillRect(bx + 2, by + 2, 4, 4); ctx.fillRect(bx + 16, by + 2, 4, 4); // Ears
+    ctx.fillRect(bx + 6, by + 24, 6, 8); ctx.fillRect(bx + 20, by + 24, 6, 8); // Legs
+    // Face
+    ctx.fillStyle = '#000'; ctx.fillRect(bx + 8, by + 6, 2, 2);
+    ctx.fillStyle = '#3a1a0a'; ctx.fillRect(bx + 14, by + 6, 4, 4); // Snout
+
+    // 39: SPIDER (Black/Red, creepy)
+    const spx = 64; const spy = r5y;
+    ctx.fillStyle = '#222'; // Body
+    ctx.beginPath(); ctx.ellipse(spx + 16, spy + 16, 8, 10, 0, 0, Math.PI * 2); ctx.fill();
+    // Legs
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+        const lo = (i < 2 ? -1 : 1);
+        ctx.beginPath(); ctx.moveTo(spx + 16, spy + 16); ctx.lineTo(spx + 16 + (lo * 12), spy + 8 + (i * 6)); ctx.stroke();
+    }
+    // Eyes (Red glowing)
+    ctx.fillStyle = '#f00'; ctx.fillRect(spx + 14, spy + 12, 2, 2); ctx.fillRect(spx + 17, spy + 12, 2, 2);
+
+    // 40: BANDIT (Hooded)
+    const bdx = 96; const bdy = r5y;
+    drawHumanoid(96, r5y, '#db9', '#333', '#111', null, '#522', 'dagger');
+    // Hood
+    ctx.fillStyle = '#222';
+    ctx.fillRect(bdx + 10, bdy, 12, 8);
+    // Bandana mask
+    ctx.fillStyle = '#a22';
+    ctx.fillRect(bdx + 11, bdy + 8, 10, 4);
 
     spriteSheet.src = canvas.toDataURL();
 }
@@ -491,6 +547,9 @@ export const SPRITES = {
     GHOST: 10,
     SLIME: 11,
     ZOMBIE: 13,
+    BEAR: 38,
+    SPIDER: 39,
+    BANDIT: 40,
 
     // Environment
     GRASS: 16,
@@ -504,6 +563,7 @@ export const SPRITES = {
     MOSSY: 24,
     DARK: 25,
     TREE: 34,
+    PINE_TREE: 37,
 
     // Items
     SWORD: 26,

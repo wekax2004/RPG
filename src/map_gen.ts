@@ -74,39 +74,80 @@ export function generateMap(width: number, height: number, seed: number): { widt
             const dist = Math.sqrt(dx * dx + dy * dy);
 
             if (dist > forestMinFn && dist < forestMaxFn) {
-                // Forest Zone
-                // Reduced chance of trees (40% for more clearings)
-                if (rng.next() < 0.4) {
-                    // Don't overwrite walls or water easily, but let's just force wood for density
-                    if (data[y * width + x] === 16) { // If grass
-                        data[y * width + x] = 34; // TREE (Collision + Visual)
-                        treeCount++;
+                if (dist > 50) {
+                    // --- DEEP FOREST ZONE ---
+                    // Denser trees, pine trees
+                    if (rng.next() < 0.6) {
+                        if (data[y * width + x] === 16) {
+                            data[y * width + x] = 37; // PINE TREE (Darker)
+                            treeCount++;
+                        }
                     }
-                }
 
-                // Spawn Wolves with clearing
-                if (rng.next() < 0.008 && data[y * width + x] === 16) { // Slightly more wolves
-                    entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'wolf', difficulty: 0.8 });
-                    // Create 3x3 clearing around enemy
-                    for (let cy = -1; cy <= 1; cy++) {
-                        for (let cx = -1; cx <= 1; cx++) {
-                            const tx = x + cx, ty = y + cy;
-                            if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
-                                if (data[ty * width + tx] === 34) data[ty * width + tx] = 16; // Remove tree
+                    // Enemies: Bear, Spider, Bandit
+                    if (data[y * width + x] === 16) {
+                        const roll = rng.next();
+
+                        // Bear (Tanky)
+                        if (roll < 0.005) {
+                            entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'bear', difficulty: 2.0 });
+                        }
+                        // Spider (Fast, Poison)
+                        else if (roll < 0.01) {
+                            entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'spider', difficulty: 1.5 });
+                        }
+                        // Bandit (Ranged/Smart)
+                        else if (roll < 0.015) {
+                            entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'bandit', difficulty: 1.8 });
+                        }
+
+                        // Clear small area for them
+                        if (roll < 0.015) {
+                            for (let cy = -1; cy <= 1; cy++) {
+                                for (let cx = -1; cx <= 1; cx++) {
+                                    const tx = x + cx, ty = y + cy;
+                                    if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
+                                        if (data[ty * width + tx] === 37) data[ty * width + tx] = 16;
+                                    }
+                                }
                             }
                         }
                     }
-                }
+                } else {
+                    // --- LIGHT FOREST ZONE ---
+                    // Reduced chance of trees (40% for more clearings)
+                    if (rng.next() < 0.4) {
+                        // Don't overwrite walls or water easily, but let's just force wood for density
+                        if (data[y * width + x] === 16) { // If grass
+                            data[y * width + x] = 34; // TREE (Collision + Visual)
+                            treeCount++;
+                        }
+                    }
 
-                // Spawn Orcs (further from town)
-                if (dist > 25 && rng.next() < 0.004 && data[y * width + x] === 16) {
-                    entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'orc', difficulty: 1.0 });
-                    // Create clearing
-                    for (let cy = -1; cy <= 1; cy++) {
-                        for (let cx = -1; cx <= 1; cx++) {
-                            const tx = x + cx, ty = y + cy;
-                            if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
-                                if (data[ty * width + tx] === 34) data[ty * width + tx] = 16;
+                    // Spawn Wolves with clearing
+                    if (rng.next() < 0.008 && data[y * width + x] === 16) { // Slightly more wolves
+                        entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'wolf', difficulty: 0.8 });
+                        // Create 3x3 clearing around enemy
+                        for (let cy = -1; cy <= 1; cy++) {
+                            for (let cx = -1; cx <= 1; cx++) {
+                                const tx = x + cx, ty = y + cy;
+                                if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
+                                    if (data[ty * width + tx] === 34) data[ty * width + tx] = 16; // Remove tree
+                                }
+                            }
+                        }
+                    }
+
+                    // Spawn Orcs (further from town)
+                    if (dist > 25 && rng.next() < 0.004 && data[y * width + x] === 16) {
+                        entities.push({ type: 'enemy', x: x * 32, y: y * 32, enemyType: 'orc', difficulty: 1.0 });
+                        // Create clearing
+                        for (let cy = -1; cy <= 1; cy++) {
+                            for (let cx = -1; cx <= 1; cx++) {
+                                const tx = x + cx, ty = y + cy;
+                                if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
+                                    if (data[ty * width + tx] === 34) data[ty * width + tx] = 16;
+                                }
                             }
                         }
                     }

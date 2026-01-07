@@ -583,6 +583,24 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
             if (tileId === 34) continue; // Trees are solid
 
             // Update Position
+            // --- DEEP FOREST UNLOCK CHECK ---
+            const cx = 2048; const cy = 2048;
+            const dist = Math.sqrt((nextX - cx) ** 2 + (nextY - cy) ** 2);
+
+            if (dist > 1550) {
+                const qLog = world.getComponent(id, QuestLog);
+                let unlocked = false;
+                if (qLog) {
+                    const quest = qLog.quests.find(q => q.id === "wolf_menace");
+                    if (quest && quest.turnedIn) unlocked = true;
+                }
+
+                if (!unlocked) {
+                    if ((ui as any).console) (ui as any).console.addSystemMessage("The Deep Forest is too dangerous! Complete 'Wolf Menace' first.");
+                    continue; // Block movement
+                }
+            }
+
             pos.x = nextX;
             pos.y = nextY;
 
@@ -1372,6 +1390,21 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
         world.addComponent(e, new AI(10)); // Slow
         world.addComponent(e, new Health(100 * hpScale, 100 * hpScale)); // Tanky
         world.addComponent(e, new Name("Slime"));
+    } else if (type === "bear") {
+        world.addComponent(e, new Sprite(SPRITES.BEAR, 32));
+        world.addComponent(e, new AI(20)); // Slow
+        world.addComponent(e, new Health(150 * hpScale, 150 * hpScale)); // Very Tanky
+        world.addComponent(e, new Name("Bear"));
+    } else if (type === "spider") {
+        world.addComponent(e, new Sprite(SPRITES.SPIDER, 32));
+        world.addComponent(e, new AI(60)); // Fast
+        world.addComponent(e, new Health(40 * hpScale, 40 * hpScale));
+        world.addComponent(e, new Name("Spider"));
+    } else if (type === "bandit") {
+        world.addComponent(e, new Sprite(SPRITES.BANDIT, 32));
+        world.addComponent(e, new AI(40)); // Smart/Fast
+        world.addComponent(e, new Health(60 * hpScale, 60 * hpScale));
+        world.addComponent(e, new Name("Bandit"));
     } else {
         world.addComponent(e, new Sprite(SPRITES.ORC, 32));
         world.addComponent(e, new AI(30));
@@ -2125,7 +2158,13 @@ const ITEM_DB = {
     // Rare
     warhammer: new Item('rhand', 'Warhammer', SPRITES.CLUB, 18, 130, 'Heavy impact', 'club', 'rare', 8, 0, 0),
     // Epic
-    morningStar: new Item('rhand', 'Morning Star', SPRITES.CLUB, 30, 320, 'Crushes skulls', 'club', 'epic', 12, 0, 0)
+    morningStar: new Item('rhand', 'Morning Star', SPRITES.CLUB, 30, 320, 'Crushes skulls', 'club', 'epic', 12, 0, 0),
+
+    // --- DEEP FOREST ITEMS ---
+    bearFur: new Item('body', 'Bear Fur', SPRITES.KNIGHT, 0, 80, 'Thick and warm', 'none', 'uncommon', 5, 20, 0),
+    spiderSilk: new Item('consumable', 'Spider Silk', SPRITES.WEB, 0, 15, 'Strong sticky thread', 'none', 'common'),
+    venomDagger: new Item('rhand', 'Venom Dagger', SPRITES.SWORD, 14, 150, 'Drips with poison', 'sword', 'rare'), // TODO: Add poison logic
+    banditHood: new Item('head', 'Bandit Hood', SPRITES.KNIGHT, 0, 60, 'Hides your face', 'none', 'uncommon', 3, 0, 0)
 };
 
 // Enemy drop tables - defines which items each enemy can drop and their chances
@@ -2152,6 +2191,22 @@ const DROP_TABLES: Record<string, { item: Item, chance: number }[]> = {
         { item: ITEM_DB.rustySword, chance: 0.10 },
         { item: ITEM_DB.handAxe, chance: 0.08 },
     ],
+    // --- DEEP FOREST ENEMIES ---
+    bear: [
+        { item: ITEM_DB.bearFur, chance: 0.40 },
+        { item: ITEM_DB.wolfMeat, chance: 0.50 }, // Bears have meat too
+    ],
+    spider: [
+        { item: ITEM_DB.spiderSilk, chance: 0.60 },
+        { item: ITEM_DB.venomDagger, chance: 0.05 }, // Rare drop
+    ],
+    bandit: [
+        { item: ITEM_DB.banditHood, chance: 0.15 },
+        { item: ITEM_DB.leatherArmor, chance: 0.10 },
+        { item: ITEM_DB.ironSword, chance: 0.10 },
+        { item: ITEM_DB.healthPotion, chance: 0.25 },
+    ],
+    // --- BOSSES ---
     warlord: [
         { item: ITEM_DB.nobleSword, chance: 1.0 }, // Guaranteed!
         { item: ITEM_DB.plateArmor, chance: 0.50 },
