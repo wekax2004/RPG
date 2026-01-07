@@ -469,6 +469,17 @@ function drawPixelArt() {
     ctx.fillStyle = '#0a2a1a';
     ctx.fillRect(tx + 4, ty + 42, 3, 4); ctx.fillRect(tx + 24, ty + 38, 3, 5);
 
+    // 35: AXE (Row 4, Col 3 - 96, 128)
+    const ax = 96; const ay = 128;
+    // Handle
+    ctx.fillStyle = '#864'; ctx.fillRect(ax + 14, ay + 6, 4, 24);
+    // Blades (Double Bit)
+    ctx.fillStyle = '#ccc';
+    // Left Blade
+    ctx.beginPath(); ctx.moveTo(ax + 14, ay + 10); ctx.lineTo(ax + 4, ay + 6); ctx.lineTo(ax + 4, ay + 18); ctx.lineTo(ax + 14, ay + 14); ctx.fill();
+    // Right Blade
+    ctx.beginPath(); ctx.moveTo(ax + 18, ay + 10); ctx.lineTo(ax + 28, ay + 6); ctx.lineTo(ax + 28, ay + 18); ctx.lineTo(ax + 18, ay + 14); ctx.fill();
+
     // 36: CLUB (Row 4, Col 4 - 128, 128)
     const cx = 128; const cy = 128;
     // Handle
@@ -547,15 +558,28 @@ function drawPixelArt() {
     ctx.strokeRect(arx + 8, ary + 4, 16, 22);
 
     // 42: NECROMANCER (Dark Mage)
-    const ncx = 160; const ncy = r5y;
-    drawHumanoid(ncx, ncy, '#db9', '#213', '#415', null, '#102', 'staff');
+    // 41: ARMOR (Iron Plate)
+    const arx = 128; const ary = r5y;
+    // Same as 30 but maybe distinct? Let's copy 30 for now or make it gold?
+    // Let's make it distinct - Iron Plate with Red Cape
+    ctx.fillStyle = '#889'; ctx.fillRect(arx + 6, ary + 6, 20, 22);
+    ctx.fillStyle = '#a00'; ctx.fillRect(arx + 8, ary + 8, 16, 18); // Inner
+    ctx.fillStyle = '#ccd'; ctx.fillRect(arx + 10, ary + 10, 12, 6); // Shine
+
+    // 42: NECROMANCER (Dark Mage)
+    const nmx = 160; const nmy = r5y;
+    drawHumanoid(nmx, nmy, '#db9', '#213', '#415', null, '#102', 'staff');
     // Skull Mask
-    ctx.fillStyle = '#ddd';
-    ctx.fillRect(ncx + 11, ncy + 5, 10, 8);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(ncx + 12, ncy + 7, 2, 2); ctx.fillRect(ncx + 17, ncy + 7, 2, 2); // Eyes
+    ctx.fillStyle = '#ddd'; ctx.fillRect(nmx + 11, nmy + 5, 10, 8);
+    ctx.fillStyle = '#000'; ctx.fillRect(nmx + 12, nmy + 7, 2, 2); ctx.fillRect(nmx + 17, nmy + 7, 2, 2); // Eyes
     // Glowing Staff
-    ctx.fillStyle = '#f0f'; ctx.fillRect(ncx + 25, ncy + 2, 4, 4);
+    ctx.fillStyle = '#f0f'; ctx.fillRect(nmx + 25, nmy + 2, 4, 4);
+
+    // 43: MANA POTION (Blue)
+    // Row 5, Col 6 -> 192, 160
+    const mpx = 192; const mpy = r5y;
+    ctx.fillStyle = '#22f'; ctx.beginPath(); ctx.arc(mpx + 16, mpy + 20, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillRect(mpx + 14, mpy + 10, 4, 6); // Cork
 
     spriteSheet.src = canvas.toDataURL();
 }
@@ -590,7 +614,7 @@ export const SPRITES = {
     SPIDER: 39,
     BANDIT: 40,
 
-    MAX: 43,
+    MAX: 44,
     NECROMANCER: 42,
 
     // Environment
@@ -617,6 +641,8 @@ export const SPRITES = {
     AXE: 35,
     CLUB: 36,
     ARMOR: 41,
+
+    MANA_POTION: 43,
 
     // Other
     KNIGHT: 30,

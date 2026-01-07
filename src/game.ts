@@ -1478,7 +1478,7 @@ export function createMerchant(world: World, x: number, y: number) {
 
     // Potions
     merch.items.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'));
-    merch.items.push(new Item('Mana Potion', 'consumable', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
+    merch.items.push(new Item('Mana Potion', 'consumable', SPRITES.MANA_POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
 
     // Basic Weapons
     merch.items.push(new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common'));
