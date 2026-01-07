@@ -204,8 +204,12 @@ export class UIManager {
                 <div id="shop-buy-list" style="margin-bottom:10px;"></div>
                 <div style="font-size:12px; color:#aaa; margin-bottom:4px;">Selling (Backpack):</div>
                 <div id="shop-sell-list"></div>
-                <div style="margin-top:10px; text-align:center; font-size:12px; cursor:pointer;" onclick="const el=document.getElementById('shop-panel'); el.classList.add('hidden'); el.style.display='none';">Close</div>
+                <div id="shop-close-btn" style="margin-top:10px; text-align:center; font-size:12px; cursor:pointer;">Close</div>
             `;
+
+            const closeBtn = panel.querySelector('#shop-close-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => this.hideDialogue());
+
             const sidebar = document.getElementById('sidebar');
             if (sidebar) sidebar.appendChild(panel);
             else document.body.appendChild(panel);
@@ -624,12 +628,17 @@ export class UIManager {
             div.onmouseleave = () => this.closeInspect();
 
             div.onclick = () => {
-                console.log(`[Shop] Sell Click: ${item.name} for ${sellPrice}gp`);
-                playerInv.gold += sellPrice;
-                playerInv.storage.splice(index, 1);
-                if (this.console) this.console.sendMessage(`Sold ${item.name}.`);
-                this.renderShop(merchant, playerInv);
-                this.updateInventory(playerInv, spriteSheet.src);
+                try {
+                    console.log(`[Shop] Sell Click: ${item.name} for ${sellPrice}gp`);
+                    playerInv.gold += sellPrice;
+                    playerInv.storage.splice(index, 1);
+                    if (this.console) this.console.sendMessage(`Sold ${item.name}.`);
+                    this.renderShop(merchant, playerInv);
+                    this.updateInventory(playerInv, spriteSheet.src);
+                } catch (e: any) {
+                    console.error("Sell Error:", e);
+                    if (this.console) this.console.addSystemMessage("Error selling item: " + e.message);
+                }
             };
             this.shopSellList.appendChild(div);
         });
