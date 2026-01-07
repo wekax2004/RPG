@@ -1088,6 +1088,27 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
             ctx.lineWidth = 1;
             ctx.strokeRect(barX, barY, barWidth, barHeight);
         }
+
+        // Draw NPC Name Labels (for entities with Name and QuestGiver or Interactable)
+        const nameComp = world.getComponent(id, Name);
+        const isQuestGiver = world.getComponent(id, QuestGiver);
+        const isInteractable = world.getComponent(id, Interactable);
+        if (nameComp && (isQuestGiver || isInteractable) && !isPlayer) {
+            const nameX = Math.floor(pos.x - camX + sprite.size / 2);
+            const nameY = Math.floor(pos.y - camY) - 8;
+
+            ctx.font = '10px "VT323", monospace';
+            ctx.textAlign = 'center';
+            const textWidth = ctx.measureText(nameComp.value).width;
+
+            // Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(nameX - textWidth / 2 - 2, nameY - 8, textWidth + 4, 10);
+
+            // Name text (gold color for quest givers, white for others)
+            ctx.fillStyle = isQuestGiver ? '#ffd700' : '#ffffff';
+            ctx.fillText(nameComp.value, nameX, nameY);
+        }
     }
 
     // Draw Target Reticle

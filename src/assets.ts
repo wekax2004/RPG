@@ -135,6 +135,55 @@ function drawPixelArt() {
     // 3: NPC (Villager)
     drawHumanoid(96, 0, '#db9', '#c75', '#432', null, null, 'none');
 
+    // 4: HUNTER NPC (Green leather, bow)
+    drawHumanoid(128, 0, '#db9', '#3a5a2a', '#4a3a1a', null, '#2a4a1a', 'bow');
+    // Hunting cap
+    ctx.fillStyle = '#3a5a2a';
+    ctx.fillRect(128 + 8, 0, 16, 6);
+    ctx.fillStyle = '#2a4a1a';
+    ctx.fillRect(128 + 10, 2, 12, 4);
+    // Feather
+    ctx.fillStyle = '#8a3a1a';
+    ctx.fillRect(128 + 22, 0, 2, 6);
+
+    // 5: GUARD NPC (Armor, spear)
+    const gx = 160;
+    // Metallic armor body
+    ctx.fillStyle = '#6a6a7a'; ctx.fillRect(gx + 8, 12, 16, 12);
+    ctx.fillStyle = '#8a8a9a'; ctx.fillRect(gx + 10, 14, 4, 8);
+    ctx.fillStyle = '#5a5a6a'; ctx.fillRect(gx + 18, 14, 4, 8);
+    // Head (with helmet)
+    ctx.fillStyle = '#6a6a7a'; ctx.fillRect(gx + 10, 2, 12, 10);
+    ctx.fillStyle = '#db9'; ctx.fillRect(gx + 12, 6, 8, 6); // Face opening
+    // Eyes
+    ctx.fillStyle = '#000'; ctx.fillRect(gx + 13, 8, 2, 2); ctx.fillRect(gx + 17, 8, 2, 2);
+    // Helmet crest
+    ctx.fillStyle = '#8a1a1a'; ctx.fillRect(gx + 14, 0, 4, 4);
+    // Legs
+    ctx.fillStyle = '#5a5a6a'; ctx.fillRect(gx + 10, 24, 5, 8); ctx.fillRect(gx + 17, 24, 5, 8);
+    // Spear
+    ctx.fillStyle = '#6a4a2a'; ctx.fillRect(gx + 26, 4, 3, 26);
+    ctx.fillStyle = '#aaa'; ctx.fillRect(gx + 25, 0, 5, 6);
+
+    // 6: PRIEST NPC (White robes, cross)
+    const px = 192;
+    // White robe body
+    ctx.fillStyle = '#eee'; ctx.fillRect(px + 6, 12, 20, 18);
+    ctx.fillStyle = '#ccc'; ctx.fillRect(px + 8, 14, 4, 14); // Shadow
+    ctx.fillStyle = '#ddd'; ctx.fillRect(px + 20, 14, 4, 14);
+    // Gold trim
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(px + 6, 28, 20, 2);
+    ctx.fillRect(px + 14, 14, 4, 16);
+    // Head
+    ctx.fillStyle = '#db9'; ctx.fillRect(px + 10, 2, 12, 10);
+    ctx.fillStyle = '#000'; ctx.fillRect(px + 12, 6, 2, 2); ctx.fillRect(px + 18, 6, 2, 2);
+    // Bald/shaved head
+    ctx.fillStyle = '#c8a'; ctx.fillRect(px + 10, 0, 12, 4);
+    // Held cross
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(px + 4, 14, 2, 10);
+    ctx.fillRect(px + 2, 16, 6, 2);
     // --- ROW 1: ENEMIES (8-15) ---
     const r1 = 32;
 
@@ -258,27 +307,22 @@ function drawPixelArt() {
     // --- ROW 2: TERRAIN (16-23) ---
     const r2 = 64;
 
-    // 16: GRASS (Rich Tibia-style with dirt and grass blades)
-    // Base dark green
-    ctx.fillStyle = '#2d5a1e'; ctx.fillRect(0, r2, 32, 32);
-    // Mid green patches
-    ctx.fillStyle = '#3d7a2e';
-    ctx.fillRect(2, r2 + 2, 8, 6); ctx.fillRect(14, r2 + 4, 10, 8);
-    ctx.fillRect(4, r2 + 14, 12, 10); ctx.fillRect(20, r2 + 18, 10, 8);
-    // Light green highlights (grass blades)
-    ctx.fillStyle = '#5d9a4e';
-    ctx.fillRect(4, r2 + 3, 2, 4); ctx.fillRect(10, r2 + 6, 2, 3);
-    ctx.fillRect(18, r2 + 8, 2, 4); ctx.fillRect(6, r2 + 16, 2, 4);
-    ctx.fillRect(14, r2 + 20, 2, 3); ctx.fillRect(24, r2 + 22, 2, 4);
-    // Dirt/brown patches (like in Tibia grass)
-    ctx.fillStyle = '#5a4a2a';
-    ctx.fillRect(24, r2 + 6, 4, 3); ctx.fillRect(8, r2 + 26, 5, 3);
-    ctx.fillStyle = '#4a3a1a';
-    ctx.fillRect(25, r2 + 7, 2, 2); ctx.fillRect(9, r2 + 27, 3, 2);
-    // Small dark shadows between grass
-    ctx.fillStyle = '#1a4a0e';
-    ctx.fillRect(12, r2 + 10, 2, 2); ctx.fillRect(22, r2 + 14, 2, 2);
-    ctx.fillRect(6, r2 + 22, 2, 2);
+    // 16: GRASS (Clean Tibia-style - solid green with subtle variation)
+    // Base green fill
+    ctx.fillStyle = '#3a7a2a'; ctx.fillRect(0, r2, 32, 32);
+    // Lighter green patches (subtle, seamless)
+    ctx.fillStyle = '#4a8a3a';
+    ctx.fillRect(2, r2 + 2, 6, 5); ctx.fillRect(16, r2 + 4, 8, 6);
+    ctx.fillRect(6, r2 + 16, 10, 8); ctx.fillRect(22, r2 + 20, 8, 8);
+    ctx.fillRect(4, r2 + 26, 6, 4);
+    // Darker green shadows (very subtle)
+    ctx.fillStyle = '#2a6a1a';
+    ctx.fillRect(12, r2 + 8, 4, 4); ctx.fillRect(24, r2 + 10, 4, 4);
+    ctx.fillRect(8, r2 + 22, 4, 4); ctx.fillRect(18, r2 + 14, 4, 4);
+    // Tiny grass blade highlights
+    ctx.fillStyle = '#5a9a4a';
+    ctx.fillRect(4, r2 + 4, 1, 2); ctx.fillRect(18, r2 + 6, 1, 2);
+    ctx.fillRect(8, r2 + 18, 1, 2); ctx.fillRect(24, r2 + 22, 1, 2);
 
     // 17: WALL (Tibia-style - Single tile, no tall extension to avoid overwriting Row 1)
     const wallX = 32;
@@ -377,46 +421,46 @@ function drawPixelArt() {
     ctx.fillStyle = '#542'; ctx.beginPath(); ctx.arc(32 + 16, r4y + 16, 4, 0, Math.PI * 2); ctx.fill(); // Boss
     ctx.strokeStyle = '#431'; ctx.lineWidth = 2; ctx.stroke();
 
-    // 34: TREE (Tall Sprite - 32x64, Rich Tibia-style foliage)
+    // 34: TREE (Tall Sprite - 32x64, Distinct darker blue-green foliage)
     const tx = 64;
     const ty = 128; // Row 4
 
-    // Trunk (Base) with bark texture
-    ctx.fillStyle = '#4a2a1a'; ctx.fillRect(tx + 11, ty + 46, 10, 18);
-    ctx.fillStyle = '#5a3a2a'; ctx.fillRect(tx + 13, ty + 48, 3, 14);
-    ctx.fillStyle = '#3a1a0a'; ctx.fillRect(tx + 18, ty + 50, 2, 10);
+    // Trunk (Base) with bark texture - make more prominent
+    ctx.fillStyle = '#6a4a2a'; ctx.fillRect(tx + 10, ty + 44, 12, 20);
+    ctx.fillStyle = '#8a6a4a'; ctx.fillRect(tx + 12, ty + 46, 4, 16);
+    ctx.fillStyle = '#4a2a0a'; ctx.fillRect(tx + 18, ty + 48, 3, 12);
 
     // Shadow on ground
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(tx + 16, ty + 62, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(tx + 16, ty + 62, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
 
-    // Foliage (Layered, leafy appearance)
-    // Bottom tier - darkest
-    ctx.fillStyle = '#1a5a1a';
-    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 24); ctx.lineTo(tx + 30, ty + 52); ctx.lineTo(tx + 2, ty + 52); ctx.fill();
-    // Add leaf clusters
-    ctx.fillStyle = '#2a6a2a';
-    ctx.fillRect(tx + 6, ty + 42, 6, 6); ctx.fillRect(tx + 20, ty + 44, 6, 5);
-    ctx.fillRect(tx + 12, ty + 38, 8, 6);
+    // Foliage (Darker blue-green to contrast with grass)
+    // Bottom tier - very dark
+    ctx.fillStyle = '#0a3a2a';
+    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 22); ctx.lineTo(tx + 31, ty + 52); ctx.lineTo(tx + 1, ty + 52); ctx.fill();
+    // Leaf clusters
+    ctx.fillStyle = '#1a4a3a';
+    ctx.fillRect(tx + 4, ty + 40, 8, 8); ctx.fillRect(tx + 20, ty + 42, 8, 7);
+    ctx.fillRect(tx + 10, ty + 36, 10, 8);
 
     // Mid tier
-    ctx.fillStyle = '#2a7a2a';
-    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 10); ctx.lineTo(tx + 28, ty + 38); ctx.lineTo(tx + 4, ty + 38); ctx.fill();
+    ctx.fillStyle = '#1a5a4a';
+    ctx.beginPath(); ctx.moveTo(tx + 16, ty + 8); ctx.lineTo(tx + 29, ty + 36); ctx.lineTo(tx + 3, ty + 36); ctx.fill();
     // Leaf texture
-    ctx.fillStyle = '#3a8a3a';
-    ctx.fillRect(tx + 8, ty + 28, 5, 5); ctx.fillRect(tx + 18, ty + 26, 6, 5);
-    ctx.fillRect(tx + 12, ty + 20, 6, 6);
+    ctx.fillStyle = '#2a6a5a';
+    ctx.fillRect(tx + 6, ty + 26, 6, 6); ctx.fillRect(tx + 18, ty + 24, 7, 6);
+    ctx.fillRect(tx + 11, ty + 18, 8, 7);
 
-    // Top tier - brightest (sun-facing)
-    ctx.fillStyle = '#3a9a3a';
-    ctx.beginPath(); ctx.moveTo(tx + 16, ty - 4); ctx.lineTo(tx + 24, ty + 18); ctx.lineTo(tx + 8, ty + 18); ctx.fill();
-    // Highlight leaves
-    ctx.fillStyle = '#5aba5a';
-    ctx.fillRect(tx + 12, ty + 4, 4, 4); ctx.fillRect(tx + 16, ty + 8, 4, 4);
+    // Top tier - slightly brighter but still blue-green
+    ctx.fillStyle = '#2a7a6a';
+    ctx.beginPath(); ctx.moveTo(tx + 16, ty - 6); ctx.lineTo(tx + 25, ty + 16); ctx.lineTo(tx + 7, ty + 16); ctx.fill();
+    // Highlight leaves (teal tint)
+    ctx.fillStyle = '#3a9a8a';
+    ctx.fillRect(tx + 11, ty + 2, 5, 5); ctx.fillRect(tx + 16, ty + 6, 5, 5);
 
     // Dark shadow details
-    ctx.fillStyle = '#0a4a0a';
-    ctx.fillRect(tx + 6, ty + 44, 2, 3); ctx.fillRect(tx + 24, ty + 40, 2, 4);
+    ctx.fillStyle = '#0a2a1a';
+    ctx.fillRect(tx + 4, ty + 42, 3, 4); ctx.fillRect(tx + 24, ty + 38, 3, 5);
 
     spriteSheet.src = canvas.toDataURL();
 }
@@ -436,6 +480,9 @@ export const SPRITES = {
     MAGE: 1,
     RANGER: 2,
     NPC: 3,
+    HUNTER: 4,
+    GUARD: 5,
+    PRIEST: 6,
 
     // Enemies
     SKELETON: 8,

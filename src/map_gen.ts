@@ -152,6 +152,7 @@ export function generateMap(width: number, height: number, seed: number): { widt
         x: centerX + 32,
         y: centerY + 64,
         name: "Hunter Gorn",
+        sprite: 4, // HUNTER sprite
         quests: [
             {
                 id: "wolf_menace",
@@ -174,6 +175,7 @@ export function generateMap(width: number, height: number, seed: number): { widt
         x: centerX - 32,
         y: centerY + 64,
         name: "Guard Captain",
+        sprite: 5, // GUARD sprite
         quests: [
             {
                 id: "orc_patrol",
@@ -196,6 +198,7 @@ export function generateMap(width: number, height: number, seed: number): { widt
         x: centerX,
         y: centerY + 96,
         name: "Father Marcus",
+        sprite: 6, // PRIEST sprite
         quests: [
             {
                 id: "crypt_cleansing",

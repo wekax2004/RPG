@@ -417,7 +417,7 @@ class Game {
                         this.world.addComponent(s, new Position(ent.x, ent.y));
                         this.world.addComponent(s, new Sprite(ent.sprite, ent.size));
                     } else if (ent.type === 'quest_npc') {
-                        this.createQuestNPC(ent.x, ent.y, ent.name, ent.quests);
+                        this.createQuestNPC(ent.x, ent.y, ent.name, ent.quests, ent.sprite);
                     }
                 }
             }
@@ -747,10 +747,10 @@ class Game {
         mCtx.strokeRect(0, 0, mapSize, mapSize);
     }
 
-    createQuestNPC(x: number, y: number, name: string, quests: Quest[]) {
+    createQuestNPC(x: number, y: number, name: string, quests: Quest[], spriteIndex: number = SPRITES.NPC) {
         const e = this.world.createEntity();
         this.world.addComponent(e, new Position(x, y));
-        this.world.addComponent(e, new Sprite(SPRITES.NPC, 32));
+        this.world.addComponent(e, new Sprite(spriteIndex, 32));
         this.world.addComponent(e, new Name(name));
         this.world.addComponent(e, new Interactable(`Talk to ${name}`));
         this.world.addComponent(e, new QuestGiver(quests, name));
