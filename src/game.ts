@@ -2064,34 +2064,56 @@ export function updateStatsFromPassives(world: World, playerEntity: number) {
 
 // Predefined Items Database - Each item has FIXED stats and rarity
 const ITEM_DB = {
-    // Common items (white)
+    // --- CONSUMABLES ---
     wolfMeat: new Item('consumable', 'Wolf Meat', SPRITES.POTION, 0, 5, 'Raw meat', 'none', 'common'),
     rottenFlesh: new Item('consumable', 'Rotten Flesh', SPRITES.POTION, 0, 2, 'Disgusting', 'none', 'common'),
     healthPotion: new Item('consumable', 'Health Potion', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'),
     manaPotion: new Item('consumable', 'Mana Potion', SPRITES.POTION, 0, 40, 'Restores 30 mana', 'none', 'common'),
-    wolfPelt: new Item('body', 'Wolf Pelt', SPRITES.KNIGHT, 0, 15, 'Warm fur armor', 'none', 'common', 3, 0, 0),
-    rustySword: new Item('rhand', 'Rusty Sword', SPRITES.SWORD, 5, 10, 'Corroded blade', 'sword', 'common'),
 
-    // Uncommon items (green)
-    boneSword: new Item('rhand', 'Bone Sword', SPRITES.WOODEN_SWORD, 10, 25, 'Made from bones', 'sword', 'uncommon'),
-    skullHelm: new Item('head', 'Skull Helm', SPRITES.KNIGHT, 0, 35, 'Creepy but effective', 'none', 'uncommon', 5, 0, 0),
-    ironSword: new Item('rhand', 'Iron Sword', SPRITES.SWORD, 12, 40, 'Standard weapon', 'sword', 'uncommon'),
+    // --- ARMOR ---
     leatherArmor: new Item('body', 'Leather Armor', SPRITES.KNIGHT, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0),
-
-    // Rare items (blue)
-    orcAxe: new Item('rhand', 'Orc Axe', SPRITES.SWORD, 18, 80, 'Heavy orcish weapon', 'axe', 'rare'),
+    wolfPelt: new Item('body', 'Wolf Pelt', SPRITES.KNIGHT, 0, 15, 'Warm fur armor', 'none', 'common', 3, 0, 0),
     orcArmor: new Item('body', 'Orc Armor', SPRITES.KNIGHT, 0, 100, 'Crude but sturdy', 'none', 'rare', 10, 15, 0),
-    orcShield: new Item('lhand', 'Orc Shield', SPRITES.WOODEN_SHIELD, 0, 70, 'Battered shield', 'none', 'rare', 8, 0, 0),
-    steelSword: new Item('rhand', 'Steel Sword', SPRITES.SWORD, 20, 120, 'Well-crafted blade', 'sword', 'rare'),
-
-    // Epic items (purple)  
-    demonBlade: new Item('rhand', 'Demon Blade', SPRITES.SWORD, 35, 300, 'Burns with hellfire', 'sword', 'epic', 0, 0, 20),
     plateArmor: new Item('body', 'Plate Armor', SPRITES.KNIGHT, 0, 400, 'Heavy knight armor', 'none', 'epic', 20, 30, 0),
+    skullHelm: new Item('head', 'Skull Helm', SPRITES.KNIGHT, 0, 35, 'Creepy but effective', 'none', 'uncommon', 5, 0, 0),
+    crownOfKings: new Item('head', 'Crown of Kings', SPRITES.KNIGHT, 0, 800, 'Worn by legends', 'none', 'legendary', 10, 100, 50),
+    orcShield: new Item('lhand', 'Orc Shield', SPRITES.WOODEN_SHIELD, 0, 70, 'Battered shield', 'none', 'rare', 8, 0, 0),
     dragonShield: new Item('lhand', 'Dragon Shield', SPRITES.WOODEN_SHIELD, 0, 350, 'Scales of a dragon', 'none', 'epic', 15, 20, 10),
 
-    // Legendary items (orange)
-    nobleSword: new Item('rhand', 'Noble Sword', SPRITES.NOBLE_SWORD, 50, 500, 'A weapon of ancient power', 'sword', 'legendary', 0, 50, 20),
-    crownOfKings: new Item('head', 'Crown of Kings', SPRITES.KNIGHT, 0, 800, 'Worn by legends', 'none', 'legendary', 10, 100, 50),
+    // --- WEAPONS: SWORDS (Balanced Dmg/Spd) ---
+    // Common
+    rustySword: new Item('rhand', 'Rusty Sword', SPRITES.SWORD, 5, 10, 'Old and dull', 'sword', 'common'),
+    woodenSword: new Item('rhand', 'Wooden Sword', SPRITES.WOODEN_SWORD, 3, 5, 'Training weapon', 'sword', 'common'),
+    // Uncommon
+    ironSword: new Item('rhand', 'Iron Sword', SPRITES.SWORD, 12, 40, 'Standard soldier blade', 'sword', 'uncommon'),
+    boneSword: new Item('rhand', 'Bone Sword', SPRITES.WOODEN_SWORD, 10, 25, 'Sharpened bone', 'sword', 'uncommon'),
+    // Rare
+    steelSword: new Item('rhand', 'Steel Sword', SPRITES.SWORD, 20, 120, 'Finely crafted', 'sword', 'rare'),
+    // Epic
+    demonBlade: new Item('rhand', 'Demon Blade', SPRITES.SWORD, 35, 300, 'Burns with hellfire', 'sword', 'epic', 0, 0, 20),
+    // Legendary
+    nobleSword: new Item('rhand', 'Noble Sword', SPRITES.NOBLE_SWORD, 50, 500, 'Hero\'s weapon', 'sword', 'legendary', 5, 50, 20),
+
+    // --- WEAPONS: AXES (High Dmg, Low Def) ---
+    // Common
+    handAxe: new Item('rhand', 'Hand Axe', SPRITES.AXE, 7, 15, 'Woodcutter\'s tool', 'axe', 'common'),
+    // Uncommon
+    battleAxe: new Item('rhand', 'Battle Axe', SPRITES.AXE, 16, 50, 'Heavy chopper', 'axe', 'uncommon'),
+    orcAxe: new Item('rhand', 'Orc Axe', SPRITES.AXE, 18, 80, 'Brutal weapon', 'axe', 'rare'),
+    // Rare
+    warAxe: new Item('rhand', 'War Axe', SPRITES.AXE, 28, 150, 'Crushes armor', 'axe', 'rare'),
+    // Epic
+    executionerAxe: new Item('rhand', 'Executioner Axe', SPRITES.AXE, 45, 350, 'Decapitating force', 'axe', 'epic'),
+
+    // --- WEAPONS: CLUBS (Modest Dmg, +Defense) ---
+    // Common
+    woodenClub: new Item('rhand', 'Wooden Club', SPRITES.CLUB, 4, 8, 'Heavy branch', 'club', 'common', 2, 0, 0),
+    // Uncommon
+    mace: new Item('rhand', 'Iron Mace', SPRITES.CLUB, 10, 45, 'Spiked bludgeon', 'club', 'uncommon', 4, 0, 0),
+    // Rare
+    warhammer: new Item('rhand', 'Warhammer', SPRITES.CLUB, 18, 130, 'Heavy impact', 'club', 'rare', 8, 0, 0),
+    // Epic
+    morningStar: new Item('rhand', 'Morning Star', SPRITES.CLUB, 30, 320, 'Crushes skulls', 'club', 'epic', 12, 0, 0)
 };
 
 // Enemy drop tables - defines which items each enemy can drop and their chances
@@ -2102,28 +2124,32 @@ const DROP_TABLES: Record<string, { item: Item, chance: number }[]> = {
     ],
     skeleton: [
         { item: ITEM_DB.boneSword, chance: 0.10 },
+        { item: ITEM_DB.woodenClub, chance: 0.15 }, // Clubs for skeles
         { item: ITEM_DB.skullHelm, chance: 0.08 },
         { item: ITEM_DB.healthPotion, chance: 0.20 },
     ],
     orc: [
-        { item: ITEM_DB.orcAxe, chance: 0.05 },
+        { item: ITEM_DB.orcAxe, chance: 0.08 }, // Orcs love axes
+        { item: ITEM_DB.mace, chance: 0.05 },
         { item: ITEM_DB.orcArmor, chance: 0.03 },
         { item: ITEM_DB.orcShield, chance: 0.04 },
-        { item: ITEM_DB.manaPotion, chance: 0.15 },
         { item: ITEM_DB.healthPotion, chance: 0.15 },
     ],
     zombie: [
         { item: ITEM_DB.rottenFlesh, chance: 0.40 },
         { item: ITEM_DB.rustySword, chance: 0.10 },
+        { item: ITEM_DB.handAxe, chance: 0.08 },
     ],
     warlord: [
         { item: ITEM_DB.nobleSword, chance: 1.0 }, // Guaranteed!
         { item: ITEM_DB.plateArmor, chance: 0.50 },
+        { item: ITEM_DB.executionerAxe, chance: 0.30 },
     ],
     boss: [
         { item: ITEM_DB.demonBlade, chance: 0.80 },
         { item: ITEM_DB.dragonShield, chance: 0.50 },
         { item: ITEM_DB.crownOfKings, chance: 0.20 },
+        { item: ITEM_DB.morningStar, chance: 0.40 },
     ],
 };
 

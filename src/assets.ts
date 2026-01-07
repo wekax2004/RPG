@@ -508,14 +508,15 @@ export const SPRITES = {
     // Items
     SWORD: 26,
     POTION: 27,
-    GOLD: 28,
-
+    COIN: 28,
     WOODEN_SWORD: 31,
-    NOBLE_SWORD: 32,
-    BOW: 26,    // reuse
-    WAND: 26,   // reuse
-    SHIELD: 30, // Tower/Iron
     WOODEN_SHIELD: 33,
+    NOBLE_SWORD: 32,
+    AXE: 35,
+    CLUB: 36,
+
+    // Other
+    KNIGHT: 30, // Using Shield as "Knight" icon for armor for now? Or keep it generic map icon
 
     // Effects
     FIREBALL: 29,
