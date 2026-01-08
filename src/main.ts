@@ -522,6 +522,59 @@ class Game {
                             localStorage.setItem('retro-rpg-migration-7', 'true');
                             this.console.addSystemMessage("Fixed Invalid Items (Migration 7).");
                         }
+
+                        // Migration 8: Restore missing defense values from known items
+                        if (inv && !localStorage.getItem('retro-rpg-migration-8')) {
+                            // Hardcoded defense values for known items (from ITEM_DB)
+                            const defenseMap: Record<string, number> = {
+                                'Leather Armor': 6,
+                                'Wolf Pelt': 3,
+                                'Orc Armor': 10,
+                                'Plate Armor': 20,
+                                'Skull Helm': 5,
+                                'Crown of Kings': 10,
+                                'Orc Shield': 8,
+                                'Dragon Shield': 15,
+                                'Wooden Shield': 3,
+                                'Bear Fur': 5,
+                                'Bandit Hood': 3,
+                                'Wooden Club': 2,
+                                'Iron Mace': 4,
+                                'Warhammer': 8,
+                                'Morning Star': 12,
+                                'Noble Sword': 5
+                            };
+
+                            const fixDefense = (item: Item) => {
+                                const correctDef = defenseMap[item.name];
+                                if (correctDef !== undefined && item.defense !== correctDef) {
+                                    item.defense = correctDef;
+                                }
+                            };
+                            inv.items.forEach(fixDefense);
+                            inv.storage.forEach(fixDefense);
+
+                            localStorage.setItem('retro-rpg-migration-8', 'true');
+                            this.console.addSystemMessage("Restored Defense stats (Migration 8).");
+                        }
+
+                        // Migration 9: Force reset inventory to fix defense on starter gear
+                        if (inv && !localStorage.getItem('retro-rpg-migration-9')) {
+                            inv.items.clear();
+                            inv.storage = [];
+
+                            // Starter Gear with correct defense values
+                            inv.items.set('rhand', new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common', 0));
+                            inv.items.set('lhand', new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3));
+                            inv.items.set('body', new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6));
+
+                            // Potions
+                            inv.storage.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common', 0));
+                            inv.storage.push(new Item('Mana Potion', 'consumable', SPRITES.MANA_POTION, 0, 40, 'Restores 30 mana', 'none', 'common', 0));
+
+                            localStorage.setItem('retro-rpg-migration-9', 'true');
+                            this.console.addSystemMessage("Inventory reset with fixed Defense stats (Migration 9).");
+                        }
                     }
                     this.console.addSystemMessage("Save Loaded.");
                     // Force Inventory Update

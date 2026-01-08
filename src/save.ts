@@ -56,7 +56,8 @@ export function saveGame(world: World, ui?: UIManager) {
             arr.push({
                 slot: item.slot, name: item.name, uIndex: item.uIndex,
                 damage: item.damage, price: item.price || 10,
-                description: item.description || "", weaponType: item.weaponType || "sword"
+                description: item.description || "", weaponType: item.weaponType || "sword",
+                defense: item.defense || 0
             });
         });
         return arr;
@@ -66,7 +67,8 @@ export function saveGame(world: World, ui?: UIManager) {
     const storageArr = inv.storage.map(item => ({
         slot: item.slot, name: item.name, uIndex: item.uIndex,
         damage: item.damage, price: item.price || 10,
-        description: item.description || "", weaponType: item.weaponType || "sword"
+        description: item.description || "", weaponType: item.weaponType || "sword",
+        defense: item.defense || 0
     }));
 
     const data: SaveData = {
@@ -177,7 +179,7 @@ export function loadGame(world: World, ui: UIManager): boolean {
             else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
             else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
 
-            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType);
+            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType, 'common', i.defense || 0);
             inv.items.set(i.slot, item);
         });
 
@@ -189,7 +191,7 @@ export function loadGame(world: World, ui: UIManager): boolean {
             else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
             else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
 
-            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType);
+            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType, 'common', i.defense || 0);
             inv.storage.push(item);
         });
 

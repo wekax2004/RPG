@@ -171,6 +171,7 @@ export class UIManager {
     createInspect(): HTMLElement {
         const el = document.createElement('div');
         el.id = 'inspect-panel'; el.className = 'hidden';
+        el.style.pointerEvents = 'none'; // Don't block clicks on underlying elements
         el.innerHTML = `<div id="inspect-name"></div><div id="inspect-desc"></div><div id="inspect-stats"></div>`;
         document.body.appendChild(el); return el;
     }
@@ -527,7 +528,7 @@ export class UIManager {
         // Show
         this.inspectPanel.classList.remove('hidden');
         this.inspectPanel.style.display = 'block';
-        this.inspectPanel.style.zIndex = '6000';
+        this.inspectPanel.style.zIndex = '10000';
         this.inspectPanel.style.opacity = '1';
     }
 
@@ -580,11 +581,14 @@ export class UIManager {
         this.shopBuyList.innerHTML = '';
         merchant.items.forEach((item: any) => {
             const div = document.createElement('div');
-            div.style.padding = '4px';
+            div.style.padding = '8px 4px';
             div.style.borderBottom = '1px solid #333';
             div.style.fontSize = '12px';
             div.style.cursor = 'pointer';
             div.style.color = playerInv.gold >= item.price ? '#fff' : '#888';
+            div.style.width = '100%';
+            div.style.boxSizing = 'border-box';
+            div.style.userSelect = 'none';
             div.innerText = `${item.name} - ${item.price}gp`;
 
             div.onmouseover = () => this.inspectItem(item);
@@ -601,9 +605,11 @@ export class UIManager {
                     // or just update inventory data structure and rely on loop.
 
                     // Simple logic: Push to storage (backpack)
-                    // We need a way to deep copy. For now, create new Item structure manually or assume simple object.
-                    // Important: item is an instance of Item class.
-                    const newItem = { ...item }; // Shallow copy props
+                    // Create proper Item instance with all properties including defense
+                    const newItem = new Item(
+                        item.name, item.slot, item.uIndex, item.damage, item.price,
+                        item.description, item.weaponType, item.rarity || 'common', item.defense || 0
+                    );
 
                     playerInv.storage.push(newItem);
                     if (this.console) this.console.sendMessage(`Bought ${item.name}.`);
@@ -621,10 +627,13 @@ export class UIManager {
         this.shopSellList.innerHTML = '';
         playerInv.storage.forEach((item, index) => {
             const div = document.createElement('div');
-            div.style.padding = '4px';
+            div.style.padding = '8px 4px';
             div.style.borderBottom = '1px solid #333';
             div.style.fontSize = '12px';
             div.style.cursor = 'pointer';
+            div.style.width = '100%';
+            div.style.boxSizing = 'border-box';
+            div.style.userSelect = 'none';
             const sellPrice = Math.floor(item.price / 2);
             div.innerText = `${item.name} - ${sellPrice}gp`;
 

@@ -7,10 +7,92 @@ canvas.width = 256;
 canvas.height = 256;
 const ctx = canvas.getContext('2d')!;
 
+// ==========================================
+// TIBIA-STYLE HELPER FUNCTIONS
+// ==========================================
+
+// Tibia Color Palette
+const TIBIA_COLORS = {
+    // Skin tones
+    skinLight: '#FFC8A0',
+    skinMid: '#E0A080',
+    skinDark: '#C07850',
+
+    // Metals
+    steelLight: '#E8E8E8',
+    steelMid: '#A0A0A0',
+    steelDark: '#606060',
+
+    // Wood/Leather
+    brownLight: '#A08060',
+    brownMid: '#705030',
+    brownDark: '#402010',
+
+    // Grass
+    grassLight: '#5AAA4A',
+    grassMid: '#3A8A2A',
+    grassDark: '#2A6A1A',
+
+    // Stone
+    stoneLight: '#909090',
+    stoneMid: '#707070',
+    stoneDark: '#505050',
+
+    // Outline
+    outline: '#000000'
+};
+
+// Draw 1px black outline around a rectangular shape
+const drawOutline = (x: number, y: number, w: number, h: number) => {
+    ctx.strokeStyle = TIBIA_COLORS.outline;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+};
+
+// Dithering pattern for Tibia-style texture
+const dither = (x: number, y: number, w: number, h: number, color1: string, color2: string, density: number = 0.3) => {
+    ctx.fillStyle = color1;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = color2;
+    for (let i = 0; i < w; i++) {
+        for (let j = 0; j < h; j++) {
+            // Checkerboard pattern with noise
+            if ((i + j) % 2 === 0 && Math.random() < density) {
+                ctx.fillRect(x + i, y + j, 1, 1);
+            }
+        }
+    }
+};
+
+// Draw shaded rectangle (light on top-left, dark on bottom-right)
+const shadedRect = (x: number, y: number, w: number, h: number, baseColor: string, lightColor: string, darkColor: string) => {
+    // Base fill
+    ctx.fillStyle = baseColor;
+    ctx.fillRect(x, y, w, h);
+
+    // Top-left highlight (Tibia light source)
+    ctx.fillStyle = lightColor;
+    ctx.fillRect(x, y, w, 2);
+    ctx.fillRect(x, y, 2, h);
+
+    // Bottom-right shadow
+    ctx.fillStyle = darkColor;
+    ctx.fillRect(x, y + h - 2, w, 2);
+    ctx.fillRect(x + w - 2, y, 2, h);
+};
+
+// Draw sprite with 1px outline (Tibia standard)
+const outlinedSprite = (x: number, y: number, drawFunc: () => void) => {
+    drawFunc();
+    // Add outline effect by tracing edges
+    ctx.strokeStyle = TIBIA_COLORS.outline;
+    ctx.lineWidth = 1;
+};
+
 function drawPixelArt() {
     console.log("Generating Tibia-Style Humanoid Pixel Art...");
 
-    // Helper: Noise Texture
+    // Helper: Noise Texture (keeping original for compatibility)
     const noise = (x: number, y: number, colorBase: number[], variation: number) => {
         for (let i = 0; i < 32; i += 2) {
             for (let j = 0; j < 32; j += 2) {
@@ -21,6 +103,7 @@ function drawPixelArt() {
             }
         }
     };
+
 
     // Helper: Draw 3D Humanoid
     const drawHumanoid = (
@@ -101,28 +184,62 @@ function drawPixelArt() {
     };
 
     // --- ROW 0: PLAYER & CHARACTERS (0-7) ---
-    // 0: KNIGHT (Tibia-style - Cleaner proportions)
-    // Using drawHumanoid but with better colors
+    // 0: KNIGHT (Enhanced Tibia-style - detailed armor with shading)
     const kx = 0, ky = 0;
-    // Body (Chain mail)
-    ctx.fillStyle = '#707070'; ctx.fillRect(kx + 8, ky + 12, 16, 12);
-    // Head
-    ctx.fillStyle = '#d4a574'; ctx.fillRect(kx + 10, ky + 4, 12, 10);
-    // Helmet
-    ctx.fillStyle = '#909090'; ctx.fillRect(kx + 9, ky + 2, 14, 6);
-    ctx.fillStyle = '#606060'; ctx.fillRect(kx + 9, ky + 2, 14, 2); // Visor
-    // Eyes
-    ctx.fillStyle = '#000'; ctx.fillRect(kx + 12, ky + 8, 2, 2); ctx.fillRect(kx + 18, ky + 8, 2, 2);
-    // Legs
-    ctx.fillStyle = '#505050'; ctx.fillRect(kx + 10, ky + 24, 5, 6); ctx.fillRect(kx + 17, ky + 24, 5, 6);
-    // Arms
-    ctx.fillStyle = '#707070'; ctx.fillRect(kx + 4, ky + 12, 4, 8); ctx.fillRect(kx + 24, ky + 12, 4, 8);
-    // Sword
-    ctx.fillStyle = '#c0c0c0'; ctx.fillRect(kx + 26, ky + 6, 3, 18);
-    ctx.fillStyle = '#8b4513'; ctx.fillRect(kx + 25, ky + 20, 5, 3);
-    // Shield
-    ctx.fillStyle = '#8b0000'; ctx.fillRect(kx + 2, ky + 14, 6, 8);
-    ctx.fillStyle = '#ffd700'; ctx.fillRect(kx + 4, ky + 17, 2, 2);
+
+    // Shadow under character
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(kx + 16, ky + 29, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Legs (steel greaves with shading)
+    shadedRect(kx + 9, ky + 22, 6, 8, TIBIA_COLORS.steelMid, TIBIA_COLORS.steelLight, TIBIA_COLORS.steelDark);
+    shadedRect(kx + 17, ky + 22, 6, 8, TIBIA_COLORS.steelMid, TIBIA_COLORS.steelLight, TIBIA_COLORS.steelDark);
+
+    // Body (plate armor with iconic Tibia shading)
+    shadedRect(kx + 7, ky + 10, 18, 14, TIBIA_COLORS.steelMid, TIBIA_COLORS.steelLight, TIBIA_COLORS.steelDark);
+    // Armor detail lines
+    ctx.fillStyle = TIBIA_COLORS.steelDark;
+    ctx.fillRect(kx + 15, ky + 12, 2, 10);
+
+    // Arms (armored)
+    ctx.fillStyle = TIBIA_COLORS.steelMid;
+    ctx.fillRect(kx + 3, ky + 10, 5, 10); ctx.fillRect(kx + 24, ky + 10, 5, 10);
+    ctx.fillStyle = TIBIA_COLORS.steelDark;
+    ctx.fillRect(kx + 6, ky + 12, 2, 6); ctx.fillRect(kx + 24, ky + 12, 2, 6);
+
+    // Head/Helmet (classic Tibia knight helm)
+    shadedRect(kx + 9, ky + 2, 14, 10, TIBIA_COLORS.steelMid, TIBIA_COLORS.steelLight, TIBIA_COLORS.steelDark);
+    // Visor opening
+    ctx.fillStyle = '#1A1A1A';
+    ctx.fillRect(kx + 11, ky + 5, 10, 4);
+    // Eyes visible in visor
+    ctx.fillStyle = TIBIA_COLORS.skinMid;
+    ctx.fillRect(kx + 12, ky + 6, 8, 2);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(kx + 13, ky + 6, 2, 2); ctx.fillRect(kx + 17, ky + 6, 2, 2);
+    // Helmet crest
+    ctx.fillStyle = '#CC2222';
+    ctx.fillRect(kx + 14, ky, 4, 4);
+
+    // Shield (left hand - red with gold emblem)
+    shadedRect(kx + 1, ky + 12, 7, 10, '#8B0000', '#AA2020', '#600000');
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(kx + 3, ky + 15, 3, 4); // Gold cross
+    ctx.fillRect(kx + 2, ky + 16, 5, 2);
+
+    // Sword (right hand)
+    ctx.fillStyle = TIBIA_COLORS.steelLight;
+    ctx.fillRect(kx + 26, ky + 4, 3, 16);
+    ctx.fillStyle = TIBIA_COLORS.steelDark;
+    ctx.fillRect(kx + 28, ky + 6, 1, 12);
+    // Sword hilt
+    ctx.fillStyle = TIBIA_COLORS.brownMid;
+    ctx.fillRect(kx + 25, ky + 18, 5, 3);
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(kx + 26, ky + 19, 3, 1);
+
+    // 1px black outline around entire knight
+    drawOutline(kx + 1, ky, 30, 30);
 
     // 1: MAGE (Blue/Gold)
     drawHumanoid(32, 0, '#db9', '#228', '#22a', null, null, 'staff');
@@ -192,49 +309,133 @@ function drawPixelArt() {
     // --- ROW 1: ENEMIES (8-15) ---
     const r1 = 32;
 
-    // 8: SKELETON (Tibia-style)
+    // 8: SKELETON (Enhanced Tibia-style - detailed bones with shading)
     const sx = 0, sy = r1;
-    // Skull
-    ctx.fillStyle = '#e8e8d8'; ctx.fillRect(sx + 10, sy + 2, 12, 12);
-    ctx.fillStyle = '#000'; ctx.fillRect(sx + 12, sy + 6, 3, 3); ctx.fillRect(sx + 17, sy + 6, 3, 3); // Eyes
-    ctx.fillRect(sx + 14, sy + 10, 4, 2); // Mouth
-    // Ribcage
-    ctx.fillStyle = '#d8d8c8'; ctx.fillRect(sx + 10, sy + 14, 12, 10);
-    ctx.fillStyle = '#1a1a1a';
-    for (let i = 0; i < 4; i++) ctx.fillRect(sx + 11, sy + 15 + i * 2, 10, 1);
-    // Arms (bones)
-    ctx.fillStyle = '#e8e8d8';
-    ctx.fillRect(sx + 4, sy + 14, 6, 2); ctx.fillRect(sx + 22, sy + 14, 6, 2);
-    ctx.fillRect(sx + 4, sy + 18, 2, 6); ctx.fillRect(sx + 26, sy + 18, 2, 6);
-    // Legs
-    ctx.fillRect(sx + 12, sy + 24, 3, 8); ctx.fillRect(sx + 17, sy + 24, 3, 8);
-    // Sword
-    ctx.fillStyle = '#a0a0a0'; ctx.fillRect(sx + 26, sy + 8, 2, 14);
 
-    // 9: ORC (Tibia-style - Bright Green warrior)
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(sx + 16, sy + 30, 8, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Skull (cream colored with depth)
+    shadedRect(sx + 10, sy + 2, 12, 12, '#E8E8D8', '#F8F8F0', '#C8C8B8');
+    // Eye sockets (deep black)
+    ctx.fillStyle = '#1A0A0A';
+    ctx.fillRect(sx + 12, sy + 5, 4, 4); ctx.fillRect(sx + 17, sy + 5, 4, 4);
+    // Red glowing eye dots
+    ctx.fillStyle = '#FF2222';
+    ctx.fillRect(sx + 13, sy + 6, 2, 2); ctx.fillRect(sx + 18, sy + 6, 2, 2);
+    // Nose hole
+    ctx.fillStyle = '#2A1A1A';
+    ctx.fillRect(sx + 15, sy + 9, 2, 2);
+    // Mouth/teeth
+    ctx.fillStyle = '#1A1A1A';
+    ctx.fillRect(sx + 12, sy + 11, 8, 2);
+    ctx.fillStyle = '#FFFFFF';
+    for (let i = 0; i < 4; i++) ctx.fillRect(sx + 13 + i * 2, sy + 11, 1, 2);
+
+    // Ribcage (with individual ribs)
+    ctx.fillStyle = '#D8D8C8';
+    ctx.fillRect(sx + 10, sy + 14, 12, 10);
+    ctx.fillStyle = '#A8A898';
+    // Rib shadows
+    for (let i = 0; i < 4; i++) {
+        ctx.fillRect(sx + 11, sy + 15 + i * 2, 10, 1);
+    }
+    // Spine
+    ctx.fillStyle = '#C8C8B8';
+    ctx.fillRect(sx + 15, sy + 14, 2, 10);
+
+    // Arms (bone segments)
+    ctx.fillStyle = '#E8E8D8';
+    // Upper arms
+    ctx.fillRect(sx + 4, sy + 14, 6, 3); ctx.fillRect(sx + 22, sy + 14, 6, 3);
+    // Forearms
+    ctx.fillRect(sx + 3, sy + 17, 3, 8); ctx.fillRect(sx + 26, sy + 17, 3, 8);
+    // Hand bones
+    ctx.fillStyle = '#D0D0C0';
+    ctx.fillRect(sx + 2, sy + 24, 5, 3); ctx.fillRect(sx + 25, sy + 24, 5, 3);
+
+    // Legs (bone segments)
+    ctx.fillStyle = '#E8E8D8';
+    ctx.fillRect(sx + 11, sy + 24, 4, 8); ctx.fillRect(sx + 17, sy + 24, 4, 8);
+    // Knee joints
+    ctx.fillStyle = '#C8C8B8';
+    ctx.fillRect(sx + 11, sy + 27, 4, 2); ctx.fillRect(sx + 17, sy + 27, 4, 2);
+
+    // Rusty sword
+    ctx.fillStyle = '#8A7A6A';
+    ctx.fillRect(sx + 27, sy + 6, 3, 16);
+    ctx.fillStyle = '#6A5A4A';
+    ctx.fillRect(sx + 28, sy + 8, 1, 12);
+    // Hilt
+    ctx.fillStyle = TIBIA_COLORS.brownDark;
+    ctx.fillRect(sx + 26, sy + 20, 5, 3);
+
+    // Outline
+    drawOutline(sx + 2, sy + 2, 28, 28);
+
+    // 9: ORC (Enhanced Tibia-style - muscular green warrior)
     const ox = 32, oy = r1;
-    // Head (bright green skin)
-    ctx.fillStyle = '#2a8a2a'; ctx.fillRect(ox + 10, oy + 2, 12, 12);
-    // Face shading
-    ctx.fillStyle = '#1a6a1a'; ctx.fillRect(ox + 10, oy + 8, 12, 6);
-    // Eyes (yellow/angry)
-    ctx.fillStyle = '#ffff00'; ctx.fillRect(ox + 12, oy + 5, 2, 2); ctx.fillRect(ox + 18, oy + 5, 2, 2);
-    // Tusks (white, prominent)
-    ctx.fillStyle = '#ffffff';
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(ox + 16, oy + 30, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Legs (brown leather pants)
+    shadedRect(ox + 11, oy + 22, 5, 8, '#5A3A1A', '#7A5A3A', '#3A2A0A');
+    shadedRect(ox + 16, oy + 22, 5, 8, '#5A3A1A', '#7A5A3A', '#3A2A0A');
+
+    // Body (leather vest with muscle showing)
+    shadedRect(ox + 9, oy + 12, 14, 12, '#6A4A2A', '#8A6A4A', '#4A3A1A');
+    // Chest muscle showing
+    ctx.fillStyle = '#2A8A2A';
+    ctx.fillRect(ox + 10, oy + 13, 5, 4); ctx.fillRect(ox + 17, oy + 13, 5, 4);
+    ctx.fillStyle = '#1A7A1A';
+    ctx.fillRect(ox + 11, oy + 14, 3, 2); ctx.fillRect(ox + 18, oy + 14, 3, 2);
+
+    // Arms (muscular green)
+    ctx.fillStyle = '#2A8A2A';
+    ctx.fillRect(ox + 4, oy + 12, 6, 10); ctx.fillRect(ox + 22, oy + 12, 6, 10);
+    // Muscle shading
+    ctx.fillStyle = '#1A7A1A';
+    ctx.fillRect(ox + 6, oy + 14, 3, 6); ctx.fillRect(ox + 23, oy + 14, 3, 6);
+    ctx.fillStyle = '#3A9A3A';
+    ctx.fillRect(ox + 4, oy + 13, 2, 3); ctx.fillRect(ox + 26, oy + 13, 2, 3);
+
+    // Hands (darker green)
+    ctx.fillStyle = '#1A6A1A';
+    ctx.fillRect(ox + 3, oy + 20, 5, 4); ctx.fillRect(ox + 24, oy + 20, 5, 4);
+
+    // Head (bright green with shading)
+    shadedRect(ox + 10, oy + 2, 12, 12, '#2A8A2A', '#3A9A3A', '#1A6A1A');
+    // Brow ridge (angular, menacing)
+    ctx.fillStyle = '#1A6A1A';
+    ctx.fillRect(ox + 10, oy + 4, 12, 2);
+    // Eyes (fierce yellow with red pupils)
+    ctx.fillStyle = '#FFFF00';
+    ctx.fillRect(ox + 12, oy + 5, 3, 3); ctx.fillRect(ox + 17, oy + 5, 3, 3);
+    ctx.fillStyle = '#FF0000';
+    ctx.fillRect(ox + 13, oy + 6, 1, 1); ctx.fillRect(ox + 18, oy + 6, 1, 1);
+    // Tusks (prominent)
+    ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(ox + 11, oy + 10, 2, 5); ctx.fillRect(ox + 19, oy + 10, 2, 5);
-    // Body (leather vest)
-    ctx.fillStyle = '#6a4a2a'; ctx.fillRect(ox + 10, oy + 14, 12, 10);
-    // Arms (green muscular)
-    ctx.fillStyle = '#2a8a2a';
-    ctx.fillRect(ox + 4, oy + 14, 6, 8); ctx.fillRect(ox + 22, oy + 14, 6, 8);
-    // Hands
-    ctx.fillStyle = '#1a7a1a';
-    ctx.fillRect(ox + 4, oy + 20, 4, 4); ctx.fillRect(ox + 24, oy + 20, 4, 4);
-    // Legs (brown leather)
-    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(ox + 12, oy + 24, 4, 6); ctx.fillRect(ox + 16, oy + 24, 4, 6);
-    // Club weapon
-    ctx.fillStyle = '#8a6a4a'; ctx.fillRect(ox + 26, oy + 4, 4, 20);
-    ctx.fillStyle = '#5a4a3a'; ctx.fillRect(ox + 25, oy + 2, 6, 4); // Club head
+    ctx.fillStyle = '#E0E0D0';
+    ctx.fillRect(ox + 12, oy + 11, 1, 4); ctx.fillRect(ox + 19, oy + 11, 1, 4);
+
+    // Club weapon (spiked)
+    ctx.fillStyle = TIBIA_COLORS.brownMid;
+    ctx.fillRect(ox + 27, oy + 4, 4, 22);
+    ctx.fillStyle = TIBIA_COLORS.brownDark;
+    ctx.fillRect(ox + 29, oy + 6, 2, 18);
+    // Club head (bulky)
+    shadedRect(ox + 25, oy, 8, 6, '#6A4A2A', '#8A6A4A', '#4A2A1A');
+    // Spikes
+    ctx.fillStyle = '#A0A0A0';
+    ctx.fillRect(ox + 24, oy + 1, 2, 2);
+    ctx.fillRect(ox + 31, oy + 2, 2, 2);
+
+    // Outline
+    drawOutline(ox + 3, oy, 28, 30);
 
     // 10: GHOST
     ctx.fillStyle = 'rgba(200, 200, 255, 0.6)';
@@ -312,45 +513,76 @@ function drawPixelArt() {
     // --- ROW 2: TERRAIN (16-23) ---
     const r2 = 64;
 
-    // 16: GRASS (Clean Tibia-style - solid green with subtle variation)
-    // Base green fill
-    ctx.fillStyle = '#3a7a2a'; ctx.fillRect(0, r2, 32, 32);
-    // Lighter green patches (subtle, seamless)
-    ctx.fillStyle = '#4a8a3a';
-    ctx.fillRect(2, r2 + 2, 6, 5); ctx.fillRect(16, r2 + 4, 8, 6);
-    ctx.fillRect(6, r2 + 16, 10, 8); ctx.fillRect(22, r2 + 20, 8, 8);
-    ctx.fillRect(4, r2 + 26, 6, 4);
-    // Darker green shadows (very subtle)
-    ctx.fillStyle = '#2a6a1a';
-    ctx.fillRect(12, r2 + 8, 4, 4); ctx.fillRect(24, r2 + 10, 4, 4);
-    ctx.fillRect(8, r2 + 22, 4, 4); ctx.fillRect(18, r2 + 14, 4, 4);
-    // Tiny grass blade highlights
-    ctx.fillStyle = '#5a9a4a';
-    ctx.fillRect(4, r2 + 4, 1, 2); ctx.fillRect(18, r2 + 6, 1, 2);
-    ctx.fillRect(8, r2 + 18, 1, 2); ctx.fillRect(24, r2 + 22, 1, 2);
+    // 16: GRASS (Enhanced Tibia-style - rich dithered texture)
+    // Base green fill with dithering
+    dither(0, r2, 32, 32, TIBIA_COLORS.grassMid, TIBIA_COLORS.grassDark, 0.25);
+    // Lighter green patches (organic, varied)
+    dither(2, r2 + 2, 8, 6, TIBIA_COLORS.grassLight, TIBIA_COLORS.grassMid, 0.3);
+    dither(16, r2 + 8, 10, 8, TIBIA_COLORS.grassLight, TIBIA_COLORS.grassMid, 0.2);
+    dither(6, r2 + 18, 12, 10, TIBIA_COLORS.grassLight, TIBIA_COLORS.grassMid, 0.35);
+    // Small grass blade highlights
+    ctx.fillStyle = '#6ABA5A';
+    ctx.fillRect(4, r2 + 4, 1, 3); ctx.fillRect(10, r2 + 8, 1, 2);
+    ctx.fillRect(20, r2 + 6, 1, 3); ctx.fillRect(26, r2 + 14, 1, 2);
+    ctx.fillRect(8, r2 + 20, 1, 3); ctx.fillRect(14, r2 + 24, 1, 2);
+    ctx.fillRect(22, r2 + 22, 1, 3); ctx.fillRect(28, r2 + 28, 1, 2);
+    // Tiny flowers/detail (yellow/red dots)
+    ctx.fillStyle = '#FFFF50';
+    ctx.fillRect(6, r2 + 10, 2, 2); ctx.fillRect(24, r2 + 18, 2, 2);
+    ctx.fillStyle = '#FF6060';
+    ctx.fillRect(18, r2 + 26, 2, 2);
 
-    // 17: WALL (Tibia-style - Single tile, no tall extension to avoid overwriting Row 1)
+    // 17: WALL (Enhanced Tibia-style - detailed brick with dithering)
     const wallX = 32;
-    // Front Face (Warmer brick colors)
-    ctx.fillStyle = '#8b6b4f'; ctx.fillRect(wallX, r2, 32, 32);
-    // Brick pattern
-    ctx.fillStyle = '#6b4b3f';
+    // Base brick color with dithering
+    dither(wallX, r2, 32, 32, '#8B6B4F', '#7B5B3F', 0.2);
+
+    // Individual bricks with shading
     for (let by = 0; by < 4; by++) {
         for (let bx = 0; bx < 2; bx++) {
             const brickOx = bx * 16 + (by % 2 === 0 ? 0 : 8);
-            ctx.fillRect(wallX + brickOx, r2 + by * 8, 14, 6);
+            const brickY = r2 + by * 8;
+
+            // Brick with shading
+            shadedRect(wallX + brickOx, brickY, 14, 6, '#9B7B5F', '#AB8B6F', '#6B4B3F');
         }
     }
-    // Mortar lines
-    ctx.strokeStyle = '#5a3a2a'; ctx.lineWidth = 1;
-    for (let i = 0; i < 4; i++) ctx.strokeRect(wallX, r2 + i * 8, 32, 8);
-    // Top edge highlight (instead of tall section)
-    ctx.fillStyle = '#3a1a0a'; ctx.fillRect(wallX, r2, 32, 3);
-    ctx.fillStyle = '#9b7b5f'; ctx.fillRect(wallX, r2 + 28, 32, 2);
 
-    // 18: WATER
-    ctx.fillStyle = '#358'; ctx.fillRect(64, r2, 32, 32);
-    ctx.fillStyle = '#58b'; ctx.fillRect(64 + 4, r2 + 6, 8, 2); ctx.fillRect(64 + 16, r2 + 20, 12, 2);
+    // Mortar/grout lines (darker)
+    ctx.fillStyle = '#4A2A1A';
+    for (let i = 0; i <= 4; i++) {
+        ctx.fillRect(wallX, r2 + i * 8 - 1, 32, 2);
+    }
+    ctx.fillRect(wallX + 15, r2, 2, 32); // Vertical mortar
+    ctx.fillRect(wallX + 7, r2 + 8, 2, 8);
+    ctx.fillRect(wallX + 23, r2 + 8, 2, 8);
+    ctx.fillRect(wallX + 7, r2 + 24, 2, 8);
+    ctx.fillRect(wallX + 23, r2 + 24, 2, 8);
+
+    // Top shadow (depth)
+    ctx.fillStyle = '#2A1A0A';
+    ctx.fillRect(wallX, r2, 32, 2);
+    // Bottom highlight
+    ctx.fillStyle = '#AB8B6F';
+    ctx.fillRect(wallX, r2 + 30, 32, 2);
+
+    // 18: WATER (Enhanced Tibia-style - deep blue with wave texture)
+    // Deep water base with dithering
+    dither(64, r2, 32, 32, '#2050A0', '#1040A0', 0.4);
+    // Mid-depth layer
+    dither(64 + 2, r2 + 2, 28, 28, '#3060B0', '#2050A0', 0.3);
+    // Wave highlights (white-ish)
+    ctx.fillStyle = '#80B0E0';
+    ctx.fillRect(64 + 4, r2 + 5, 10, 2);
+    ctx.fillRect(64 + 18, r2 + 12, 8, 2);
+    ctx.fillRect(64 + 8, r2 + 20, 12, 2);
+    ctx.fillRect(64 + 2, r2 + 28, 6, 1);
+    ctx.fillRect(64 + 22, r2 + 26, 8, 1);
+    // Darker wave troughs
+    ctx.fillStyle = '#1030A0';
+    ctx.fillRect(64 + 10, r2 + 8, 8, 1);
+    ctx.fillRect(64 + 4, r2 + 16, 6, 1);
+    ctx.fillRect(64 + 16, r2 + 24, 10, 1);
 
     // 19: WOOD
     ctx.fillStyle = '#643'; ctx.fillRect(96, r2, 32, 32);

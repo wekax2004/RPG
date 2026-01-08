@@ -1483,7 +1483,7 @@ export function createMerchant(world: World, x: number, y: number) {
 
     // Basic Armor
     merch.items.push(new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3, 0, 0));
-    merch.items.push(new Item('Leather Armor', 'body', SPRITES.KNIGHT, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0));
+    merch.items.push(new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6, 0, 0));
 
     world.addComponent(e, merch);
     return e;
