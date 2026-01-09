@@ -10,7 +10,7 @@ export class Velocity {
 
 export class Sprite {
     // uIndex: horizontal index in 16px grid
-    constructor(public uIndex: number, public size: number = 16) { }
+    constructor(public uIndex: number, public size: number = 16, public flipX: boolean = false) { }
 }
 
 export class TileMap {

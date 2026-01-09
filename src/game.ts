@@ -55,10 +55,24 @@ export function inputSystem(world: World, input: InputHandler) {
         vel.x = 0;
         vel.y = 0;
 
-        if (input.isDown('ArrowLeft') || input.isDown('KeyA')) { vel.x = -speed; pc.facingX = -1; pc.facingY = 0; }
-        if (input.isDown('ArrowRight') || input.isDown('KeyD')) { vel.x = speed; pc.facingX = 1; pc.facingY = 0; }
-        if (input.isDown('ArrowUp') || input.isDown('KeyW')) { vel.y = -speed; pc.facingX = 0; pc.facingY = -1; }
-        if (input.isDown('ArrowDown') || input.isDown('KeyS')) { vel.y = speed; pc.facingX = 0; pc.facingY = 1; }
+        const sprite = world.getComponent(id, Sprite);
+
+        if (input.isDown('ArrowLeft') || input.isDown('KeyA')) {
+            vel.x = -speed; pc.facingX = -1; pc.facingY = 0;
+            if (sprite) { sprite.uIndex = SPRITES.PLAYER_SIDE; sprite.flipX = true; }
+        }
+        if (input.isDown('ArrowRight') || input.isDown('KeyD')) {
+            vel.x = speed; pc.facingX = 1; pc.facingY = 0;
+            if (sprite) { sprite.uIndex = SPRITES.PLAYER_SIDE; sprite.flipX = false; }
+        }
+        if (input.isDown('ArrowUp') || input.isDown('KeyW')) {
+            vel.y = -speed; pc.facingX = 0; pc.facingY = -1;
+            if (sprite) { sprite.uIndex = SPRITES.PLAYER_BACK; sprite.flipX = false; }
+        }
+        if (input.isDown('ArrowDown') || input.isDown('KeyS')) {
+            vel.y = speed; pc.facingX = 0; pc.facingY = 1;
+            if (sprite) { sprite.uIndex = SPRITES.PLAYER; sprite.flipX = false; }
+        }
 
         // Unstuck
         if (input.isDown('KeyU')) {
@@ -1273,11 +1287,11 @@ export function projectileSystem(world: World, dt: number, ui: UIManager, audio:
 }
 
 // Updated drawSprite using AssetManager with Sheet Switching
-export function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: number, dy: number, size: number = 32) {
+export function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: number, dy: number, size: number = 32, flipX: boolean = false) {
     let source = assetManager.getSpriteSource(uIndex);
 
     // --- Dynamic Texture Switching (Prompt Fix) ---
-    if (uIndex >= 100) {
+    if (uIndex >= 100 && uIndex < 200) { // Fix: limit range so IDs like 900+ don't match dungeon logic
         // IDs 100-199: Use 'dungeon' sheet by default
         let sheetName = 'dungeon';
         let localIndex = uIndex - 100;
@@ -1334,11 +1348,23 @@ export function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: nu
         }
 
         // Draw with strict integer coordinates
-        ctx.drawImage(
-            source.image,
-            Math.floor(source.sx), Math.floor(source.sy), Math.floor(source.sw), Math.floor(source.sh),
-            Math.floor(dx), Math.floor(dy) + dOffsetY, dWidth, dHeight
-        );
+        if (flipX) {
+            ctx.save();
+            ctx.translate(Math.floor(dx) + dWidth, Math.floor(dy) + dOffsetY);
+            ctx.scale(-1, 1);
+            ctx.drawImage(
+                source.image,
+                Math.floor(source.sx), Math.floor(source.sy), Math.floor(source.sw), Math.floor(source.sh),
+                0, 0, dWidth, dHeight // Draw at 0,0 relative to translated context
+            );
+            ctx.restore();
+        } else {
+            ctx.drawImage(
+                source.image,
+                Math.floor(source.sx), Math.floor(source.sy), Math.floor(source.sw), Math.floor(source.sh),
+                Math.floor(dx), Math.floor(dy) + dOffsetY, dWidth, dHeight
+            );
+        }
     } else {
         // Fallback or Missing - Draw Black
         ctx.fillStyle = '#000000';
@@ -1454,7 +1480,7 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
         // Culling
         if (pos.x - camX < -32 || pos.x - camX > 320 || pos.y - camY < -32 || pos.y - camY > 240) continue;
 
-        drawSprite(ctx, sprite.uIndex, Math.floor(pos.x - camX), Math.floor(pos.y - camY), sprite.size);
+        drawSprite(ctx, sprite.uIndex, Math.floor(pos.x - camX), Math.floor(pos.y - camY), sprite.size, sprite.flipX);
         renderedCount++;
 
         // Draw Health Bar for enemies (entities with Health but not PlayerControllable)

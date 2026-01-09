@@ -6,6 +6,8 @@ export const SHEET_COLS = 8; // Restored for compatibility
 export const SPRITES = {
     // Characters (Procedural)
     PLAYER: 0,
+    PLAYER_BACK: 900, // New reserved ID for directional
+    PLAYER_SIDE: 901,
     MAGE: 1,
     RANGER: 2,
     NPC: 3,
@@ -138,47 +140,33 @@ export class AssetManager {
     }
 
     async load(): Promise<void> {
-        console.log('[AssetManager] Loading Assets (AI PHASE 2 & 3)...');
+        console.log('[AssetManager] Loading Placeholder Assets...');
 
-        // 1. Load User's Tileset (for Ground)
-        await this.loadImage('forest', 'assets/tileset.jpg');
-        this.sheetConfigs.set('forest', { tileSize: 32, stride: 33, offsetX: 33, offsetY: 33 });
+        // 1. Load the Placeholders you just generated
+        // Note: We use 'sprites/' because Vite serves 'public/' as root
+        await this.loadImage('knight', 'sprites/player_knight.png');
+        await this.loadImage('mage', 'sprites/player_mage.png');
+        await this.loadImage('ranger', 'sprites/player_ranger.png');
+        await this.loadImage('orc', 'sprites/enemy_orc.png');
+        await this.loadImage('grass', 'sprites/tile_grass.png');
+        await this.loadImage('wall', 'sprites/tile_wall.png');
 
-        // 2. Load & Process AI Assets (Nearest Neighbor Resize + Chroma Key)
-        await this.loadAIAsset('ai_tree', 'assets/generated_tree.png', 96);
-        await this.loadAIAsset('ai_bush', 'assets/ai_bush.png', 32);
+        // Define how to read them (Simple 32x32 single tiles)
+        const singleTile = { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
 
-        // Characters
-        await this.loadAIAsset('ai_mage', 'assets/ai_mage.png', 32);
-        await this.loadAIAsset('ai_orc', 'assets/ai_orc.png', 32);
-        await this.loadAIAsset('ai_skeleton', 'assets/ai_skeleton.png', 32);
-        await this.loadAIAsset('ai_rock', 'assets/ai_rock.png', 32);
-        await this.loadAIAsset('ai_wolf', 'assets/ai_wolf.png', 32);
-        await this.loadAIAsset('ai_knight', 'assets/ai_knight.png', 32);
-        await this.loadAIAsset('ai_guard', 'assets/ai_guard.png', 32);
-        await this.loadAIAsset('ai_old_man', 'assets/ai_old_man.png', 32);
-        await this.loadAIAsset('ai_warlord', 'assets/ai_warlord.png', 32);
-        await this.loadAIAsset('ai_yeti', 'assets/ai_yeti.png', 32);
+        this.sheetConfigs.set('knight', singleTile);
+        this.sheetConfigs.set('mage', singleTile);
+        this.sheetConfigs.set('ranger', singleTile);
+        this.sheetConfigs.set('orc', singleTile);
+        this.sheetConfigs.set('grass', singleTile);
+        this.sheetConfigs.set('wall', singleTile);
 
-        // Items & Misc
-        await this.loadAIAsset('ai_sword', 'assets/ai_sword.png', 32);
-        await this.loadAIAsset('ai_potion', 'assets/ai_potion.png', 32);
-        await this.loadAIAsset('ai_chest', 'assets/ai_chest.png', 32);
-
-        // Terrain - Phase 5
-        await this.loadAIAsset('ai_grass', 'assets/ai_grass.png', 32);
-        await this.loadAIAsset('ai_water', 'assets/ai_water.png', 32);
-        await this.loadAIAsset('ai_stone_wall', 'assets/ai_stone_wall.png', 32);
-        await this.loadAIAsset('ai_wood_floor', 'assets/ai_wood_floor.png', 32);
-
-        // Fixes
-        await this.loadAIAsset('ai_fireball_v2', 'assets/ai_fireball_v2.png', 32);
-
+        // Load Items (fallback to keep inventory working)
         await this.loadItems();
 
         this.loaded = true;
         this.buildSpriteCache();
-        console.log('[AssetManager] Assets generated.');
+        console.log('[AssetManager] Placeholders loaded.');
     }
 
     async loadImage(key: string, src: string) {
@@ -282,57 +270,60 @@ export class AssetManager {
         if (!this.images.size) return;
 
         // CHARACTERS (Mapped to Phase 1-4 AI Assets)
-        this.mapSprite(SPRITES.PLAYER, 'ai_mage', 0, 0);
-        this.mapSprite(SPRITES.MAGE, 'ai_mage', 0, 0);
-        this.mapSprite(SPRITES.NPC, 'ai_old_man', 0, 0);
-        this.mapSprite(SPRITES.GUARD, 'ai_guard', 0, 0);
-        this.mapSprite(SPRITES.KNIGHT, 'ai_knight', 0, 0);
-        this.mapSprite(SPRITES.ORC, 'ai_orc', 0, 0); // Standard Orc
-        // The instruction had a conflicting mapping for ID 9 (ORC) and ai_warlord.
-        // To avoid overwriting, and since SPRITES.ORC is already mapped to ai_orc,
-        // we will map ai_warlord to SPRITES.ORC as well, effectively making the Warlord
-        // use the ai_orc sprite unless game.ts is updated to use a new ID for Warlord.
-        // For now, we'll keep the existing ORC mapping.
-        // If a specific Warlord sprite is needed, a new SPRITES enum entry would be ideal.
-        this.mapSprite(SPRITES.YETI, 'ai_yeti', 0, 0);
+        // PLAYER MAPPED TO SHEET (Cols: 3, Rows: 1)
+        // Load the sheet first in load()!
 
-        this.mapSprite(SPRITES.SKELETON, 'ai_skeleton', 0, 0);
-        this.mapSprite(SPRITES.WOLF, 'ai_wolf', 0, 0);
+        // Mapping PLAYER to the sheet. 
+        // 0,0 is Front. 
+        // We will need logic in Renderer to pick the right column based on Facing.
+        // For now, map sprite 0 to the whole sheet or first frame?
+        // mapSprite takes (id, sheet, col, row, cols, rows)
+        // Let's map ID 0 to the First Frame (Front)
+        this.mapSprite(SPRITES.PLAYER, 'ai_mage_sheet', 0, 0);
 
-        // TERRAIN
-        // Note: Using 'forest' which now contains the User's Tileset
-        // MAPPING TO TILES
-        this.mapSprite(SPRITES.TREE, 'ai_tree', 0, 0, 3, 3); // 3x3 Big Tree (AI Generated)
-        this.mapSprite(SPRITES.PINE_TREE, 'forest', 4, 0, 1, 2); // 1x2 Pine
-        this.mapSprite(SPRITES.ROCK, 'ai_rock', 0, 0, 1, 1);      // Phase 1 AI Rock
-        this.mapSprite(SPRITES.BUSH, 'ai_bush', 0, 0, 1, 1);      // Phase 2 AI Bush
+        // We might need separate IDs for directions if the renderer isn't smart yet.
+        // OR we rely on the Renderer to use (BaseID + Offset).
+        // Standard RPGs often use: ID (Front), ID+1 (Back), ID+2 (Side).
+        // ASSETS.TS SPRITES: PLAYER=0.
+        // So let's map:
+        // 0 -> Front
+        // 1 -> Back? No, 1 is Mage (which is also Player).
+        // game.ts inputSystem sets facingX/Y.
 
-        // Use a safe tile for Grass (Row 4, Col 0)
-        // this.mapSprite(SPRITES.GRASS, 'forest', 0, 4); // Replaced by new AI asset
+        // Let's Check Renderer Logic or Sprite Component.
+        // Viewed files: game.ts uses `new Sprite(spriteIndex)`.
+        // It doesn't seem to dynamically change Sprite ID based on facing yet.
+        // Phase 6 Goal: "Directional Sprites".
+        // I need to UPDATE game.ts/renderer.ts to support this.
+        // --- MAP THE IDS TO YOUR NEW FILES ---
 
-        // Water
-        // this.mapSprite(SPRITES.WATER, 'forest', 1, 4); // Replaced by new AI asset
+        // Characters
+        this.mapSprite(SPRITES.PLAYER, 'knight', 0, 0); // Default Knight
+        this.mapSprite(SPRITES.KNIGHT, 'knight', 0, 0);
+        this.mapSprite(SPRITES.MAGE, 'mage', 0, 0);
+        this.mapSprite(SPRITES.RANGER, 'ranger', 0, 0);
+        this.mapSprite(SPRITES.ORC, 'orc', 0, 0);
 
-        // NEW TERRAIN MAPPINGS (Phase 5)
-        this.mapSprite(SPRITES.GRASS, 'ai_grass', 0, 0); // Replaces broken tileset
-        this.mapSprite(SPRITES.WATER, 'ai_water', 0, 0);
+        // Map other enemies to Orc for now (so they aren't invisible)
+        this.mapSprite(SPRITES.SKELETON, 'orc', 0, 0);
+        this.mapSprite(SPRITES.ZOMBIE, 'orc', 0, 0);
 
-        // Remap Town Structure to New IDs
-        this.mapSprite(SPRITES.TOWN_WALL, 'ai_stone_wall', 0, 0);
-        this.mapSprite(SPRITES.TOWN_FLOOR, 'ai_wood_floor', 0, 0);
+        // Terrain
+        this.mapSprite(SPRITES.GRASS, 'grass', 0, 0);      // ID 16
+        this.mapSprite(SPRITES.WALL, 'wall', 0, 0);      // ID 17
 
-        // Items
-        this.mapSprite(SPRITES.SWORD, 'ai_sword', 0, 0);
-        this.mapSprite(SPRITES.POTION, 'ai_potion', 0, 0);
+        // Map "Town" tiles to standard tiles for now
+        this.mapSprite(SPRITES.TOWN_FLOOR, 'grass', 0, 0);
+        this.mapSprite(SPRITES.TOWN_WALL, 'wall', 0, 0);
 
-        // Projectiles
-        this.mapSprite(SPRITES.FIREBALL, 'ai_fireball_v2', 0, 0); // Fixed ID 100
+        // Fallbacks for missing generated files
+        // Use 'grass' for things like Water/Wood so they aren't black
+        this.mapSprite(SPRITES.WATER, 'grass', 0, 0);
+        this.mapSprite(SPRITES.WOOD, 'grass', 0, 0);
 
-        // Misc
-        // Chest is usually a sprite like "Box" or "Crate".
-        // SPRITES doesn't have CHEST explicitly listed in the visible snippet?
-        // Ah, SPRITES needs to be checked.
-        // If not, I'll just leave it loaded as 'ai_chest' for future use.
+        // Directional Fallbacks (until proper sheets exist)
+        this.mapSprite(SPRITES.PLAYER_BACK, 'knight', 0, 0);
+        this.mapSprite(SPRITES.PLAYER_SIDE, 'knight', 0, 0);
     }
 
     private mapSprite(id: number, sheet: string, col: number, row: number, cols: number = 1, rows: number = 1) {
