@@ -915,25 +915,46 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                 return false;
             };
 
+            // Helper to update tile occupancy
+            const updateOccupancy = (oldX: number, oldY: number, newX: number, newY: number) => {
+                if (!map) return;
+                const oldTx = Math.floor((oldX + 8) / map.tileSize);
+                const oldTy = Math.floor((oldY + 8) / map.tileSize);
+                const newTx = Math.floor((newX + 8) / map.tileSize);
+                const newTy = Math.floor((newY + 8) / map.tileSize);
+
+                if (oldTx !== newTx || oldTy !== newTy) {
+                    // Clear old
+                    if (oldTx >= 0 && oldTx < map.width && oldTy >= 0 && oldTy < map.height) {
+                        const oldIdx = oldTy * map.width + oldTx;
+                        if (map.tiles[oldIdx].creature === id) {
+                            map.tiles[oldIdx].creature = null;
+                        }
+                    }
+                    // Set new
+                    if (newTx >= 0 && newTx < map.width && newTy >= 0 && newTy < map.height) {
+                        const newIdx = newTy * map.width + newTx;
+                        map.tiles[newIdx].creature = id;
+                    }
+                }
+            };
+
             // X Axis
             if (!checkCollision(nextX + (vel.x > 0 ? 12 : 4), pos.y + 12) &&
                 !checkCollision(nextX + (vel.x > 0 ? 12 : 4), pos.y + 28)) {
                 // No collision
+                updateOccupancy(pos.x, pos.y, nextX, pos.y);
                 pos.x = nextX;
             } else {
                 // Collision!
                 vel.x = 0;
             }
 
-            // Y Axis checks need separate nextY calculation if X moved... 
-            // Actually typical ECS updates X then Y or both. 
-            // Current logic calculated nextX and nextY upfront.
-            // Let's keep X update then Check Y.
-
+            // Y Axis
             const nextYAfterX = pos.y + vel.y * dt;
-
             if (!checkCollision(pos.x + 4, nextYAfterX + (vel.y > 0 ? 28 : 12)) &&
                 !checkCollision(pos.x + 12, nextYAfterX + (vel.y > 0 ? 28 : 12))) {
+                updateOccupancy(pos.x, pos.y, pos.x, nextYAfterX);
                 pos.y = nextYAfterX;
             } else {
                 vel.y = 0;
@@ -1426,19 +1447,7 @@ function getTileVariant(x: number, y: number, numVariants: number): number {
 const GRASS_VARIANTS = [16, 16, 16, 62, 63, 64]; // 50% base, 16.6% dark, 16.6% light, 16.6% flowers
 
 export function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
-    let camX = 0, camY = 0;
-    const cameraEntity = world.query([Camera])[0];
-    if (cameraEntity !== undefined) {
-        const cam = world.getComponent(cameraEntity, Camera)!;
-        camX = Math.floor(cam.x + shakeOffsetX);
-        camY = Math.floor(cam.y + shakeOffsetY);
-    }
-    // --- Tile Rendering ---
-    const mapEntities = world.query([TileMap]);
-    if (mapEntities.length > 0) {
-        const id = mapEntities[0];
-        const map = world.getComponent(id, TileMap)!;
-    }
+    // Deprecated. Merged into renderSystem.
 }
 
 export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
@@ -1453,103 +1462,115 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
         camY = Math.floor(cam.y + (typeof shakeOffsetY !== 'undefined' ? shakeOffsetY : 0));
     }
 
-    // Collect visible sprites with their "bottom Y" for Y-sorting (2.5D depth)
-    const entities = world.query([Position, Sprite]);
+    const mapEntities = world.query([TileMap]);
+    if (mapEntities.length === 0) return;
+    const map = world.getComponent(mapEntities[0], TileMap)!;
 
-    // Sort by bottom Y (pos.y + sprite.size) so lower objects appear IN FRONT
-    const sorted = entities.sort((a, b) => {
-        const posA = world.getComponent(a, Position)!;
-        const spriteA = world.getComponent(a, Sprite)!;
-        const posB = world.getComponent(b, Position)!;
-        const spriteB = world.getComponent(b, Sprite)!;
-        // Bottom Y = position Y + sprite height
-        const bottomA = posA.y + spriteA.size;
-        const bottomB = posB.y + spriteB.size;
-        return bottomA - bottomB;
-    });
+    // Viewport Culling
+    const startCol = Math.floor(Math.max(0, camX / map.tileSize));
+    const endCol = Math.floor(Math.min(map.width, (camX + 320) / map.tileSize + 1));
+    const startRow = Math.floor(Math.max(0, camY / map.tileSize));
+    const endRow = Math.floor(Math.min(map.height, (camY + 240) / map.tileSize + 1));
 
-    let renderedCount = 0;
-    for (const id of sorted) {
-        const pos = world.getComponent(id, Position)!;
-        const sprite = world.getComponent(id, Sprite)!;
+    const overlays: number[] = []; // Store IDs to draw HUDs later
 
-        // Culling
-        if (pos.x - camX < -32 || pos.x - camX > 320 || pos.y - camY < -32 || pos.y - camY > 240) continue;
+    // --- MAIN RENDER LOOP (Y-Sorted / Row-by-Row) ---
+    // Tibia-like: Draw Row N (Ground -> Items -> Creature) -> Next Row
+    for (let r = startRow; r < endRow; r++) {
+        for (let c = startCol; c < endCol; c++) {
+            const idx = r * map.width + c;
+            const tile = map.tiles[idx];
+            if (!tile) continue;
 
-        drawSprite(ctx, sprite.uIndex, Math.floor(pos.x - camX), Math.floor(pos.y - camY), sprite.size, sprite.flipX);
-        renderedCount++;
+            const drawX = Math.floor(c * map.tileSize - camX);
+            const drawY = Math.floor(r * map.tileSize - camY);
 
-        // Draw Health Bar for enemies (entities with Health but not PlayerControllable)
-        const health = world.getComponent(id, Health);
-        const isPlayer = world.getComponent(id, PlayerControllable);
-        if (health && !isPlayer && health.current < health.max) {
-            const barWidth = sprite.size;
-            const barHeight = 4;
-            const barX = Math.floor(pos.x - camX);
-            const barY = Math.floor(pos.y - camY) - 6;
-            const healthPercent = health.current / health.max;
-
-            // Background (dark red)
-            ctx.fillStyle = '#400';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-
-            // Health (green to red gradient based on health)
-            if (healthPercent > 0.5) {
-                ctx.fillStyle = '#0a0';
-            } else if (healthPercent > 0.25) {
-                ctx.fillStyle = '#aa0';
-            } else {
-                ctx.fillStyle = '#a00';
+            // 1. Draw Tile Items (Ground -> Walls -> Objects)
+            for (const item of tile.items) {
+                drawSprite(ctx, item.id, drawX, drawY, map.tileSize);
             }
-            ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
 
-            // Border
-            ctx.strokeStyle = '#000';
+            // 2. Draw Creature (if on this tile)
+            if (tile.creature) {
+                const id = tile.creature;
+                // Verify entity still exists/valid
+                const pos = world.getComponent(id, Position);
+                const sprite = world.getComponent(id, Sprite);
+
+                if (pos && sprite) {
+                    // Use ACTUAL position for smooth movement, but purely strictly ordered by this tile loop
+                    const px = Math.floor(pos.x - camX);
+                    const py = Math.floor(pos.y - camY);
+
+                    // Center correction if sprite is larger than tile?
+                    // Typically mapped to foot position. 
+                    // Draw sprite
+                    drawSprite(ctx, sprite.uIndex, px, py, sprite.size, sprite.flipX);
+
+                    // Add to overlay queue
+                    overlays.push(id);
+                }
+            }
+        }
+    }
+
+    // 3. Draw "Free" Entities (Particles, Projectiles) - On Top for now
+    // Ideally these would be sorted into the rows too, but simple z-buffer is fine for FX
+    // Particles are handled in textRenderSystem currently.
+
+    // Projectiles
+    const projectiles = world.query([Position, Projectile, Sprite]);
+    for (const pid of projectiles) {
+        const pos = world.getComponent(pid, Position)!;
+        const sprite = world.getComponent(pid, Sprite)!;
+        if (pos.x - camX > -32 && pos.x - camX < 320 && pos.y - camY > -32 && pos.y - camY < 240) {
+            drawSprite(ctx, sprite.uIndex, Math.floor(pos.x - camX), Math.floor(pos.y - camY), sprite.size, sprite.flipX);
+        }
+    }
+
+    // 4. Overlays (Health Bars, Names)
+    for (const id of overlays) {
+        drawOverlays(world, ctx, id, camX, camY);
+    }
+
+    // Draw Target Reticle
+    const player = world.query([PlayerControllable, Target])[0];
+    if (player !== undefined) {
+        const targetComp = world.getComponent(player, Target)!;
+        const tPos = world.getComponent(targetComp.targetId, Position);
+        if (tPos) {
+            const tx = Math.floor(tPos.x - camX);
+            const ty = Math.floor(tPos.y - camY);
+            ctx.strokeStyle = '#ff0000';
             ctx.lineWidth = 1;
-            ctx.strokeRect(barX, barY, barWidth, barHeight);
+            ctx.strokeRect(tx, ty, 32, 32); // Assume 32x32 for now, or use target's sprite size
         }
+    }
 
-        // Draw NPC Name Labels (for entities with Name and QuestGiver or Interactable)
-        const nameComp = world.getComponent(id, Name);
-        const isQuestGiver = world.getComponent(id, QuestGiver);
-        const isInteractable = world.getComponent(id, Interactable);
-        if (nameComp && (isQuestGiver || isInteractable) && !isPlayer) {
-            const nameX = Math.floor(pos.x - camX + sprite.size / 2);
-            const nameY = Math.floor(pos.y - camY) - 6;
-
-            ctx.font = 'bold 12px "VT323", monospace';
-            ctx.textAlign = 'center';
-            const textWidth = ctx.measureText(nameComp.value).width;
-
-            // Background (solid black for better contrast)
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(nameX - textWidth / 2 - 3, nameY - 11, textWidth + 6, 14);
-
-            // Text shadow
-            ctx.fillStyle = '#000';
-            ctx.fillText(nameComp.value, nameX + 1, nameY + 1);
-
-            // Name text (gold for quest givers, white for others)
-            ctx.fillStyle = isQuestGiver ? '#ffd700' : '#ffffff';
-            ctx.fillText(nameComp.value, nameX, nameY);
+    // DEBUG: Draw collision box if entity has a Collider component
+    if (DEBUG_COLLIDERS) {
+        const colliders = world.query([Position, Collider]);
+        for (const id of colliders) {
+            const pos = world.getComponent(id, Position)!;
+            const collider = world.getComponent(id, Collider)!;
+            const colX = Math.floor(pos.x + collider.offsetX - camX);
+            const colY = Math.floor(pos.y + collider.offsetY - camY);
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(colX, colY, collider.width, collider.height);
         }
+    }
 
-        // DEBUG: Draw collision box if entity has a Collider component
-        if (DEBUG_COLLIDERS) {
-            const collider = world.getComponent(id, Collider);
-            if (collider) {
-                const colX = Math.floor(pos.x + collider.offsetX - camX);
-                const colY = Math.floor(pos.y + collider.offsetY - camY);
-                ctx.strokeStyle = '#ff0000';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(colX, colY, collider.width, collider.height);
-            }
-        }
+    // DEBUG: Draw AI state name above enemies
+    if (DEBUG_AI_STATES) {
+        const aiEntities = world.query([Position, Sprite, AI]);
+        for (const id of aiEntities) {
+            const pos = world.getComponent(id, Position)!;
+            const sprite = world.getComponent(id, Sprite)!;
+            const aiComp = world.getComponent(id, AI)!;
+            const isPlayer = world.getComponent(id, PlayerControllable);
 
-        // DEBUG: Draw AI state name above enemies
-        if (DEBUG_AI_STATES) {
-            const aiComp = world.getComponent(id, AI);
-            if (aiComp && !isPlayer) {
+            if (!isPlayer) {
                 const stateX = Math.floor(pos.x - camX + sprite.size / 2);
                 const stateY = Math.floor(pos.y - camY) - 18; // Above health bar
 
@@ -1570,20 +1591,70 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
             }
         }
     }
+}
 
-    // Draw Target Reticle
-    const player = world.query([PlayerControllable, Target])[0];
-    if (player !== undefined) {
-        const targetComp = world.getComponent(player, Target)!;
-        const tPos = world.getComponent(targetComp.targetId, Position);
-        if (tPos) {
-            const tx = Math.floor(tPos.x - camX);
-            const ty = Math.floor(tPos.y - camY);
-            ctx.strokeStyle = '#ff0000';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(tx, ty, 32, 32); // Assume 32x32 for now, or use target's sprite size
+// Separate function for Overlays to keep loop clean
+// Separate function for Overlays to keep loop clean
+function drawOverlays(world: World, ctx: CanvasRenderingContext2D, id: number, camX: number, camY: number) {
+    const pos = world.getComponent(id, Position)!;
+    const sprite = world.getComponent(id, Sprite)!;
+    const health = world.getComponent(id, Health);
+    const nameComp = world.getComponent(id, Name);
+    const isPlayer = world.getComponent(id, PlayerControllable);
+
+    // Health Bar
+    if (health && !isPlayer && health.current < health.max) {
+        const barWidth = sprite.size;
+        const barHeight = 4;
+        const barX = Math.floor(pos.x - camX);
+        const barY = Math.floor(pos.y - camY) - 6;
+        const healthPercent = health.current / health.max;
+
+        // Background (dark red)
+        ctx.fillStyle = '#400';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        // Health (green to red gradient based on health)
+        if (healthPercent > 0.5) {
+            ctx.fillStyle = '#0a0';
+        } else if (healthPercent > 0.25) {
+            ctx.fillStyle = '#aa0';
+        } else {
+            ctx.fillStyle = '#a00';
         }
+        ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+
+        // Border
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
     }
+
+    // Draw NPC Name Labels (for entities with Name and QuestGiver or Interactable)
+    const isQuestGiver = world.getComponent(id, QuestGiver);
+    const isInteractable = world.getComponent(id, Interactable);
+    if (nameComp && (isQuestGiver || isInteractable) && !isPlayer) {
+        const nameX = Math.floor(pos.x - camX + sprite.size / 2);
+        const nameY = Math.floor(pos.y - camY) - 6;
+
+        ctx.font = 'bold 12px "VT323", monospace';
+        ctx.textAlign = 'center';
+        const textWidth = ctx.measureText(nameComp.value).width;
+
+        // Background (solid black for better contrast)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(nameX - textWidth / 2 - 3, nameY - 11, textWidth + 6, 14);
+
+        // Text shadow
+        ctx.fillStyle = '#000';
+        ctx.fillText(nameComp.value, nameX + 1, nameY + 1);
+
+        // Name text (gold for quest givers, white for others)
+        ctx.fillStyle = isQuestGiver ? '#ffd700' : '#ffffff';
+        ctx.fillText(nameComp.value, nameX, nameY);
+    }
+
+
 
 }
 

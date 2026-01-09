@@ -22,6 +22,7 @@ export class TileItem {
 
 export class Tile {
     items: TileItem[] = []; // Stack: [Ground, ..., TopItem]
+    creature: number | null = null; // Entity ID of creature on this tile
 
     // Helper to add items easily
     add(id: number) {
