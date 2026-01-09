@@ -1063,11 +1063,8 @@ class Game {
 // Use this to align your 'tileset.png' perfectly.
 
 window.addEventListener('keydown', (e) => {
-    const game = (window as any).game;
-    if (!game) return;
-
-    // Use 'forest' key (which maps to trees/rocks)
-    const config = game.assets.sheetConfigs.get('forest');
+    // FIX: Use the imported assetManager directly, not game.assets
+    const config = (assetManager as any).sheetConfigs.get('forest');
     if (!config) return;
 
     // ARROW KEYS: Move the image (Offset)
