@@ -1,19 +1,18 @@
 import { World, InputHandler } from './engine';
-import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, uiControlSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, consumeItem, safeZoneRegenSystem, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell, updateStatsFromPassives, AI, Quest, QuestLog, QuestGiver, Interactable, Name, Item } from './game';
-import { Vocation, lightingRenderSystem, LightSource, RemotePlayer, Sprite, SPRITES, spriteSheet, Velocity } from './game'; // Fix TS2552
+import { inputSystem, movementSystem, renderSystem, tileRenderSystem, aiSystem, interactionSystem, itemPickupSystem, combatSystem, cameraSystem, floatingTextSystem, textRenderSystem, consumableSystem, enemyCombatSystem, uiControlSystem, magicSystem, projectileSystem, particleSystem, screenShakeSystem, decaySystem, castSpell, consumeItem, safeZoneRegenSystem, deathSystem, createPlayer, createEnemy, createBoss, createNPC, createMerchant, createItem, createTeleporter, createFireEnemy, createIceEnemy, createWaterEnemy, createEarthEnemy, createFinalBoss, createSealedGate, dungeonSystem, equipmentLightSystem, TileMap, Camera, FloatingText, Health, PlayerControllable, Inventory, Facing, Mana, Experience, Skills, Position, NetworkItem, SpellBook, SkillPoints, ActiveSpell, updateStatsFromPassives, AI, Quest, QuestLog, QuestGiver, Interactable, Name, Item, DungeonEntrance, DungeonExit } from './game';
+import { Vocation, lightingRenderSystem, LightSource, RemotePlayer, Sprite, Velocity } from './game';
+import { SPRITES, spriteSheet, assetManager } from './assets';
 import { UIManager, ConsoleManager, CharacterCreation } from './ui';
-import { saveGame, loadGame } from './save';
+import { saveGame, loadGame, hasSave, getSavedSeed } from './save';
 import { NetworkManager } from './network';
-import { generateMap } from './map_gen';
+import { generateOverworld, generateDungeon } from './map_gen';
+import { PixelRenderer, BUFFER_WIDTH, BUFFER_HEIGHT } from './renderer';
 
 import { AudioController } from './audio';
 
-const CANVAS_WIDTH = 320;
-const CANVAS_HEIGHT = 240;
-
 class Game {
     private canvas: HTMLCanvasElement;
-    private ctx: CanvasRenderingContext2D;
+    private renderer: PixelRenderer;
     private lastTime: number = 0;
     private running: boolean = true;
     public pvpEnabled: boolean = false; // Safe by default
@@ -22,6 +21,7 @@ class Game {
     private mapHeightPixels: number = 0;
     private spawnX: number = 100;
     private spawnY: number = 100;
+    private currentSeed: number = 0;
 
     public world: World;
     private input: InputHandler;
@@ -29,16 +29,13 @@ class Game {
     public console: ConsoleManager;
     private network: NetworkManager;
     public audio: AudioController;
+    public assetDebugMode: boolean = false; // Force ON for debugging
 
     constructor() {
         this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-        this.ctx = this.canvas.getContext('2d')!;
 
-        // Explicitly set internal resolution
-        this.canvas.width = CANVAS_WIDTH;
-        this.canvas.height = CANVAS_HEIGHT;
-
-        // Initial UI Render - Removed invalid early call
+        // Initialize Virtual Console renderer (handles off-screen buffer and upscaling)
+        this.renderer = new PixelRenderer(this.canvas);
 
         // Initialize ECS and UI
         this.world = new World();
@@ -122,13 +119,60 @@ class Game {
 
 
 
+        // --- STYLE SWITCHER (Debug Tool) ---
+        (window as any).debugFloorOffset = 1; // Default
+        console.log("Tile Hunter Active. Use '[' and ']' to change floor index.");
+
+        window.addEventListener('keydown', (e) => {
+            const configs = (assetManager as any).sheetConfigs;
+
+            // --- TILE HUNTER KEYS ---
+            if (e.key === ']') {
+                (window as any).debugFloorOffset++;
+                console.log(`Current Floor Index: ${(window as any).debugFloorOffset}`);
+                this.console.addSystemMessage(`Floor Index: ${(window as any).debugFloorOffset}`);
+            }
+            if (e.key === '[') {
+                (window as any).debugFloorOffset--;
+                if ((window as any).debugFloorOffset < 0) (window as any).debugFloorOffset = 0;
+                console.log(`Current Floor Index: ${(window as any).debugFloorOffset}`);
+                this.console.addSystemMessage(`Floor Index: ${(window as any).debugFloorOffset}`);
+            }
+            // ------------------------
+
+            if (e.key === '1') {
+                configs.set('forest', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+                const hr = { tileSize: 64, stride: 64, offsetX: 0, offsetY: 0 };
+                ['mage', 'knight', 'orc', 'skeleton', 'wolf'].forEach((k: any) => configs.set(k, hr));
+                this.console.addSystemMessage("Applied Mode 1: Standard (0 Offset)");
+                (assetManager as any).buildSpriteCache(); // Force Rebuild
+                console.log("Applied Mode 1");
+            }
+            if (e.key === '2') {
+                configs.set('forest', { tileSize: 30, stride: 32, offsetX: 33, offsetY: 33 });
+                this.console.addSystemMessage("Applied Mode 2: Ruler Fix (33 Offset)");
+                (assetManager as any).buildSpriteCache();
+                console.log("Applied Mode 2");
+            }
+            if (e.key === '3') {
+                configs.set('forest', { tileSize: 32, stride: 32, offsetX: 1, offsetY: 1 });
+                this.console.addSystemMessage("Applied Mode 3: 1px Offset");
+                (assetManager as any).buildSpriteCache();
+                console.log("Applied Mode 3");
+            }
+        });
+
         // Link UI to Console for system messages
         this.ui.console = this.console;
     }
 
     async init() {
         this.console.addSystemMessage("Connecting to Retro RPG Server...");
-        this.console.addSystemMessage("Assets Loading...");
+        this.console.addSystemMessage("Loading Assets...");
+
+        await assetManager.load();
+        this.console.addSystemMessage("Assets Loaded.");
+
 
         // Setup Network Login Callback
         // Setup Network Login Callback
@@ -363,22 +407,49 @@ class Game {
         }, true); // Capture phase
         // Better: InputHandler check ui.isChatOpen()
 
-        // Attempt Login
-        this.network.login("Player" + Math.floor(Math.random() * 1000));
+        // Check if running in browser without Electron (offline mode)
+        if (!(window as any).electronAPI?.sendPacket) {
+            // No Electron API - start in offline/single-player mode
+            console.log("[Game] No server connection - starting in OFFLINE mode.");
+            this.console.addSystemMessage("Playing in Offline Mode.");
+
+            // IMPROVED INIT LOGIC: Check for Save First
+            if (hasSave()) {
+                const savedSeed = getSavedSeed();
+                console.log(`[Init] Save found. Saved Seed: ${savedSeed}`);
+
+                if (savedSeed) {
+                    this.currentSeed = savedSeed;
+                    this.startGame(this.currentSeed, this.spawnX, this.spawnY, true); // true = load save mode
+                } else {
+                    // Legacy Save (No seed) - We must fallback.
+                    // Option: Use a fixed seed or rand. 
+                    // Let's use a fixed seed for consistency if migration fails, or just random.
+                    console.warn("[Init] Legacy save has no seed. Using backup.");
+                    this.currentSeed = 99999;
+                    this.startGame(this.currentSeed, this.spawnX, this.spawnY, true);
+                }
+            } else {
+                // New Game
+                // Use random seed and center spawn for offline play
+                this.currentSeed = 99999;
+                const offlineSpawnX = 128 * 32; // Center of 256x256 map
+                const offlineSpawnY = 128 * 32;
+                this.startGame(this.currentSeed, offlineSpawnX, offlineSpawnY, false);
+            }
+
+        } else {
+            // Attempt Login (Electron/multiplayer mode)
+            this.network.login("Player" + Math.floor(Math.random() * 1000));
+        }
     }
 
-    async startGame(seed: number, spawnX: number, spawnY: number) {
+    async startGame(seed: number, spawnX: number, spawnY: number, loadFromSave: boolean = false) {
         try {
-            // Generate Map Procedurally (Larger world for Crypt)
-            // Use Global Seed from Server
-            const mapData = generateMap(256, 256, seed);
-            console.log(`[Main] Map Generated. Entities: ${mapData.entities.length}.`);
-
-            // FORCE DEBUG TILE (Tree) next to spawn
-            const tileX = Math.floor(spawnX / 32) + 2;
-            const tileY = Math.floor(spawnY / 32);
-            mapData.data[tileY * 256 + tileX] = 34; // TREE (Test)
-            console.log(`[Debug] Forced Tree (ID 34) at ${tileX}, ${tileY}`);
+            // Generate Map Procedurally (Sourced from Seed)
+            // If loading from save, this RECONSTRUCTS the world securely.
+            const mapData = generateOverworld(256, 256, seed);
+            console.log(`[Main] Map Generated. Entities: ${mapData.entities.length}. Seed: ${seed}`);
 
             // Create Map Entity
             const mapEntity = this.world.createEntity();
@@ -418,6 +489,69 @@ class Game {
                         this.world.addComponent(s, new Sprite(ent.sprite, ent.size));
                     } else if (ent.type === 'quest_npc') {
                         this.createQuestNPC(ent.x, ent.y, ent.name, ent.quests, ent.sprite);
+                    } else if (ent.type === 'chest') {
+                        // Treasure chest - interactable loot container
+                        const chest = this.world.createEntity();
+                        this.world.addComponent(chest, new Position(ent.x, ent.y));
+                        this.world.addComponent(chest, new Sprite(73, 32)); // CHEST_CLOSED
+                        this.world.addComponent(chest, new Interactable('Press E to open'));
+                        this.world.addComponent(chest, new Name(`${ent.tier.charAt(0).toUpperCase() + ent.tier.slice(1)} Chest`));
+                        // Store loot data in a custom component or as metadata
+                        (this.world as any).chestLoot = (this.world as any).chestLoot || new Map();
+                        (this.world as any).chestLoot.set(chest, { ...ent.loot, opened: false });
+                    } else if (ent.type === 'temple') {
+                        // Temple - spawn point setter
+                        const temple = this.world.createEntity();
+                        this.world.addComponent(temple, new Position(ent.x, ent.y));
+                        this.world.addComponent(temple, new Sprite(76, 32)); // TEMPLE
+                        this.world.addComponent(temple, new Interactable('Press E to set spawn'));
+                        this.world.addComponent(temple, new Name(ent.name || 'Temple'));
+                        this.world.addComponent(temple, new LightSource(64, '#4080FF', true)); // Blue glow
+
+                        // If default temple, set initial spawn
+                        if (ent.isDefault) {
+                            this.spawnX = ent.x;
+                            this.spawnY = ent.y;
+                        }
+                    } else if (ent.type === 'campfire') {
+                        // Campfire with warm light
+                        const fire = this.world.createEntity();
+                        this.world.addComponent(fire, new Position(ent.x, ent.y));
+                        this.world.addComponent(fire, new Sprite(80, 32)); // CAMPFIRE
+                        this.world.addComponent(fire, new LightSource(80, '#FF8800', true)); // Warm flickering glow
+                    } else if (ent.type === 'signpost') {
+                        // Signpost with direction text
+                        const sign = this.world.createEntity();
+                        this.world.addComponent(sign, new Position(ent.x, ent.y));
+                        this.world.addComponent(sign, new Sprite(92, 32)); // SIGNPOST
+                        this.world.addComponent(sign, new Interactable(ent.text || 'A weathered signpost'));
+                        this.world.addComponent(sign, new Name('Signpost'));
+                    } else if (ent.type === 'ice_enemy') {
+                        createIceEnemy(this.world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+                    } else if (ent.type === 'fire_enemy') {
+                        createFireEnemy(this.world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+                    } else if (ent.type === 'water_enemy') {
+                        createWaterEnemy(this.world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+                    } else if (ent.type === 'earth_enemy') {
+                        createEarthEnemy(this.world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+                    } else if (ent.type === 'dungeon_entrance') {
+                        const portal = this.world.createEntity();
+                        this.world.addComponent(portal, new Position(ent.x, ent.y));
+                        this.world.addComponent(portal, new Sprite(77, 32)); // CAVE/PORTAL
+                        this.world.addComponent(portal, new DungeonEntrance(ent.dungeonType, ent.label));
+                        this.world.addComponent(portal, new Interactable(`Enter ${ent.label}`));
+                        this.world.addComponent(portal, new Name(ent.label));
+                    } else if (ent.type === 'dungeon_exit') {
+                        const portal = this.world.createEntity();
+                        this.world.addComponent(portal, new Position(ent.x, ent.y));
+                        this.world.addComponent(portal, new Sprite(77, 32));
+                        this.world.addComponent(portal, new DungeonExit(ent.label));
+                        this.world.addComponent(portal, new Interactable(ent.label));
+                        this.world.addComponent(portal, new Name(ent.label));
+                    } else if (ent.type === 'final_boss') {
+                        createFinalBoss(this.world, ent.x, ent.y);
+                    } else if (ent.type === 'sealed_gate') {
+                        createSealedGate(this.world, ent.x, ent.y);
                     }
                 }
             }
@@ -428,177 +562,28 @@ class Game {
             // Initial UI Render
             this.ui.updateStatus(150, 150, 0, 100, 400, 0, 1, 0, 100);
 
-            const hasSave = localStorage.getItem('retro-rpg-save-v2');
-
-            if (hasSave) {
-                console.log("Save found. Loading game...");
-                createPlayer(this.world, this.spawnX, this.spawnY, this.input, 'knight');
+            // LOGIC FORK: Load or Create
+            if (loadFromSave) {
+                console.log("Loading Game logic...");
+                createPlayer(this.world, this.spawnX, this.spawnY, this.input, 'knight'); // Create temp player to attach data to
                 if (loadGame(this.world, this.ui)) {
-                    // Ensure Skills exist (Migration for old saves)
-                    const player = this.world.query([PlayerControllable])[0];
-                    if (player !== undefined) {
-                        // Migration 1: Skills
-                        if (!this.world.getComponent(player, Skills)) {
-                            this.world.addComponent(player, new Skills());
-                            this.world.addComponent(player, new Vocation("Knight", 15, 5, 25)); // Default
-                            this.console.addSystemMessage("Save migrated: Skills added.");
-                        }
-
-                        // Migration 2: Map Expansion (Old center ~480, New center ~1024)
-                        const pos = this.world.getComponent(player, Position)!;
-                        if (pos.x < 800) {
-                            pos.x = this.spawnX;
-                            pos.y = this.spawnY;
-                            this.console.addSystemMessage("World Updated: Moved to new village.");
-                        }
-
-                        // Migration 3: Fix Broken Sprites (Legacy Save Data)
-                        const inv = this.world.getComponent(player, Inventory);
-                        if (inv) {
-                            for (const [_, item] of inv.items) {
-                                if (item.name === "Tower Shield") {
-                                    item.uIndex = SPRITES.WOODEN_SHIELD; // 33
-                                }
-                                if (item.uIndex === SPRITES.KNIGHT || item.uIndex === 0) {
-                                    // If it's Armor, update to new Armor Sprite
-                                    if (item.slot === 'body' || item.slot === 'head') {
-                                        item.uIndex = SPRITES.ARMOR; // 41
-                                    }
-                                }
-                            }
-                        }
-
-
-
-                        // Migration 5: Reset Corrupted Inventory
-                        if (inv && !localStorage.getItem('retro-rpg-migration-5')) {
-                            inv.items.clear();
-                            inv.storage = [];
-                            inv.gold = 100;
-
-                            // Starter Gear
-                            inv.items.set('rhand', new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common'));
-                            inv.items.set('lhand', new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3));
-                            inv.items.set('body', new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6));
-
-                            // Potions
-                            inv.storage.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'));
-                            inv.storage.push(new Item('Mana Potion', 'consumable', SPRITES.MANA_POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
-
-                            localStorage.setItem('retro-rpg-migration-5', 'true');
-                            this.console.addSystemMessage("NOTICE: Inventory Reset to fix corruption.");
-                        }
-
-                        // Migration 6: Fix Wrong Sprites (Gold/Meat)
-                        if (inv && !localStorage.getItem('retro-rpg-migration-6')) {
-                            const fixItem = (item: Item) => {
-                                if (item.name === 'Wolf Meat') item.uIndex = SPRITES.MEAT;
-                                if (item.name === 'Rotten Flesh') item.uIndex = SPRITES.ROTTEN_MEAT;
-                                if (item.name === 'Gold Coin') item.uIndex = SPRITES.COIN;
-                            };
-                            inv.items.forEach(fixItem);
-                            inv.storage.forEach(fixItem);
-
-                            localStorage.setItem('retro-rpg-migration-6', 'true');
-                            this.console.addSystemMessage("Updated Item Sprites.");
-                        }
-
-                        // Migration 7: Fix Swapped Name/Slot (Undo ITEM_DB corruption)
-                        if (inv && !localStorage.getItem('retro-rpg-migration-7')) {
-                            const validSlots = ['rhand', 'lhand', 'body', 'head', 'legs', 'feet', 'consumable', 'currency', 'food', 'potion'];
-                            const fixSwap = (item: Item) => {
-                                // Check if name is actually a slot (corruption from reversed arguments)
-                                if (validSlots.includes(item.name) && !validSlots.includes(item.slot)) {
-                                    const oldName = item.name;
-                                    item.name = item.slot;
-                                    item.slot = oldName;
-                                }
-                                // Ensure defense is present and number
-                                if (item.defense === undefined) item.defense = 0;
-                            };
-                            inv.items.forEach(fixSwap);
-                            inv.storage.forEach(fixSwap);
-
-                            localStorage.setItem('retro-rpg-migration-7', 'true');
-                            this.console.addSystemMessage("Fixed Invalid Items (Migration 7).");
-                        }
-
-                        // Migration 8: Restore missing defense values from known items
-                        if (inv && !localStorage.getItem('retro-rpg-migration-8')) {
-                            // Hardcoded defense values for known items (from ITEM_DB)
-                            const defenseMap: Record<string, number> = {
-                                'Leather Armor': 6,
-                                'Wolf Pelt': 3,
-                                'Orc Armor': 10,
-                                'Plate Armor': 20,
-                                'Skull Helm': 5,
-                                'Crown of Kings': 10,
-                                'Orc Shield': 8,
-                                'Dragon Shield': 15,
-                                'Wooden Shield': 3,
-                                'Bear Fur': 5,
-                                'Bandit Hood': 3,
-                                'Wooden Club': 2,
-                                'Iron Mace': 4,
-                                'Warhammer': 8,
-                                'Morning Star': 12,
-                                'Noble Sword': 5
-                            };
-
-                            const fixDefense = (item: Item) => {
-                                const correctDef = defenseMap[item.name];
-                                if (correctDef !== undefined && item.defense !== correctDef) {
-                                    item.defense = correctDef;
-                                }
-                            };
-                            inv.items.forEach(fixDefense);
-                            inv.storage.forEach(fixDefense);
-
-                            localStorage.setItem('retro-rpg-migration-8', 'true');
-                            this.console.addSystemMessage("Restored Defense stats (Migration 8).");
-                        }
-
-                        // Migration 9: Force reset inventory to fix defense on starter gear
-                        if (inv && !localStorage.getItem('retro-rpg-migration-9')) {
-                            inv.items.clear();
-                            inv.storage = [];
-
-                            // Starter Gear with correct defense values
-                            inv.items.set('rhand', new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common', 0));
-                            inv.items.set('lhand', new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3));
-                            inv.items.set('body', new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6));
-
-                            // Potions
-                            inv.storage.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common', 0));
-                            inv.storage.push(new Item('Mana Potion', 'consumable', SPRITES.MANA_POTION, 0, 40, 'Restores 30 mana', 'none', 'common', 0));
-
-                            localStorage.setItem('retro-rpg-migration-9', 'true');
-                            this.console.addSystemMessage("Inventory reset with fixed Defense stats (Migration 9).");
-                        }
-                    }
-                    this.console.addSystemMessage("Save Loaded.");
-                    // Force Inventory Update
-                    const inv = this.world.getComponent(player, Inventory);
-                    if (inv) this.ui.updateInventory(inv, spriteSheet.src);
-                }
-                this.startGameLoop();
-            } else {
-                console.log("No save found. Starting Character Creation...");
-                const cc = new CharacterCreation((vocation) => {
-                    console.log(`Vocation selected: ${vocation}`);
-                    createPlayer(this.world, this.spawnX, this.spawnY, this.input, vocation);
-                    this.console.addSystemMessage(`You have chosen the path of the ${vocation}.`);
-
-                    // Force Inventory Update (New Character)
-                    const player = this.world.query([PlayerControllable])[0];
-                    if (player !== undefined) {
-                        const inv = this.world.getComponent(player, Inventory);
-                        if (inv) this.ui.updateInventory(inv, spriteSheet.src);
-                    }
-
+                    this.postLoadMigrations(); // Extracted Function
                     this.startGameLoop();
-                });
-                cc.show();
+                } else {
+                    console.error("Save load failed. Starting fresh.");
+                    // If load fail, maybe reset? Or just throw.
+                    // Fallback to creation
+                    this.createCharacterFlow();
+                }
+            } else {
+                this.createCharacterFlow();
+            }
+
+            // Draw 20x20 Grid starting from Offset
+            for (let row = 0; row < 20; row++) {
+                for (let col = 0; col < 20; col++) {
+                    // This loop is empty as per the instruction, assuming it's a placeholder for future drawing logic.
+                }
             }
 
         } catch (e) {
@@ -607,8 +592,179 @@ class Game {
         }
         // Save on Exit/Refresh
         window.addEventListener('beforeunload', () => {
-            if (this.running) saveGame(this.world, this.ui);
+            if (this.running) saveGame(this.world, this.ui, this.currentSeed);
         });
+    }
+
+    createCharacterFlow() {
+        console.log("Starting Character Creation...");
+        const cc = new CharacterCreation((vocation) => {
+            console.log(`Vocation selected: ${vocation}`);
+            createPlayer(this.world, this.spawnX, this.spawnY, this.input, vocation);
+            this.console.addSystemMessage(`You have chosen the path of the ${vocation}.`);
+
+            // Force Inventory Update (New Character)
+            const player = this.world.query([PlayerControllable])[0];
+            if (player !== undefined) {
+                const inv = this.world.getComponent(player, Inventory);
+                if (inv) this.ui.updateInventory(inv, spriteSheet.src);
+            }
+
+            this.startGameLoop();
+        });
+        cc.show();
+    }
+
+    postLoadMigrations() {
+        // Ensure Skills exist (Migration for old saves)
+        const player = this.world.query([PlayerControllable])[0];
+        if (player !== undefined) {
+            // Migration 1: Skills
+            if (!this.world.getComponent(player, Skills)) {
+                this.world.addComponent(player, new Skills());
+                this.world.addComponent(player, new Vocation("Knight", 15, 5, 25)); // Default
+                this.console.addSystemMessage("Save migrated: Skills added.");
+            }
+
+            // MIGRATION 2 REMOVED: No longer need to force position if we loaded correct map
+            /*
+            const pos = this.world.getComponent(player, Position)!;
+            if (pos.x < 800) {
+                pos.x = this.spawnX;
+                pos.y = this.spawnY;
+                this.console.addSystemMessage("World Updated: Moved to new village.");
+            }
+            */
+            // Migration 3: Fix Broken Sprites (Legacy Save Data)
+            const inv = this.world.getComponent(player, Inventory);
+            if (inv) {
+                for (const [_, item] of inv.items) {
+                    if (item.name === "Tower Shield") {
+                        item.uIndex = SPRITES.WOODEN_SHIELD; // 33
+                    }
+                    if (item.uIndex === SPRITES.KNIGHT || item.uIndex === 0) {
+                        // If it's Armor, update to new Armor Sprite
+                        if (item.slot === 'body' || item.slot === 'head') {
+                            item.uIndex = SPRITES.ARMOR; // 41
+                        }
+                    }
+                }
+            }
+
+
+
+            // Migration 5: Reset Corrupted Inventory
+            if (inv && !localStorage.getItem('retro-rpg-migration-5')) {
+                inv.items.clear();
+                inv.storage = [];
+                inv.gold = 100;
+
+                // Starter Gear
+                inv.items.set('rhand', new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common'));
+                inv.items.set('lhand', new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3));
+                inv.items.set('body', new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6));
+
+                // Potions
+                inv.storage.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common'));
+                inv.storage.push(new Item('Mana Potion', 'consumable', SPRITES.MANA_POTION, 0, 40, 'Restores 30 mana', 'none', 'common'));
+
+                localStorage.setItem('retro-rpg-migration-5', 'true');
+                this.console.addSystemMessage("NOTICE: Inventory Reset to fix corruption.");
+            }
+
+            // Migration 6: Fix Wrong Sprites (Gold/Meat)
+            if (inv && !localStorage.getItem('retro-rpg-migration-6')) {
+                const fixItem = (item: Item) => {
+                    if (item.name === 'Wolf Meat') item.uIndex = SPRITES.MEAT;
+                    if (item.name === 'Rotten Flesh') item.uIndex = SPRITES.ROTTEN_MEAT;
+                    if (item.name === 'Gold Coin') item.uIndex = SPRITES.COIN;
+                };
+                inv.items.forEach(fixItem);
+                inv.storage.forEach(fixItem);
+
+                localStorage.setItem('retro-rpg-migration-6', 'true');
+                this.console.addSystemMessage("Updated Item Sprites.");
+            }
+
+            // Migration 7: Fix Swapped Name/Slot (Undo ITEM_DB corruption)
+            if (inv && !localStorage.getItem('retro-rpg-migration-7')) {
+                const validSlots = ['rhand', 'lhand', 'body', 'head', 'legs', 'feet', 'consumable', 'currency', 'food', 'potion'];
+                const fixSwap = (item: Item) => {
+                    // Check if name is actually a slot (corruption from reversed arguments)
+                    if (validSlots.includes(item.name) && !validSlots.includes(item.slot)) {
+                        const oldName = item.name;
+                        item.name = item.slot;
+                        item.slot = oldName;
+                    }
+                    // Ensure defense is present and number
+                    if (item.defense === undefined) item.defense = 0;
+                };
+                inv.items.forEach(fixSwap);
+                inv.storage.forEach(fixSwap);
+
+                localStorage.setItem('retro-rpg-migration-7', 'true');
+                this.console.addSystemMessage("Fixed Invalid Items (Migration 7).");
+            }
+
+            // Migration 8: Restore missing defense values from known items
+            if (inv && !localStorage.getItem('retro-rpg-migration-8')) {
+                // Hardcoded defense values for known items (from ITEM_DB)
+                const defenseMap: Record<string, number> = {
+                    'Leather Armor': 6,
+                    'Wolf Pelt': 3,
+                    'Orc Armor': 10,
+                    'Plate Armor': 20,
+                    'Skull Helm': 5,
+                    'Crown of Kings': 10,
+                    'Orc Shield': 8,
+                    'Dragon Shield': 15,
+                    'Wooden Shield': 3,
+                    'Bear Fur': 5,
+                    'Bandit Hood': 3,
+                    'Wooden Club': 2,
+                    'Iron Mace': 4,
+                    'Warhammer': 8,
+                    'Morning Star': 12,
+                    'Noble Sword': 5
+                };
+
+                const fixDefense = (item: Item) => {
+                    const correctDef = defenseMap[item.name];
+                    if (correctDef !== undefined && item.defense !== correctDef) {
+                        item.defense = correctDef;
+                    }
+                };
+                inv.items.forEach(fixDefense);
+                inv.storage.forEach(fixDefense);
+
+                localStorage.setItem('retro-rpg-migration-8', 'true');
+                this.console.addSystemMessage("Restored Defense stats (Migration 8).");
+            }
+
+            // Migration 9: Force reset inventory to fix defense on starter gear
+            if (inv && !localStorage.getItem('retro-rpg-migration-9')) {
+                inv.items.clear();
+                inv.storage = [];
+
+                // Starter Gear with correct defense values
+                inv.items.set('rhand', new Item('Wooden Sword', 'rhand', SPRITES.WOODEN_SWORD, 3, 10, 'Training weapon', 'sword', 'common', 0));
+                inv.items.set('lhand', new Item('Wooden Shield', 'lhand', SPRITES.WOODEN_SHIELD, 0, 20, 'Simple plank shield', 'none', 'common', 3));
+                inv.items.set('body', new Item('Leather Armor', 'body', SPRITES.ARMOR, 0, 50, 'Basic protection', 'none', 'uncommon', 6));
+
+                // Potions
+                inv.storage.push(new Item('Health Potion', 'consumable', SPRITES.POTION, 0, 30, 'Restores 50 health', 'none', 'common', 0));
+                inv.storage.push(new Item('Mana Potion', 'consumable', SPRITES.MANA_POTION, 0, 40, 'Restores 30 mana', 'none', 'common', 0));
+
+                localStorage.setItem('retro-rpg-migration-9', 'true');
+                this.console.addSystemMessage("Inventory reset with fixed Defense stats (Migration 9).");
+            }
+        }
+        this.console.addSystemMessage("Save Loaded.");
+        // Force Inventory Update
+        if (player) {
+            const inv = this.world.getComponent(player, Inventory);
+            if (inv) this.ui.updateInventory(inv, spriteSheet.src);
+        }
     }
 
     startGameLoop() {
@@ -618,11 +774,12 @@ class Game {
 
         // Auto-Save Loop
         setInterval(() => {
-            if (this.running) saveGame(this.world, this.ui);
+            if (this.running) saveGame(this.world, this.ui, this.currentSeed);
         }, 5000);
     }
 
     update(dt: number) {
+        equipmentLightSystem(this.world);
         inputSystem(this.world, this.input);
 
         // Run Magic System always (to allow toggling UI/Skills)
@@ -652,6 +809,7 @@ class Game {
             // The original consumableSystem call was duplicated, this one is removed as per the instruction's snippet.
             // consumableSystem(this.world, this.input, this.ui); 
             enemyCombatSystem(this.world, dt, this.ui, this.audio);
+            deathSystem(this.world, this.ui, this.spawnX, this.spawnY);
 
             // Audio Updates
             const playerPos = this.world.query([PlayerControllable, Position]).map(id => this.world.getComponent(id, Position)!)[0];
@@ -677,6 +835,7 @@ class Game {
         cameraSystem(this.world, this.mapWidthPixels, this.mapHeightPixels);
 
         interactionSystem(this.world, this.input, this.ui);
+        dungeonSystem(this.world, this.input, this.ui);
 
         // UI Updates
         const playerEntity = this.world.query([PlayerControllable, Health, Inventory])[0];
@@ -741,7 +900,7 @@ class Game {
 
         for (const quest of qLog.quests) {
             const questDiv = document.createElement('div');
-            questDiv.className = `quest-item${quest.completed ? ' quest-completed' : ''}`;
+            questDiv.className = `quest - item${quest.completed ? ' quest-completed' : ''} `;
 
             const nameDiv = document.createElement('div');
             nameDiv.className = 'quest-name';
@@ -762,34 +921,37 @@ class Game {
     }
 
     render() {
-        // Clear screen
-        this.ctx.fillStyle = '#111';
-        this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        // Get the off-screen buffer context (Virtual Console)
+        const ctx = this.renderer.getBufferContext();
+
+        // Clear buffer
+        this.renderer.clear('#111');
 
         // Draw Map FIRST (background)
-        tileRenderSystem(this.world, this.ctx);
+        tileRenderSystem(this.world, ctx);
 
         // Draw Entities (foreground)
-        renderSystem(this.world, this.ctx);
+        renderSystem(this.world, ctx);
 
         // Lighting Overlay (Day: 0.1, Night: 0.9)
-        lightingRenderSystem(this.world, this.ctx, 0.0); // 0.0 = Bright Day
+        lightingRenderSystem(this.world, ctx, 0.0); // 0.0 = Bright Day
 
         // Draw Floating Text (UI overlay layer)
-        textRenderSystem(this.world, this.ctx);
+        textRenderSystem(this.world, ctx);
 
         // Draw Minimap (top-right corner)
         this.drawMinimap();
 
         // Draw debug text
         if (!this.ui.isShowing()) {
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '10px monospace';
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '10px monospace';
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px monospace';
             const pvpStatus = this.pvpEnabled ? "PvP: ON" : "PvP: OFF";
-            this.ctx.fillText(`WASD: Move | SPACE: Talk | F: Attack | P: Toggle PvP (${pvpStatus})`, 4, 10);
+            ctx.fillText(`WASD: Move | SPACE: Talk | F: Attack | P: Toggle PvP (${pvpStatus})`, 4, 10);
         }
+
+        // Present buffer to screen with integer upscaling
+        this.renderer.present();
     }
 
     drawMinimap() {
@@ -897,6 +1059,34 @@ class Game {
     }
 }
 
+// --- SPRITE SLIDER TOOL ---
+// Use this to align your 'tileset.png' perfectly.
+
+window.addEventListener('keydown', (e) => {
+    const game = (window as any).game;
+    if (!game) return;
+
+    // Use 'forest' key (which maps to trees/rocks)
+    const config = game.assets.sheetConfigs.get('forest');
+    if (!config) return;
+
+    // ARROW KEYS: Move the image (Offset)
+    if (e.key === 'ArrowRight') config.offsetX += 1;
+    if (e.key === 'ArrowLeft') config.offsetX -= 1;
+    if (e.key === 'ArrowDown') config.offsetY += 1;
+    if (e.key === 'ArrowUp') config.offsetY -= 1;
+
+    // W / S KEYS: Change grid spacing (Stride)
+    if (e.key === 'w') config.stride += 1;
+    if (e.key === 's') config.stride -= 1;
+
+    // A / D KEYS: Change Tile Size (New Feature for "Entire Sprite" issues)
+    if (e.key === 'a') config.tileSize -= 1;
+    if (e.key === 'd') config.tileSize += 1;
+
+    // LOG THE NUMBERS
+    console.log(`Current Config: offsetX: ${config.offsetX}, offsetY: ${config.offsetY}, stride: ${config.stride}, tileSize: ${config.tileSize}`);
+});
 // Start Game
 window.onload = () => {
     try {

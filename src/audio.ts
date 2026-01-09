@@ -126,6 +126,152 @@ export class AudioController {
         this.playNoise(0.1);
     }
 
+    /**
+     * Play a sound with spatial positioning.
+     * Volume decreases with distance, pans left/right based on position.
+     * @param soundType - Type of sound effect to play
+     * @param sourceX - X position of the sound source
+     * @param sourceY - Y position of the sound source
+     * @param playerX - X position of the player/listener
+     * @param playerY - Y position of the player/listener
+     */
+    playSpatialSound(
+        soundType: 'hit' | 'attack' | 'step' | 'coin' | 'death',
+        sourceX: number,
+        sourceY: number,
+        playerX: number,
+        playerY: number
+    ) {
+        if (!this.initialized) return;
+
+        // Calculate distance
+        const dx = sourceX - playerX;
+        const dy = sourceY - playerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Distance-based volume (0-500px range)
+        const maxDistance = 500;
+        const volume = Math.max(0, 1 - (distance / maxDistance));
+        if (volume <= 0) return; // Too far away
+
+        // Stereo panning based on X difference (-1 left, +1 right)
+        const maxPanDistance = 200;
+        const pan = Math.max(-1, Math.min(1, dx / maxPanDistance));
+
+        // Play the sound through spatial nodes
+        this.playSpatialEffect(soundType, volume, pan);
+    }
+
+    /**
+     * Internal: Play a sound with specified volume and pan.
+     */
+    private playSpatialEffect(soundType: 'hit' | 'attack' | 'step' | 'coin' | 'death', volume: number, pan: number) {
+        const now = this.ctx.currentTime;
+
+        // Create spatial nodes
+        const gainNode = this.ctx.createGain();
+        gainNode.gain.value = volume * 0.4; // Scale with master volume
+
+        // Use StereoPannerNode for left/right positioning
+        const pannerNode = this.ctx.createStereoPanner();
+        pannerNode.pan.value = pan;
+
+        // Connect: sound -> panner -> gain -> master
+        gainNode.connect(this.masterGain);
+        pannerNode.connect(gainNode);
+
+        // Create the appropriate sound
+        switch (soundType) {
+            case 'hit':
+                this.playSpatialNoiseBurst(pannerNode, 0.1);
+                break;
+            case 'attack':
+                this.playSpatialSweep(pannerNode, 400, 100, 0.1);
+                break;
+            case 'step':
+                this.playSpatialNoiseBurst(pannerNode, 0.05);
+                break;
+            case 'coin':
+                this.playSpatialTone(pannerNode, 1200, 'sine', 0.1);
+                break;
+            case 'death':
+                this.playSpatialSweep(pannerNode, 150, 30, 1.0);
+                break;
+        }
+    }
+
+    /**
+     * Internal: Spatial noise burst (hit, step sounds).
+     */
+    private playSpatialNoiseBurst(destination: AudioNode, duration: number) {
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(destination);
+
+        noise.start();
+    }
+
+    /**
+     * Internal: Spatial frequency sweep (attack, death sounds).
+     */
+    private playSpatialSweep(destination: AudioNode, startFreq: number, endFreq: number, duration: number) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(startFreq, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + duration);
+
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(destination);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    /**
+     * Internal: Spatial tone (coin, pickup sounds).
+     */
+    private playSpatialTone(destination: AudioNode, freq: number, type: OscillatorType, duration: number) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(destination);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+
     playCoin() {
         // Ding-Ding
         this.playTone(1200, 'sine', 0.1, 0);

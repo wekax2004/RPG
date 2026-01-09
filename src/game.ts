@@ -11,11 +11,28 @@ import {
     Item, Inventory, Health, Camera, Particle, ScreenShake, FloatingText, Name, QuestLog,
     QuestGiver, Facing, Projectile, Mana, Experience, Merchant, Skill, Skills, Vocation,
     VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable,
-    SpellBook, SkillPoints, ActiveSpell, StatusEffect, Passives, ItemRarity, RARITY_MULTIPLIERS, RARITY_COLORS
+    SpellBook, SkillPoints, ActiveSpell, StatusEffect, Passives, ItemRarity, RARITY_MULTIPLIERS, RARITY_COLORS, StatusOnHit, Locked,
+    DungeonEntrance, DungeonExit, Collider
 } from './components';
+import { generateOverworld, generateDungeon } from './map_gen';
 import { NetworkManager } from './network';
+import { AIState, getStateName } from './ai/states';
 
+// Debug flag to visualize collision boxes
+export const DEBUG_COLLIDERS = true;
 
+// Debug flag to show AI state names above enemies
+// Debug flag to show AI state names above enemies
+export const DEBUG_AI_STATES = true;
+
+// --- Components: Dialogue ---
+export class Dialogue {
+    constructor(
+        public lines: string[] = [],
+        public currentLine: number = 0,
+        public name: string = "Unknown"
+    ) { }
+}
 
 // --- Systems ---
 
@@ -67,7 +84,85 @@ export function inputSystem(world: World, input: InputHandler) {
     }
 }
 
+
+
+export function createNPC(world: World, x: number, y: number, text: string = "Hello!", name: string = "Villager", spriteIndex: number = SPRITES.NPC) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Sprite(spriteIndex));
+    world.addComponent(e, new Facing(0, 1));
+    world.addComponent(e, new Interactable('Press E to talk'));
+    world.addComponent(e, new Name(name));
+
+    // Add Dialogue Component
+    let lines = ["Hello there.", "Nice weather today."];
+    if (name === "Old Man") {
+        lines = [
+            "Greetings, traveler.",
+            "The temple ahead is dangerous.",
+            "Take this sword, it's dangerous alone!"
+        ];
+    } else if (name === "Merchant") {
+        lines = ["I have wares, if you have coin."];
+    }
+
+    world.addComponent(e, new Dialogue(lines, 0, name));
+
+    // NPCs can wander slightly
+    // world.addComponent(e, new AI('wander')); 
+    // For now static to talk easier
+}
+
 export function interactionSystem(world: World, input: InputHandler, ui: UIManager) {
+    // Dialogue Interaction (E key)
+    if (input.isJustPressed('e')) {
+        const player = world.query([PlayerControllable, Position])[0];
+        if (player === undefined) return;
+        const pPos = world.getComponent(player, Position)!;
+
+        // Check Dialogue NPCs
+        const talkers = world.query([Dialogue, Position]);
+        for (const eid of talkers) {
+            const dPos = world.getComponent(eid, Position)!;
+            const dist = Math.sqrt(Math.pow(dPos.x - pPos.x, 2) + Math.pow(dPos.y - pPos.y, 2));
+
+            if (dist < 48) { // 1.5 tiles
+                const dialogue = world.getComponent(eid, Dialogue)!;
+
+                // Interaction Logic
+                // If UI is closed, Open it with Line 0
+                // If UI is open, Advance Line
+                // If End of Lines, Close UI & Reset
+
+                const uiEl = document.getElementById('dialogue-ui');
+                const nameEl = document.getElementById('dialogue-name');
+                const textEl = document.getElementById('dialogue-text');
+
+                if (uiEl && nameEl && textEl) {
+                    if (uiEl.style.display === 'none') {
+                        // Open
+                        uiEl.style.display = 'block';
+                        dialogue.currentLine = 0;
+                        nameEl.innerText = dialogue.name;
+                        textEl.innerText = dialogue.lines[dialogue.currentLine];
+                    } else {
+                        // Advance
+                        dialogue.currentLine++;
+                        if (dialogue.currentLine >= dialogue.lines.length) {
+                            // End
+                            uiEl.style.display = 'none';
+                            dialogue.currentLine = 0;
+                        } else {
+                            // Show Next
+                            textEl.innerText = dialogue.lines[dialogue.currentLine];
+                        }
+                    }
+                }
+                return; // Block other interactions if dialogue is handled
+            }
+        }
+    }
+
     // Targeting Logic (Left Click)
     if (input.isDown('MouseLeft')) {
         const mx = input.mouse.x;
@@ -398,6 +493,68 @@ export function particleSystem(world: World, dt: number) {
     }
 }
 
+/**
+ * Spawn blood particles exploding outward from a point.
+ * Used when damage is dealt to enemies.
+ */
+export function spawnBloodEffect(world: World, x: number, y: number) {
+    const count = 10 + Math.floor(Math.random() * 6); // 10-15 particles
+    for (let i = 0; i < count; i++) {
+        const e = world.createEntity();
+        world.addComponent(e, new Position(x + 8, y + 8)); // Center of sprite
+
+        // Random direction explosion
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 50 + Math.random() * 100;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed - 30; // Slight upward bias
+
+        // Red color variations
+        const shade = Math.floor(Math.random() * 100);
+        const color = `rgb(${180 + shade}, ${20 + Math.floor(shade * 0.3)}, ${10 + Math.floor(shade * 0.2)})`;
+
+        world.addComponent(e, new Particle(0.4 + Math.random() * 0.3, 0.7, color, 2 + Math.floor(Math.random() * 2), vx, vy));
+    }
+}
+
+/**
+ * Spawn magic particles floating gently upward.
+ * Used for spell effects, healing, etc.
+ */
+export function spawnMagicEffect(world: World, x: number, y: number, colorScheme: 'blue' | 'green' | 'yellow' = 'blue') {
+    const count = 8 + Math.floor(Math.random() * 5); // 8-12 particles
+    for (let i = 0; i < count; i++) {
+        const e = world.createEntity();
+        world.addComponent(e, new Position(x + Math.random() * 16, y + Math.random() * 16));
+
+        // Gentle upward float with slight horizontal drift
+        const vx = (Math.random() - 0.5) * 30;
+        const vy = -20 - Math.random() * 40; // Float upward
+
+        // Color based on scheme
+        let color: string;
+        if (colorScheme === 'green') {
+            color = `rgb(${50 + Math.floor(Math.random() * 50)}, ${200 + Math.floor(Math.random() * 55)}, ${80 + Math.floor(Math.random() * 50)})`;
+        } else if (colorScheme === 'yellow') {
+            color = `rgb(${220 + Math.floor(Math.random() * 35)}, ${200 + Math.floor(Math.random() * 55)}, ${50 + Math.floor(Math.random() * 50)})`;
+        } else {
+            color = `rgb(${100 + Math.floor(Math.random() * 80)}, ${150 + Math.floor(Math.random() * 80)}, ${220 + Math.floor(Math.random() * 35)})`;
+        }
+
+        world.addComponent(e, new Particle(0.5 + Math.random() * 0.4, 0.9, color, 2, vx, vy));
+    }
+}
+
+/**
+ * Trigger screen shake effect.
+ * Used when player takes damage.
+ */
+export function triggerScreenShake(world: World, intensity: number = 5, duration: number = 0.3) {
+    const e = world.createEntity();
+    world.addComponent(e, new ScreenShake(duration, intensity));
+}
+
+
 let shakeOffsetX = 0;
 let shakeOffsetY = 0;
 
@@ -473,10 +630,10 @@ export function aiSystem(world: World, dt: number) {
     if (players.length === 0) return;
     const playerPos = world.getComponent(players[0], Position)!;
 
-    // Map Center...
-    const centerX = 480;
-    const centerY = 480;
-    const safeRadius = 160;
+    // Map Center (256x256 map * 32px = center at 128*32)
+    const centerX = 128 * 32; // 4096
+    const centerY = 128 * 32; // 4096
+    const safeRadius = 10 * 32; // 10 tiles = 320px town radius
 
     const enemies = world.query([AI, Position, Velocity]);
     for (const id of enemies) {
@@ -484,17 +641,16 @@ export function aiSystem(world: World, dt: number) {
         if (status && status.type === 'frozen') continue; // Skip AI if frozen
 
         const pos = world.getComponent(id, Position)!;
-        // ... (rest of AI)
         if (pos.x < -100) continue;
 
         const vel = world.getComponent(id, Velocity)!;
         const ai = world.getComponent(id, AI)!;
+        const hp = world.getComponent(id, Health);
+        const nameComp = world.getComponent(id, Name);
 
-        // Safe Zone Check
+        // Safe Zone Check - Force flee from town center
         const distToCenter = Math.sqrt(Math.pow(pos.x - centerX, 2) + Math.pow(pos.y - centerY, 2));
-
         if (distToCenter < safeRadius) {
-            // Flee from center
             const dx = pos.x - centerX;
             const dy = pos.y - centerY;
             const len = Math.sqrt(dx * dx + dy * dy);
@@ -505,36 +661,145 @@ export function aiSystem(world: World, dt: number) {
                 vel.x = ai.speed;
                 vel.y = 0;
             }
-            continue; // Skip chasing player
+            continue;
         }
 
+        // Calculate distance to player
         const dx = playerPos.x - pos.x;
         const dy = playerPos.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // BOSS RAGE MECHANIC
-        // If entity has a name "Warlord" (or similar Boss ID) and HP < 50%
-        // Increase speed significantly
-        const nameComp = world.getComponent(id, Name);
-        const hp = world.getComponent(id, Health);
+        // Boss rage mechanic (double speed at low HP)
         let currentSpeed = ai.speed;
-
         if (nameComp && nameComp.value === "Warlord" && hp && hp.current < hp.max * 0.5) {
-            // RAGE MODE
             currentSpeed *= 2.0;
-            // Visual indicator? Maybe particle trail in render system, or just speed for now.
-            // We can spawn a "RAGE" text once? Hard to track "once" without state.
         }
 
-        if (dist < 150 && dist > 16) { // Aggro range 150
-            vel.x = (dx / dist) * currentSpeed;
-            vel.y = (dy / dist) * currentSpeed;
-        } else {
-            vel.x = 0;
-            vel.y = 0;
+        // Update cooldown timer
+        if (ai.cooldownTimer > 0) ai.cooldownTimer -= dt;
+
+        // =============================================
+        // FINITE STATE MACHINE LOGIC
+        // =============================================
+
+        // Check for FLEE transition (health low) - highest priority
+        if (hp && hp.current <= hp.max * ai.fleeHealthThreshold && ai.currentState !== AIState.FLEE) {
+            ai.currentState = AIState.FLEE;
+        }
+
+        // State-specific behavior
+        switch (ai.currentState) {
+            case AIState.IDLE:
+                // Wander randomly
+                ai.wanderTimer -= dt;
+
+                if (ai.wanderTimer <= 0) {
+                    // Pick new random wander target
+                    ai.wanderTargetX = pos.x + (Math.random() - 0.5) * 100;
+                    ai.wanderTargetY = pos.y + (Math.random() - 0.5) * 100;
+                    ai.wanderTimer = 2 + Math.random() * 2; // 2-4 seconds
+                }
+
+                // Move toward wander target
+                const wanderDx = ai.wanderTargetX - pos.x;
+                const wanderDy = ai.wanderTargetY - pos.y;
+                const wanderDist = Math.sqrt(wanderDx * wanderDx + wanderDy * wanderDy);
+
+                if (wanderDist > 10) {
+                    vel.x = (wanderDx / wanderDist) * (ai.speed * 0.4); // Slower wander
+                    vel.y = (wanderDy / wanderDist) * (ai.speed * 0.4);
+                } else {
+                    vel.x = 0;
+                    vel.y = 0;
+                }
+
+                // Check for player detection
+                if (dist < ai.detectionRadius) {
+                    ai.currentState = AIState.CHASE;
+                }
+                break;
+
+            case AIState.CHASE:
+                // Move toward player
+                if (dist > 0) {
+                    vel.x = (dx / dist) * currentSpeed;
+                    vel.y = (dy / dist) * currentSpeed;
+                }
+
+                // Check for attack range
+                if (dist <= ai.attackRange) {
+                    ai.currentState = AIState.ATTACK;
+                }
+
+                // Lost player? Return to IDLE
+                if (dist > ai.detectionRadius * 1.5) {
+                    ai.currentState = AIState.IDLE;
+                }
+                break;
+
+            case AIState.ATTACK:
+                // Stop moving
+                vel.x = 0;
+                vel.y = 0;
+
+                // Attack on cooldown
+                if (ai.cooldownTimer <= 0) {
+                    if (ai.behavior === 'ranged') {
+                        // Fire projectile
+                        const p = world.createEntity();
+                        world.addComponent(p, new Position(pos.x + 8, pos.y + 8));
+
+                        const aimX = (dx / dist) * 200;
+                        const aimY = (dy / dist) * 200;
+                        world.addComponent(p, new Velocity(aimX, aimY));
+
+                        let pSprite = SPRITES.FIREBALL;
+                        let pDmg = 15;
+                        let pType = 'enemy_fire';
+
+                        if (nameComp) {
+                            if (nameComp.value.includes("Ice") || nameComp.value.includes("Frost") || nameComp.value === "Yeti") {
+                                pSprite = SPRITES.ICE_CRYSTAL || 101;
+                                pType = 'enemy_ice';
+                            } else if (nameComp.value.includes("Siren") || nameComp.value.includes("Hydra")) {
+                                pSprite = SPRITES.WATER_CRYSTAL || 104;
+                                pType = 'enemy_water';
+                            } else if (nameComp.value.includes("Basilisk")) {
+                                pSprite = 59;
+                                pType = 'enemy_poison';
+                            }
+                        }
+
+                        world.addComponent(p, new Sprite(pSprite, 16));
+                        world.addComponent(p, new Projectile(pDmg, 1.5, pType));
+                    }
+                    // Melee attack is handled by enemyCombatSystem
+
+                    ai.cooldownTimer = ai.attackCooldown;
+                }
+
+                // Player moved away? Chase again
+                if (dist > ai.attackRange * 1.5) {
+                    ai.currentState = AIState.CHASE;
+                }
+                break;
+
+            case AIState.FLEE:
+                // Run away from player
+                if (dist > 0) {
+                    vel.x = -(dx / dist) * currentSpeed * 1.2; // Slightly faster flee
+                    vel.y = -(dy / dist) * currentSpeed * 1.2;
+                }
+
+                // Recovery: If health restored above threshold, go back to CHASE
+                if (hp && hp.current > hp.max * ai.fleeHealthThreshold * 1.5) {
+                    ai.currentState = AIState.CHASE;
+                }
+                break;
         }
     }
 }
+
 
 
 
@@ -571,7 +836,44 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
         const nextY = pos.y + vel.y * dt;
 
         if (map) {
-            // ... collision logic ...
+            // --- ENTITY-TO-ENTITY COLLISION CHECK (using Collider component) ---
+            const myCollider = world.getComponent(id, Collider);
+            let blockedByEntity = false;
+
+            if (myCollider) {
+                // Calculate my collision box at next position
+                const myBoxNextX = nextX + myCollider.offsetX;
+                const myBoxNextY = nextY + myCollider.offsetY;
+                const myBoxW = myCollider.width;
+                const myBoxH = myCollider.height;
+
+                // Check against all other entities with Colliders
+                const collidables = world.query([Collider, Position]);
+                for (const otherId of collidables) {
+                    if (otherId === id) continue; // Skip self
+
+                    const otherPos = world.getComponent(otherId, Position)!;
+                    const otherCollider = world.getComponent(otherId, Collider)!;
+
+                    const otherBoxX = otherPos.x + otherCollider.offsetX;
+                    const otherBoxY = otherPos.y + otherCollider.offsetY;
+                    const otherBoxW = otherCollider.width;
+                    const otherBoxH = otherCollider.height;
+
+                    // AABB overlap check
+                    if (myBoxNextX < otherBoxX + otherBoxW &&
+                        myBoxNextX + myBoxW > otherBoxX &&
+                        myBoxNextY < otherBoxY + otherBoxH &&
+                        myBoxNextY + myBoxH > otherBoxY) {
+                        blockedByEntity = true;
+                        break;
+                    }
+                }
+            }
+
+            if (blockedByEntity) continue;
+
+            // --- TILE-BASED COLLISION CHECK ---
             const centerX = nextX + 8;
             const centerY = nextY + 8;
             const tileX = Math.floor(centerX / map.tileSize);
@@ -580,11 +882,11 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
             if (tileX < 0 || tileX >= map.width || tileY < 0 || tileY >= map.height) continue;
             const tileId = map.data[tileY * map.width + tileX];
 
-            // Collision Check (Walls 17, Water 18, Pillars 20/22?)
-            // For now existing logic:
+            // Collision Check (Walls 17, Water 18, Trees 34)
             if (tileId === 17) continue;
             if (tileId === 18) continue;
             if (tileId === 34) continue; // Trees are solid
+
 
             // Update Position
             // --- DEEP FOREST UNLOCK CHECK ---
@@ -593,27 +895,10 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
             const currentDist = Math.sqrt((pos.x - cx) ** 2 + (pos.y - cy) ** 2);
             const nextDist = Math.sqrt((nextX - cx) ** 2 + (nextY - cy) ** 2);
 
-            // Limit 1550 (approx 50 tiles)
-            if (nextDist > 1550) {
-                const qLog = world.getComponent(id, QuestLog);
-                let unlocked = false;
-                if (qLog) {
-                    const quest = qLog.quests.find(q => q.id === "wolf_menace");
-                    if (quest && quest.turnedIn) unlocked = true;
-                }
-
-                if (!unlocked) {
-                    // Critical Fix: Allow moving BACK towards safety
-                    // If we are already out (currentDist > 1550) and trying to go further (nextDist > currentDist), block.
-                    // If we are inside and trying to go out, block.
-
-                    if (currentDist <= 1550 || nextDist > currentDist) {
-                        if ((ui as any).console && Math.random() < 0.02) {
-                            (ui as any).console.addSystemMessage("The Deep Forest is too dangerous! Complete 'Wolf Menace' first.");
-                        }
-                        continue; // Block movement
-                    }
-                }
+            // Limit 1550 (approx 50 tiles) -> DISABLED for verification
+            const limitDist = 9999;
+            if (nextDist > limitDist) {
+                // Disabled logic
             }
 
             pos.x = nextX;
@@ -677,7 +962,7 @@ export function cameraSystem(world: World, mapWidth: number, mapHeight: number) 
 }
 
 // --- RENDERING ---
-import { spriteSheet, spriteCanvas, SPRITES, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
+import { spriteSheet, spriteCanvas, SPRITES, SHEET_TILE_SIZE, SHEET_COLS, assetManager } from './assets';
 
 
 export function combatSystem(world: World, input: InputHandler, audio: AudioController, ui: UIManager, network?: any, pvpEnabled: boolean = false) {
@@ -861,8 +1146,14 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
             const health = world.getComponent(targetId, Health);
             if (health) {
                 health.current -= damage;
-                audio.playHit();
+
+                // Spatial audio: play hit sound from enemy position
+                audio.playSpatialSound('hit', ePos.x, ePos.y, pos.x, pos.y);
+
                 if ((ui as any).console) (ui as any).console.sendMessage(`You hit Enemy for ${damage} dmg.`);
+
+                // Spawn blood particles on hit
+                spawnBloodEffect(world, ePos.x, ePos.y);
 
                 const ft = world.createEntity();
                 world.addComponent(ft, new Position(ePos.x, ePos.y));
@@ -981,44 +1272,102 @@ export function projectileSystem(world: World, dt: number, ui: UIManager, audio:
     }
 }
 
-function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: number, dy: number, size: number = 16) {
-    const sx = (uIndex % SHEET_COLS) * SHEET_TILE_SIZE;
-    const sy = Math.floor(uIndex / SHEET_COLS) * SHEET_TILE_SIZE;
+// Updated drawSprite using AssetManager with Sheet Switching
+export function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: number, dy: number, size: number = 32) {
+    let source = assetManager.getSpriteSource(uIndex);
 
-    // Special Case: Tall Sprites
-    let sHeight = SHEET_TILE_SIZE;
-    let dHeight = size;
-    let dOffsetY = 0;
+    // --- Dynamic Texture Switching (Prompt Fix) ---
+    if (uIndex >= 100) {
+        // IDs 100-199: Use 'dungeon' sheet by default
+        let sheetName = 'dungeon';
+        let localIndex = uIndex - 100;
 
-    if (uIndex === SPRITES.TREE) {
-        sHeight = 64; // Read 2 tiles high
-        dHeight = size * 2; // Draw 2x Size height
-        dOffsetY = -size; // Draw shifted UP so the base is at (dx, dy)
+        // --- VISUAL DEBUG REMOVED: Now using generated assets ---
+
+        const manager = assetManager as any;
+        const img = manager.images.get(sheetName);
+
+        if (img) {
+            const config = manager.sheetConfigs.get(sheetName) || { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
+
+            // Calculate Position in Sheet
+            // Assuming simplified grid (no manual UV mapping per ID for dungeon yet)
+            const cols = Math.floor(img.width / config.stride);
+            const col = localIndex % cols;
+            const row = Math.floor(localIndex / cols);
+
+            source = {
+                image: img,
+                sx: config.offsetX + (col * config.stride),
+                sy: config.offsetY + (row * config.stride),
+                sw: config.tileSize,
+                sh: config.tileSize
+            };
+        }
     }
 
-    if (uIndex === SPRITES.WALL) {
-        sHeight = 64; // Read 2 tiles high (Wall extends upward)
-        dHeight = size * 2;
-        dOffsetY = -size;
-    }
+    if (source) {
+        // Bounds Check
+        if (source.sx + source.sw > source.image.width || source.sy + source.sh > source.image.height) {
+            // OOB
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(Math.floor(dx), Math.floor(dy), size, size);
+            return;
+        }
 
-    // Use Canvas Source directly if available (Faster, no load wait)
-    if (spriteCanvas) {
-        ctx.drawImage(spriteCanvas, sx, sy, SHEET_TILE_SIZE, sHeight, dx, dy + dOffsetY, size, dHeight);
-        return;
-    }
+        // Determine Draw Dimensions
+        let dWidth = size;
+        let dHeight = size;
+        let dOffsetY = 0;
 
-    if (!spriteSheet.complete || spriteSheet.naturalWidth === 0) {
-        ctx.fillStyle = '#ff00ff';
-        ctx.fillRect(dx, dy, size, size);
-        return;
+        // Big Sprite Handling (High-Res Characters)
+        if (source.sw >= 64) {
+            // Scale 64px source to 32x48 (Tall) destination
+            dWidth = 32;
+            dHeight = 48;
+            dOffsetY = 32 - 48; // -16 (Shift up)
+        } else {
+            // Standard Scaling (Aspect Ratio)
+            const ratio = source.sh / source.sw;
+            dHeight = size * ratio;
+            dOffsetY = size - dHeight;
+        }
+
+        // Draw with strict integer coordinates
+        ctx.drawImage(
+            source.image,
+            Math.floor(source.sx), Math.floor(source.sy), Math.floor(source.sw), Math.floor(source.sh),
+            Math.floor(dx), Math.floor(dy) + dOffsetY, dWidth, dHeight
+        );
+    } else {
+        // Fallback or Missing - Draw Black
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(Math.floor(dx), Math.floor(dy), size, size);
     }
-    ctx.drawImage(spriteSheet, sx, sy, SHEET_TILE_SIZE, sHeight, dx, dy + dOffsetY, size, dHeight);
 }
 
 function drawWall(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
     drawSprite(ctx, SPRITES.WALL, x, y, size);
 }
+
+/**
+ * Deterministic coordinate hash for tile variants.
+ * Uses sin/cos hash to produce stable results (no flickering).
+ * @param x - Tile X coordinate
+ * @param y - Tile Y coordinate
+ * @param numVariants - Number of possible variants
+ * @returns A stable index from 0 to numVariants-1
+ */
+function getTileVariant(x: number, y: number, numVariants: number): number {
+    const hash = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return Math.floor((hash - Math.floor(hash)) * numVariants);
+}
+
+/**
+ * Maps for grass tile variants to add visual variety to terrain.
+ * Base grass (16) will randomly pick from these.
+ */
+const GRASS_VARIANTS = [16, 16, 16, 62, 63, 64]; // 50% base, 16.6% dark, 16.6% light, 16.6% flowers
 
 export function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
     let camX = 0, camY = 0;
@@ -1036,21 +1385,34 @@ export function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
                 const tileId = map.data[y * map.width + x];
                 const drawX = x * map.tileSize - camX;
                 const drawY = y * map.tileSize - camY;
+
+                // Culling: Skip tiles outside visible area
+                if (drawX < -map.tileSize || drawX > 320 || drawY < -map.tileSize || drawY > 240) continue;
+
                 if (tileId === 17) {
                     // Tall Wall: Draw wood floor behind, then tall wall
                     drawSprite(ctx, 19, drawX, drawY, map.tileSize); // Wood floor background
                     drawSprite(ctx, 17, drawX, drawY, map.tileSize); // Tall Wall
                 }
-                else {
-                    // Direct map: Sprite ID matches Tile ID
-                    if (tileId === 34) {
-                        // Draw Grass background first
-                        drawSprite(ctx, 16, drawX, drawY, map.tileSize);
-                        // Draw Tall Tree (drawSprite handles 32x64)
-                        drawSprite(ctx, tileId, drawX, drawY, map.tileSize);
-                    } else {
-                        drawSprite(ctx, tileId, drawX, drawY, map.tileSize);
+                else if (tileId === 16) {
+                    // Grass: Use terrain variation for visual variety
+                    const variant = getTileVariant(x, y, GRASS_VARIANTS.length);
+                    drawSprite(ctx, GRASS_VARIANTS[variant], drawX, drawY, map.tileSize);
+
+                    // Occasionally add small decorative rocks
+                    if (getTileVariant(x + 100, y + 100, 20) === 0) {
+                        drawSprite(ctx, 66, drawX, drawY, map.tileSize); // ROCK_SMALL
                     }
+                }
+                else if (tileId === 34) {
+                    // Tree: Draw varied grass background first, then tall tree
+                    const variant = getTileVariant(x, y, GRASS_VARIANTS.length);
+                    drawSprite(ctx, GRASS_VARIANTS[variant], drawX, drawY, map.tileSize);
+                    drawSprite(ctx, tileId, drawX, drawY, map.tileSize);
+                }
+                else {
+                    // Default: Direct map (Sprite ID matches Tile ID)
+                    drawSprite(ctx, tileId, drawX, drawY, map.tileSize);
                 }
             }
         }
@@ -1058,6 +1420,9 @@ export function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
 }
 
 export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
+    // Force Crisp Pixels
+    ctx.imageSmoothingEnabled = false;
+
     let camX = 0, camY = 0;
     const cameraEntity = world.query([Camera])[0];
     if (cameraEntity !== undefined) {
@@ -1066,18 +1431,19 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
         camY = Math.floor(cam.y + (typeof shakeOffsetY !== 'undefined' ? shakeOffsetY : 0));
     }
 
-    // Sort by Y for depth (simple painter's algorithm)
+    // Collect visible sprites with their "bottom Y" for Y-sorting (2.5D depth)
     const entities = world.query([Position, Sprite]);
 
-    // DEBUG: Log render stats ALWAYS
-    // if (Math.random() < 0.01) {
-    //    console.log...
-    // }
-
+    // Sort by bottom Y (pos.y + sprite.size) so lower objects appear IN FRONT
     const sorted = entities.sort((a, b) => {
         const posA = world.getComponent(a, Position)!;
+        const spriteA = world.getComponent(a, Sprite)!;
         const posB = world.getComponent(b, Position)!;
-        return posA.y - posB.y;
+        const spriteB = world.getComponent(b, Sprite)!;
+        // Bottom Y = position Y + sprite height
+        const bottomA = posA.y + spriteA.size;
+        const bottomB = posB.y + spriteB.size;
+        return bottomA - bottomB;
     });
 
     let renderedCount = 0;
@@ -1087,7 +1453,6 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
 
         // Culling
         if (pos.x - camX < -32 || pos.x - camX > 320 || pos.y - camY < -32 || pos.y - camY > 240) continue;
-
 
         drawSprite(ctx, sprite.uIndex, Math.floor(pos.x - camX), Math.floor(pos.y - camY), sprite.size);
         renderedCount++;
@@ -1146,6 +1511,42 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
             ctx.fillStyle = isQuestGiver ? '#ffd700' : '#ffffff';
             ctx.fillText(nameComp.value, nameX, nameY);
         }
+
+        // DEBUG: Draw collision box if entity has a Collider component
+        if (DEBUG_COLLIDERS) {
+            const collider = world.getComponent(id, Collider);
+            if (collider) {
+                const colX = Math.floor(pos.x + collider.offsetX - camX);
+                const colY = Math.floor(pos.y + collider.offsetY - camY);
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(colX, colY, collider.width, collider.height);
+            }
+        }
+
+        // DEBUG: Draw AI state name above enemies
+        if (DEBUG_AI_STATES) {
+            const aiComp = world.getComponent(id, AI);
+            if (aiComp && !isPlayer) {
+                const stateX = Math.floor(pos.x - camX + sprite.size / 2);
+                const stateY = Math.floor(pos.y - camY) - 18; // Above health bar
+
+                const stateName = getStateName(aiComp.currentState);
+
+                // Color-code by state
+                let stateColor = '#888888'; // IDLE = gray
+                if (aiComp.currentState === AIState.CHASE) stateColor = '#ff8800'; // Orange
+                else if (aiComp.currentState === AIState.ATTACK) stateColor = '#ff0000'; // Red
+                else if (aiComp.currentState === AIState.FLEE) stateColor = '#00ff00'; // Green
+
+                ctx.font = 'bold 8px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#000';
+                ctx.fillText(stateName, stateX + 1, stateY + 1);
+                ctx.fillStyle = stateColor;
+                ctx.fillText(stateName, stateX, stateY);
+            }
+        }
     }
 
     // Draw Target Reticle
@@ -1161,7 +1562,6 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
             ctx.strokeRect(tx, ty, 32, 32); // Assume 32x32 for now, or use target's sprite size
         }
     }
-
 
 }
 
@@ -1309,16 +1709,53 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                     if ((ui as any).console && mitigation > 0) (ui as any).console.sendMessage(`Blocked ${mitigation} dmg!`);
                 }
                 if (damage > 0) {
-                    pHealth.current = Math.max(0, pHealth.current - damage);
-                    if ((ui as any).console) (ui as any).console.sendMessage(`Ouch! Took ${damage} dmg.`);
-                    audio.playHit();
-                    const ft = world.createEntity();
-                    world.addComponent(ft, new Position(pPos.x, pPos.y));
-                    world.addComponent(ft, new Velocity(0, -20));
-                    world.addComponent(ft, new FloatingText(`-${damage}`, '#f00'));
-                    if (pHealth.current <= 0) {
-                        if ((ui as any).console) (ui as any).console.addSystemMessage("YOU DIED!");
-                        audio.playDeath();
+                    // MANA SHIELD Logic
+                    const status = world.getComponent(id, StatusEffect);
+                    let manaShieldActive = false;
+                    // Check active status (Needs iterable check if multiple statuses allowed, currently single)
+                    // Current StatusEffect is single instance. We should probably allow list, but for now assumption: one status overrides.
+                    // Wait, existing system assumes 1 status. If we want mana shield + poison, we need refactor.
+                    // For now, let's assume 'mana_shield' overwrites others or we use a separate component?
+                    // Let's use a separate logic: Mana Shield is usually a buff. StatusEffect is handled as single slot.
+                    // FIX: Let's check 'utamo vita' spell effect which adds a unique component or status. 
+                    // To avoid refactoring entire Status system, let's check a new component `ManaShield` or just rely on Status 'mana_shield'.
+                    if (status && status.type === 'mana_shield') {
+                        const pMana = world.getComponent(id, Mana);
+                        if (pMana && pMana.current > 0) {
+                            manaShieldActive = true;
+                            if (pMana.current >= damage) {
+                                pMana.current -= damage;
+                                if ((ui as any).console) (ui as any).console.sendMessage(`Mana Shield absorbed ${damage} dmg.`);
+                                spawnFloatingText(world, pPos.x, pPos.y, `-${damage}`, '#0000ff');
+                                damage = 0; // Fully absorbed
+                            } else {
+                                damage -= pMana.current;
+                                pMana.current = 0;
+                                if ((ui as any).console) (ui as any).console.sendMessage(`Mana Shield broken!`);
+                                world.removeComponent(id, StatusEffect); // Remove shield
+                            }
+                        }
+                    }
+
+                    if (damage > 0) {
+                        pHealth.current = Math.max(0, pHealth.current - damage);
+                        if ((ui as any).console) (ui as any).console.sendMessage(`Ouch! Took ${damage} dmg.`);
+
+                        // Spatial audio: play hit sound from enemy position
+                        audio.playSpatialSound('hit', ePos.x, ePos.y, pPos.x, pPos.y);
+
+                        // Screen shake and blood effect when player takes damage
+                        triggerScreenShake(world, 6, 0.2);
+                        spawnBloodEffect(world, pPos.x, pPos.y);
+
+                        const ft = world.createEntity();
+                        world.addComponent(ft, new Position(pPos.x, pPos.y));
+                        world.addComponent(ft, new Velocity(0, -20));
+                        world.addComponent(ft, new FloatingText(`-${damage}`, '#f00'));
+                        if (pHealth.current <= 0) {
+                            if ((ui as any).console) (ui as any).console.addSystemMessage("YOU DIED!");
+                            audio.playDeath();
+                        }
                     }
                 }
             }
@@ -1329,6 +1766,159 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
 
 // Draw Target Reticle
 
+export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonType: 'fire' | 'ice' | 'water' | 'earth' | 'temple' | 'final' = 'temple', seed: number = 0) {
+    // 1. Clear Entities (Preserve Player)
+    const players = world.query([PlayerControllable]);
+    if (players.length === 0) return;
+    const playerEntity = players[0];
+
+    // Remove all others
+    const all = world.query([Position]);
+    for (const id of all) {
+        if (id !== playerEntity && !world.getComponent(id, PlayerControllable)) {
+            world.removeEntity(id);
+        }
+    }
+
+    // 2. Generate Map
+    let mapData;
+    if (type === 'overworld') {
+        mapData = generateOverworld(256, 256, seed);
+    } else {
+        mapData = generateDungeon(64, 64, seed + Math.random(), dungeonType);
+    }
+
+    const mapEntity = world.query([TileMap])[0];
+    if (mapEntity !== undefined) {
+        // Update existing map component
+        const map = world.getComponent(mapEntity, TileMap)!;
+        map.width = mapData.width;
+        map.height = mapData.height;
+        map.tileSize = mapData.tileSize;
+        map.data = mapData.data; // Replace array
+    }
+
+    // 3. Spawn Entities (from Map Data)
+    for (const ent of mapData.entities) {
+        if (ent.type === 'player') {
+            // Teleport Player
+            const pPos = world.getComponent(playerEntity, Position)!;
+            pPos.x = ent.x;
+            pPos.y = ent.y;
+
+            // Reset Camera immediately to prevent flicker
+            const cam = world.query([Camera])[0];
+            if (cam) {
+                const cPos = world.getComponent(cam, Camera)!;
+                cPos.x = ent.x - 160;
+                cPos.y = ent.y - 120;
+            }
+        } else if (ent.type === 'dungeon_entrance') {
+            const portal = world.createEntity();
+            world.addComponent(portal, new Position(ent.x, ent.y));
+            world.addComponent(portal, new Sprite(77, 32));
+            world.addComponent(portal, new DungeonEntrance(ent.dungeonType, ent.label));
+            world.addComponent(portal, new Interactable(`Enter ${ent.label}`));
+            world.addComponent(portal, new Name(ent.label));
+        } else if (ent.type === 'dungeon_exit') {
+            const portal = world.createEntity();
+            world.addComponent(portal, new Position(ent.x, ent.y));
+            world.addComponent(portal, new Sprite(77, 32));
+            world.addComponent(portal, new DungeonExit(ent.label));
+            world.addComponent(portal, new Interactable(ent.label));
+            world.addComponent(portal, new Name(ent.label));
+        } else if (ent.type === 'enemy') {
+            createEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+        } else if (ent.type === 'fire_enemy') {
+            createFireEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+        } else if (ent.type === 'ice_enemy') {
+            createIceEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+        } else if (ent.type === 'water_enemy') {
+            createWaterEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+        } else if (ent.type === 'earth_enemy') {
+            createEarthEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+        } else if (ent.type === 'item') {
+            createItem(world, ent.x, ent.y, ent.name, ent.slot, ent.uIndex, ent.damage);
+        } else if (ent.type === 'static') {
+            const s = world.createEntity();
+            world.addComponent(s, new Position(ent.x, ent.y));
+            world.addComponent(s, new Sprite(ent.sprite, ent.size));
+        } else if (ent.type === 'boss') {
+            if (ent.enemyType === 'hydra') {
+                createWaterEnemy(world, ent.x, ent.y, 'hydra', 2.0);
+            } else {
+                createBoss(world, ent.x, ent.y);
+            }
+        }
+    }
+}
+
+export function dungeonSystem(world: World, input: InputHandler, ui: UIManager) {
+    if (!input.isJustPressed('Space')) return;
+
+    const playerEntity = world.query([PlayerControllable, Position])[0];
+    if (!playerEntity) return;
+
+    const pos = world.getComponent(playerEntity, Position)!;
+
+    // Find nearby Portals
+    const entrances = world.query([DungeonEntrance, Position]);
+    for (const id of entrances) {
+        const pPos = world.getComponent(id, Position)!;
+        const dx = (pos.x + 16) - (pPos.x + 16);
+        const dy = (pos.y + 16) - (pPos.y + 16);
+        if (Math.sqrt(dx * dx + dy * dy) < 50) {
+            const entrance = world.getComponent(id, DungeonEntrance)!;
+
+            // Check for Locked component
+            const locked = world.getComponent(id, Locked);
+            if (locked) {
+                const inv = world.getComponent(playerEntity, Inventory);
+                if (!inv) return;
+
+                const missingKeys = [];
+                for (const key of locked.keyIds) {
+                    let found = false;
+                    for (const [_, item] of inv.items) {
+                        if (item.name === key) { found = true; break; }
+                    }
+                    if (!found) {
+                        for (const item of inv.storage) {
+                            if (item.name === key) { found = true; break; }
+                        }
+                    }
+                    if (!found) missingKeys.push(key);
+                }
+
+                if (missingKeys.length > 0) {
+                    ui.console?.addSystemMessage(locked.message);
+                    return;
+                } else {
+                    ui.console?.addSystemMessage("The seal shatters!");
+                    // Keep it open
+                    world.removeComponent(id, Locked);
+                }
+            }
+
+            if ((ui as any).console) (ui as any).console.addSystemMessage(`Entering ${entrance.label}...`);
+            switchMap(world, 'dungeon', entrance.dungeonType as any, Date.now());
+            return;
+        }
+    }
+
+    const exits = world.query([DungeonExit, Position]);
+    for (const id of exits) {
+        const pPos = world.getComponent(id, Position)!;
+        const dx = (pos.x + 16) - (pPos.x + 16);
+        const dy = (pos.y + 16) - (pPos.y + 16);
+        if (Math.sqrt(dx * dx + dy * dy) < 50) {
+            if ((ui as any).console) (ui as any).console.addSystemMessage(`Leaving Dungeon...`);
+            switchMap(world, 'overworld', 'temple', 1337);
+            return;
+        }
+    }
+}
+
 
 
 
@@ -1337,7 +1927,17 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
-    world.addComponent(e, new Sprite(SPRITES.PLAYER, 32));
+
+    // Set sprite based on vocation
+    const vocationSpriteMap: Record<string, number> = {
+        'knight': SPRITES.PLAYER,  // 0 - Knight in full armor
+        'mage': SPRITES.MAGE,      // 1 - Blue wizard robes
+        'ranger': SPRITES.RANGER,  // 2 - Green leather with bow
+        'paladin': SPRITES.GUARD   // 5 - White/gold armor (use Guard sprite for now)
+    };
+    const spriteIndex = vocationSpriteMap[vocationKey] ?? SPRITES.PLAYER;
+    world.addComponent(e, new Sprite(spriteIndex, 32));
+
     world.addComponent(e, new PlayerControllable());
     world.addComponent(e, new Inventory());
     world.addComponent(e, new Health(200, 200));
@@ -1368,6 +1968,9 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
 
     const inv = world.getComponent(e, Inventory)!;
     inv.cap = vocData.startCap;
+
+    // Collider: Body-sized collision box (smaller than sprite)
+    world.addComponent(e, new Collider(20, 12, 6, 20)); // 20x12 box at bottom center
 
     return e;
 }
@@ -1428,12 +2031,34 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
         world.addComponent(e, new AI(40)); // Smart/Fast
         world.addComponent(e, new Health(60 * hpScale, 60 * hpScale));
         world.addComponent(e, new Name("Bandit"));
+    } else if (type === "scorpion") {
+        // Desert enemy - fast, poisonous
+        world.addComponent(e, new Sprite(SPRITES.SCORPION, 32));
+        world.addComponent(e, new AI(55)); // Fast
+        world.addComponent(e, new Health(35 * hpScale, 35 * hpScale));
+        world.addComponent(e, new Name("Scorpion"));
+    } else if (type === "mummy") {
+        // Desert enemy - slow, tanky, hits hard
+        world.addComponent(e, new Sprite(SPRITES.MUMMY, 32));
+        world.addComponent(e, new AI(18)); // Very slow
+        world.addComponent(e, new Health(100 * hpScale, 100 * hpScale)); // Tanky
+        world.addComponent(e, new Name("Mummy"));
+    } else if (type === "scarab") {
+        // Desert enemy - swarm enemy, fast, weak
+        world.addComponent(e, new Sprite(SPRITES.SCARAB, 32));
+        world.addComponent(e, new AI(65)); // Very fast
+        world.addComponent(e, new Health(15 * hpScale, 15 * hpScale)); // Weak
+        world.addComponent(e, new Name("Scarab"));
     } else {
         world.addComponent(e, new Sprite(SPRITES.ORC, 32));
         world.addComponent(e, new AI(30));
         world.addComponent(e, new Health(30 * hpScale, 30 * hpScale));
         world.addComponent(e, new Name("Orc"));
     }
+
+    // Collider: Body-sized collision box for enemies
+    world.addComponent(e, new Collider(20, 12, 6, 20)); // 20x12 box at bottom center
+
     return e;
 }
 
@@ -1448,19 +2073,111 @@ export function createBoss(world: World, x: number, y: number) {
     return e;
 }
 
-export function createNPC(world: World, x: number, y: number, text: string, name: string = "Villager", spriteIndex: number = SPRITES.NPC) {
+
+export function createIceEnemy(world: World, x: number, y: number, type: string = "ice_wolf", difficulty: number = 1.0) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
-    world.addComponent(e, new Sprite(spriteIndex, 32));
-    world.addComponent(e, new Name(name));
-    world.addComponent(e, new Interactable(text));
 
-    // Add simple wandering AI for villagers? 
-    // For now, static to keep them in place as requested (guarding gates etc)
+    const hpScale = difficulty;
 
+    if (type === "ice_wolf") {
+        world.addComponent(e, new Sprite(SPRITES.ICE_WOLF, 32));
+        world.addComponent(e, new AI(55)); // Fast
+        world.addComponent(e, new Health(45 * hpScale, 45 * hpScale));
+        world.addComponent(e, new Name("Ice Wolf"));
+        world.addComponent(e, new StatusOnHit('bleed', 0.35, 6, 4));
+    } else if (type === "frost_mage") {
+        world.addComponent(e, new Sprite(SPRITES.FROST_MAGE, 32));
+        world.addComponent(e, new AI(25)); // Slow caster
+        world.addComponent(e, new Health(80 * hpScale, 80 * hpScale));
+        world.addComponent(e, new Name("Frost Mage"));
+        world.addComponent(e, new StatusOnHit('freeze', 0.6, 4, 50));
+        // Drop Thunder Staff (Rare)
+        world.addComponent(e, new Lootable([
+            new Item('Ice Shard', 'currency', 101, 0, 5, 'Cold to the touch', 'none', 'common'),
+            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, '#00ffff', 40)
+        ]));
+    } else if (type === "yeti") {
+        // Boss-like enemy
+        world.addComponent(e, new Sprite(SPRITES.YETI, 32));
+        world.addComponent(e, new AI(18)); // Very slow
+        world.addComponent(e, new Health(250 * hpScale, 250 * hpScale));
+        world.addComponent(e, new Name("Yeti"));
+        world.addComponent(e, new StatusOnHit('bleed', 0.5, 8, 8));
+
+        // Boss Drops
+        world.addComponent(e, new Lootable([
+            new Item('Frost Helm', 'head', SPRITES.FROST_HELM, 0, 800, 'Icy protection', 'none', 'epic', 8, 0, 0, '#ccffff', 30),
+            new Item('Ice Bow', 'rhand', SPRITES.ICE_BOW, 35, 700, 'Freezes enemies', 'bow', 'rare', 0, 0, 0, '#99ffff', 35)
+        ]));
+    }
     return e;
 }
+
+export function createWaterEnemy(world: World, x: number, y: number, type: string = "crab", difficulty: number = 1.0) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Velocity(0, 0));
+
+    const hpScale = difficulty;
+
+    if (type === "crab") {
+        world.addComponent(e, new Sprite(SPRITES.CRAB, 32));
+        world.addComponent(e, new AI(20)); // Slow
+        world.addComponent(e, new Health(60 * hpScale, 60 * hpScale)); // Tanky
+        world.addComponent(e, new Name("Crab"));
+        // Shell gives natural armor? (Maybe high health reflects this)
+    } else if (type === "siren") {
+        world.addComponent(e, new Sprite(SPRITES.SIREN, 32));
+        world.addComponent(e, new AI(45)); // Fast shimmer
+        world.addComponent(e, new Health(50 * hpScale, 50 * hpScale));
+        world.addComponent(e, new Name("Siren"));
+    } else if (type === "hydra") {
+        world.addComponent(e, new Sprite(SPRITES.HYDRA, 32));
+        world.addComponent(e, new AI(25));
+        world.addComponent(e, new Health(300 * hpScale, 300 * hpScale)); // Boss HP
+        world.addComponent(e, new Name("Hydra"));
+        world.addComponent(e, new StatusOnHit('poison', 0.5, 5, 10)); // Venemous
+
+        // Hydra Drops
+        world.addComponent(e, new Lootable([
+            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, '#00ffff', 40),
+            new Item('Water Essence', 'currency', 100, 0, 50, 'Pure water energy', 'none', 'rare')
+        ]));
+    }
+    return e;
+}
+
+export function createEarthEnemy(world: World, x: number, y: number, type: string = "golem", difficulty: number = 1.0) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Velocity(0, 0));
+
+    const hpScale = difficulty;
+
+    if (type === "golem") {
+        world.addComponent(e, new Sprite(SPRITES.GOLEM, 32));
+        world.addComponent(e, new AI(15)); // Very slow
+        world.addComponent(e, new Health(120 * hpScale, 120 * hpScale)); // Extremely Tanky
+        world.addComponent(e, new Name("Golem"));
+        // Golem Drops
+        world.addComponent(e, new Lootable([
+            new Item('Earth Essence', 'currency', 110, 0, 50, 'Solid earth energy', 'none', 'rare'),
+            new Item('Obsidian Shard', 'currency', 103, 0, 15, 'Sharp black stone', 'none', 'common')
+        ]));
+        // TODO: Add 'Resistance' component later? for now just HP.
+    } else if (type === "basilisk") {
+        world.addComponent(e, new Sprite(SPRITES.BASILISK, 32));
+        world.addComponent(e, new AI(45)); // Fast
+        world.addComponent(e, new Health(60 * hpScale, 60 * hpScale));
+        world.addComponent(e, new Name("Basilisk"));
+        world.addComponent(e, new StatusOnHit('poison', 0.4, 4, 8));
+    }
+    return e;
+}
+
+
 
 export function createMerchant(world: World, x: number, y: number) {
     const e = world.createEntity();
@@ -1495,6 +2212,74 @@ export function createTeleporter(world: World, x: number, y: number, targetX: nu
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Teleporter(targetX, targetY));
     world.addComponent(e, new Sprite(SPRITES.STAIRS, 32)); // Visual Marker
+    return e;
+}
+
+export function createFireEnemy(world: World, x: number, y: number, type: string = "scorpion", difficulty: number = 1.0) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Velocity(0, 0));
+
+    const hpScale = difficulty;
+
+    if (type === "scorpion") {
+        world.addComponent(e, new Sprite(SPRITES.SCORPION, 32));
+        world.addComponent(e, new AI(55)); // Fast
+        world.addComponent(e, new Health(30 * hpScale, 30 * hpScale));
+        world.addComponent(e, new Name("Scorpion"));
+        world.addComponent(e, new StatusOnHit('poison', 0.5, 4, 6));
+    } else if (type === "mummy") {
+        world.addComponent(e, new Sprite(SPRITES.MUMMY, 32));
+        world.addComponent(e, new AI(20)); // Slow
+        world.addComponent(e, new Health(80 * hpScale, 80 * hpScale));
+        world.addComponent(e, new Name("Mummy"));
+        world.addComponent(e, new StatusOnHit('curse', 0.2, 5, 20)); // Curses reduce damage dealt? (Not impl yet)
+    } else if (type === "spider") {
+        world.addComponent(e, new Sprite(SPRITES.SPIDER, 32));
+        world.addComponent(e, new AI(45));
+        world.addComponent(e, new Health(35 * hpScale, 35 * hpScale));
+        world.addComponent(e, new Name("Spider"));
+        world.addComponent(e, new StatusOnHit('slow', 0.4, 3, 2)); // Webs
+        world.addComponent(e, new Lootable([
+            new Item('Spider Silk', 'currency', 102, 0, 5, 'Sticky silk', 'none', 'common')
+        ]));
+    } else if (type === "fire_guardian") {
+        // BOSS
+        world.addComponent(e, new Sprite(SPRITES.SCORPION, 48)); // Re-use Scorpion
+        world.addComponent(e, new AI(35));
+        world.addComponent(e, new Health(250 * hpScale, 250 * hpScale));
+        world.addComponent(e, new Name("Fire Guardian"));
+        world.addComponent(e, new StatusOnHit('burn', 0.5, 6, 20));
+
+        // Boss Drops
+        world.addComponent(e, new Lootable([
+            new Item('Magma Armor', 'armor', SPRITES.MAGMA_ARMOR, 0, 800, 'Forged in fire', 'none', 'epic', 10, 0, 0, '#ff4400', 50),
+            new Item('Fire Sword', 'rhand', SPRITES.FIRE_SWORD, 30, 700, 'Burns on contact', 'sword', 'rare', 0, 0, 0, '#ffaa00', 40)
+        ]));
+    }
+    return e;
+}
+
+export function createFinalBoss(world: World, x: number, y: number) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Velocity(0, 0));
+    world.addComponent(e, new Sprite(SPRITES.NECROMANCER, 64)); // Giant Necromancer
+    world.addComponent(e, new AI(45)); // Fast
+    world.addComponent(e, new Health(1000, 1000));
+    world.addComponent(e, new Name("Void Bringer"));
+    world.addComponent(e, new StatusOnHit('curse', 1.0, 10, 50)); // High damage curse
+    return e;
+}
+
+export function createSealedGate(world: World, x: number, y: number) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Sprite(98, 32)); // Use a Gate/Door sprite (98 is placeholder, check assets)
+    world.addComponent(e, new Name("Sealed Gate"));
+    world.addComponent(e, new Interactable("Inspect Gate"));
+    world.addComponent(e, new DungeonEntrance('final', "Final Arena"));
+    world.addComponent(e, new Locked(['Water Essence', 'Ice Essence', 'Fire Essence', 'Earth Essence'], "The gate is sealed by 4 Elemental Essences."));
     return e;
 }
 
@@ -1657,6 +2442,35 @@ export function safeZoneRegenSystem(world: World, dt: number, ui: UIManager) {
             world.addComponent(p, new Position(pos.x, pos.y - 10));
             world.addComponent(p, new Velocity(0, -10));
             world.addComponent(p, new FloatingText("+", '#00ff00'));
+        }
+    }
+}
+
+export function deathSystem(world: World, ui: UIManager, spawnX: number = 100, spawnY: number = 100) {
+    const healths = world.query([Health]);
+    for (const id of healths) {
+        const hp = world.getComponent(id, Health)!;
+        if (hp.current <= 0) {
+            // Player Death
+            const isPlayer = world.getComponent(id, PlayerControllable);
+            if (isPlayer) {
+                if ((ui as any).console) (ui as any).console.addSystemMessage("You have died! Respawning at village...");
+                hp.current = hp.max;
+                const pos = world.getComponent(id, Position);
+                if (pos) {
+                    pos.x = spawnX;
+                    pos.y = spawnY;
+                }
+                const mana = world.getComponent(id, Mana);
+                if (mana) mana.current = mana.max;
+                continue;
+            }
+
+            // NPC/Enemy Death (Fallback)
+            const name = world.getComponent(id, Name);
+            if (name) {
+                world.removeEntity(id);
+            }
         }
     }
 }
@@ -2004,10 +2818,160 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
             if (console) console.addSystemMessage("Not enough Mana!");
             spawnFloatingText(world, pos.x, pos.y, "No Mana", '#fff');
         }
+
+    } else if (spellKey === 'exeta res') {
+        // CHALLENGE (Knight Only) - Taunt
+        if (!canCast(['knight'])) return;
+        if (mana.current >= 30) {
+            mana.current -= 30;
+            spawnFloatingText(world, pos.x, pos.y, "CHALLENGE!", '#ff0000');
+            const shake = world.createEntity();
+            world.addComponent(shake, new ScreenShake(0.2, 2));
+
+            const enemies = world.query([AI, Position]);
+            let pulled = 0;
+            for (const eId of enemies) {
+                const ePos = world.getComponent(eId, Position)!;
+                const dx = ePos.x - pos.x;
+                const dy = ePos.y - pos.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < 160) { // Screen radius
+                    // Force AI to target player (simplistic 'aggro' reset)
+                    // In our AI, we rely on dist to 'center' or player. 
+                    // Let's force Velocity towards player immediately to simulate 'pull'
+                    const vel = world.getComponent(eId, Velocity);
+                    if (vel) {
+                        vel.x = -dx * 2; // Pull IN
+                        vel.y = -dy * 2;
+                    }
+                    spawnFloatingText(world, ePos.x, ePos.y - 16, "!", '#ff0000');
+                    pulled++;
+                }
+            }
+            if (console) console.addSystemMessage(`exeta res: ${pulled} enemies challenged.`);
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+        }
+
+    } else if (spellKey === 'utamo vita') {
+        // MANA SHIELD (Mage Only)
+        if (!canCast(['mage'])) return;
+        if (mana.current >= 50) {
+            mana.current -= 50;
+            // Add Status Effect 'mana_shield' for 60 seconds
+            // Requires existing Status logic to support this type or we just add the component
+            // Since our combatSystem check looks for StatusEffect with type 'mana_shield', this works.
+            const status = world.getComponent(playerEntity, StatusEffect);
+            if (status) world.removeComponent(playerEntity, StatusEffect);
+            world.addComponent(playerEntity, new StatusEffect('mana_shield', 60.0));
+
+            spawnFloatingText(world, pos.x, pos.y, "Mana Shield", '#0000ff');
+            if (console) console.addSystemMessage("utamo vita: Magic protects you.");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+        }
+
+    } else if (spellKey === 'exevo gran mas frigo') {
+        // ETERNAL WINTER (Mage Ultimate)
+        if (!canCast(['mage'])) return;
+        if (mana.current >= 120) {
+            mana.current -= 120;
+            const shake = world.createEntity();
+            world.addComponent(shake, new ScreenShake(0.5, 5)); // Heavy shake
+
+            spawnFloatingText(world, pos.x, pos.y, "ETERNAL WINTER", '#00ffff');
+
+            const enemies = world.query([Health, Position]);
+            let frozen = 0;
+            for (const eId of enemies) {
+                if (world.getComponent(eId, PlayerControllable)) continue;
+                const ePos = world.getComponent(eId, Position)!;
+                const dx = ePos.x - pos.x;
+                const dy = ePos.y - pos.y;
+                if (Math.abs(dx) < 120 && Math.abs(dy) < 120) { // Large AoE
+                    const eHp = world.getComponent(eId, Health)!;
+                    const magicLevel = skills ? skills.magic.level : 1;
+                    const dmg = 80 + (magicLevel * 6);
+                    eHp.current -= dmg;
+                    spawnFloatingText(world, ePos.x, ePos.y, `${dmg}`, '#00ffff');
+
+                    // Apply Freeze
+                    const status = world.getComponent(eId, StatusEffect);
+                    if (status) world.removeComponent(eId, StatusEffect);
+                    world.addComponent(eId, new StatusEffect('frozen', 4.0)); // 4s Freeze
+                    frozen++;
+
+                    if (eHp.current <= 0) {
+                        const nameComp = world.getComponent(eId, Name);
+                        const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
+                        const loot = generateLoot(enemyType);
+                        createCorpse(world, ePos.x, ePos.y, loot);
+                        world.removeEntity(eId);
+                    }
+                }
+            }
+            if (console) console.addSystemMessage(`exevo gran mas frigo: Frozen ${frozen} enemies.`);
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+        }
+
+    } else if (spellKey === 'exura san') {
+        // SALVATION (Paladin Healing)
+        if (!canCast(['paladin', 'ranger'])) return; // Paladin spell, mostly
+        if (mana.current >= 60) {
+            mana.current -= 60;
+            const magicLevel = skills ? skills.magic.level : 1;
+            // Paladin heals based on Magic Level + Level?
+            // Let's scale heavily with Magic
+            const heal = 80 + (magicLevel * 8);
+            hp.current = Math.min(hp.current + heal, hp.max);
+            spawnFloatingText(world, pos.x, pos.y, `+${heal}`, '#ffff00');
+            if (console) console.addSystemMessage("exura san!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+        }
+
+    } else if (spellKey === 'exori san') {
+        // DIVINE CALDERA / HOLY SMITE (Paladin Logic)
+        // Ranged Holy Attack
+        if (!canCast(['paladin'])) return;
+        if (mana.current >= 40) {
+            mana.current -= 40;
+            const pId = world.createEntity();
+            world.addComponent(pId, new Position(pos.x + 8, pos.y + 8));
+
+            const targetComp = world.getComponent(playerEntity, Target);
+            let vx = facing.x * 250;
+            let vy = facing.y * 250;
+
+            // Auto-Aim
+            if (targetComp) {
+                const targetPos = world.getComponent(targetComp.targetId, Position);
+                if (targetPos) {
+                    const dx = (targetPos.x + 8) - (pos.x + 8);
+                    const dy = (targetPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) { vx = (dx / dist) * 250; vy = (dy / dist) * 250; }
+                }
+            }
+
+            world.addComponent(pId, new Velocity(vx, vy));
+            world.addComponent(pId, new Sprite(SPRITES.SPARKLE, 8)); // Holy sparkle
+            const magicLevel = skills ? skills.magic.level : 1;
+            const distSkill = skills ? skills.distance.level : 10;
+            // Paladin Formula: Dist + Magic
+            const dmg = 40 + (distSkill * 2) + (magicLevel * 3);
+            world.addComponent(pId, new Projectile(dmg, 0.8, 'player_holy'));
+
+            if (console) console.addSystemMessage("exori san!");
+        } else {
+            if (console) console.addSystemMessage("Not enough Mana!");
+        }
     }
 }
 
-function spawnFloatingText(world: World, x: number, y: number, text: string, color: string) {
+export function spawnFloatingText(world: World, x: number, y: number, text: string, color: string) {
     const ft = world.createEntity();
     world.addComponent(ft, new Position(x, y));
     world.addComponent(ft, new Velocity(0, -20));
@@ -2370,6 +3334,8 @@ export function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D
         // 3. Draw Offscreen to Main Screen
         ctx.save();
         ctx.globalCompositeOperation = 'source-over';
+        // Use a slightly darker overlay for better contrast if needed
+        // ctx.globalAlpha = 1.1; // Not valid
         ctx.drawImage(lightCanvas, 0, 0);
         ctx.restore();
     }
@@ -2377,7 +3343,7 @@ export function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D
     // 4. Draw Colored Glows (Additive Pass on Main)
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.4; // Reduce intensity of the color glow
+    ctx.globalAlpha = 0.6; // Increased from 0.4 for more "wow" factor
     for (const id of lights) {
         const light = world.getComponent(id, LightSource)!;
         if (light.color && light.color !== '#000000') {
@@ -2401,6 +3367,45 @@ export function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D
     ctx.restore();
 }
 
+export function equipmentLightSystem(world: World) {
+    const players = world.query([PlayerControllable, Inventory]);
+    for (const playerEntity of players) {
+        const inv = world.getComponent(playerEntity, Inventory)!;
+
+        // Find best light source from equipped items
+        let bestColor: string | null = null;
+        let maxRadius = 0;
+
+        for (const [_, item] of inv.items) {
+            if (item.glowColor) {
+                if (item.glowRadius > maxRadius) {
+                    maxRadius = item.glowRadius;
+                    bestColor = item.glowColor;
+                }
+            }
+        }
+
+        const light = world.getComponent(playerEntity, LightSource);
+        if (bestColor) {
+            if (light) {
+                light.color = bestColor;
+                light.radius = maxRadius;
+                light.flickers = true;
+            } else {
+                world.addComponent(playerEntity, new LightSource(maxRadius, bestColor, true));
+            }
+        } else {
+            // No glowing gear - if we have a light, reset it to dim or remove if specific
+            if (light && (light.color !== '#ffffff' || light.radius > 32)) {
+                light.radius = 32;
+                light.color = '#ffffff';
+                light.flickers = false;
+            }
+        }
+    }
+}
+
+
 
 export function createCorpse(world: World, x: number, y: number, loot: Item[] = []) {
     // Spawn death particles (blood/smoke burst)
@@ -2423,6 +3428,12 @@ export function createCorpse(world: World, x: number, y: number, loot: Item[] = 
     world.addComponent(e, new Interactable("Loot Corpse"));
     if (loot.length > 0) {
         world.addComponent(e, new Lootable(loot));
+
+        // If any item glows, make the corpse glow
+        const glowingItem = loot.find(item => item.glowColor);
+        if (glowingItem) {
+            world.addComponent(e, new LightSource(glowingItem.glowRadius || 40, glowingItem.glowColor!, true));
+        }
     }
     return e;
 }

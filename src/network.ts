@@ -41,6 +41,11 @@ export class NetworkManager {
     }
 
     private send(packet: PacketWriter) {
+        // Check if electronAPI exists (only available in Electron app)
+        if (!(window as any).electronAPI?.sendPacket) {
+            // Running in browser without Electron - skip network
+            return;
+        }
         // Force copy to avoid serialization issues with views
         const data = packet.getData();
         const copy = new Uint8Array(data);

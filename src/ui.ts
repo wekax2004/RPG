@@ -1,5 +1,5 @@
 import { Inventory, Item, Health, Sprite, Lootable, SpellBook, SkillPoints, Passives } from './components';
-import { spriteSheet, SHEET_TILE_SIZE, SHEET_COLS } from './assets';
+import { spriteSheet, SHEET_TILE_SIZE, SHEET_COLS, assetManager } from './assets';
 
 export class UIManager {
     private box: HTMLElement;
@@ -699,21 +699,15 @@ export class UIManager {
         inv.items.forEach((item, slotKey) => {
             const slotEl = document.querySelector(`.slot.${slotKey}`);
             if (slotEl) {
-                // Use Sprite Sheet
+                // Use AssetManager
                 const el = slotEl as HTMLElement;
-                el.style.backgroundImage = `url(${spriteSrc})`;
+                const style = assetManager.getSpriteStyle(item.uIndex);
 
-                // Sheet is 128x128 (8x8 tiles of 16px).
-                // We display at 32x32 (2x scale).
-                // So effective sheet size is 256x256.
-                // Pos = index * 32
-                const col = item.uIndex % 8;
-                const row = Math.floor(item.uIndex / 8);
-
-                el.style.backgroundPosition = `-${col * 32}px -${row * 32}px`;
-                el.style.backgroundSize = '256px 256px';
+                el.style.backgroundImage = style.backgroundImage;
+                el.style.backgroundPosition = style.backgroundPosition;
+                el.style.backgroundSize = style.backgroundSize;
                 el.style.imageRendering = 'pixelated';
-                el.setAttribute('title', ""); // Clear title as we have custom inspect
+                el.setAttribute('title', "");
 
                 // Inspect Events
                 el.onmouseover = () => this.inspectItem(item);
@@ -726,7 +720,7 @@ export class UIManager {
                     inv.items.delete(slotKey);
 
                     if (this.console) this.console.sendMessage(`Unequipped ${item.name}.`);
-                    this.updateInventory(inv, spriteSrc);
+                    this.updateInventory(inv, spriteSrc); // Recursive call still passes src, can be ignored in future
                     // Sync Shop if Open
                     if (this.currentMerchant && !this.shopPanel.classList.contains('hidden')) {
                         this.renderShop(this.currentMerchant, inv);
@@ -746,13 +740,13 @@ export class UIManager {
             slot.style.height = '32px';
 
             // Render Sprite
-            slot.style.backgroundImage = `url(${spriteSrc})`;
-            const col = item.uIndex % 8;
-            const row = Math.floor(item.uIndex / 8);
-            slot.style.backgroundPosition = `-${col * 32}px -${row * 32}px`;
-            slot.style.backgroundSize = '256px 256px';
+            const style = assetManager.getSpriteStyle(item.uIndex);
+
+            slot.style.backgroundImage = style.backgroundImage;
+            slot.style.backgroundPosition = style.backgroundPosition;
+            slot.style.backgroundSize = style.backgroundSize;
             slot.style.imageRendering = 'pixelated';
-            slot.setAttribute('title', ""); // Clear default
+            slot.setAttribute('title', "");
 
             // Inspect Events
             slot.onmouseover = () => this.inspectItem(item);
@@ -806,7 +800,8 @@ export class UIManager {
     }
 
 
-    openLoot(lootable: Lootable, entityId: number, playerInv: Inventory) {
+
+    openLoot(lootable: Lootable, entityId: number, playerInv: Inventory, mainQuest?: any) {
         if (!this.lootPanel) {
             this.lootPanel = this.createLoot();
         }
@@ -814,10 +809,10 @@ export class UIManager {
         this.activeLootEntityId = entityId;
         this.lootPanel.classList.remove('hidden');
         this.lootPanel.style.display = 'block'; // Ensure visibility
-        this.renderLoot(lootable, playerInv);
+        this.renderLoot(lootable, playerInv, mainQuest);
     }
 
-    renderLoot(lootable: Lootable, playerInv: Inventory) {
+    renderLoot(lootable: Lootable, playerInv: Inventory, mainQuest?: any) {
         const grid = this.lootPanel.querySelector('#loot-grid')!;
         grid.innerHTML = '';
 
@@ -861,8 +856,22 @@ export class UIManager {
                 lootable.items.splice(index, 1);
 
                 if (this.console) this.console.sendMessage(`Looted ${item.name}.`);
+
+                // QUEST LOGIC
+                if (mainQuest) {
+                    if (item.name === 'Fire Essence') {
+                        mainQuest.fire = true;
+                        if (this.console) this.console.addSystemMessage("QUEST: You obtained the Fire Essence!");
+                        /* trigger effect or sound */
+                    }
+                    if (item.name === 'Ice Essence') {
+                        mainQuest.ice = true;
+                        if (this.console) this.console.addSystemMessage("QUEST: You obtained the Ice Essence!");
+                    }
+                }
+
                 this.updateInventory(playerInv, spriteSheet.src);
-                this.renderLoot(lootable, playerInv);
+                this.renderLoot(lootable, playerInv, mainQuest);
 
                 // If empty, auto close? Nah, let user close.
             };
@@ -951,7 +960,8 @@ export class CharacterCreation {
 
         this.createOption(container, 'Knight', 'High HP & Capacity. Master of melee.', '#a33', 'knight');
         this.createOption(container, 'Mage', 'High Mana. Master of spells.', '#33a', 'mage');
-        this.createOption(container, 'Ranger', 'Balanced stats. Master of distance.', '#3a3', 'ranger');
+        this.createOption(container, 'Ranger', 'Distance expert. Fast and deadly.', '#3a3', 'ranger');
+        this.createOption(container, 'Paladin', 'Holy warrior. Balanced Melee/Magic.', '#DAA520', 'paladin');
 
         document.body.appendChild(this.overlay);
     }

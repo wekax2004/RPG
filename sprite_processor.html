@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprite Post-Processor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00d4ff;
+        }
+
+        .section {
+            background: #16213e;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+
+        canvas {
+            border: 2px solid #00d4ff;
+            max-width: 100%;
+            image-rendering: pixelated;
+        }
+
+        button {
+            background: #00d4ff;
+            color: #1a1a2e;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background: #00b4df;
+        }
+
+        input[type="file"] {
+            margin: 10px 0;
+        }
+
+        #preview {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .preview-box {
+            text-align: center;
+        }
+
+        .preview-box canvas {
+            display: block;
+            margin: 10px auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🎮 Sprite Post-Processor</h1>
+    <p>This tool applies the "Magic Fix" to AI-generated sprites:</p>
+    <ol>
+        <li>Remove white background → transparent</li>
+        <li>Resize 50% down (Nearest Neighbor)</li>
+        <li>Resize back up (Nearest Neighbor)</li>
+    </ol>
+
+    <div class="section">
+        <h2>Step 1: Load Sprite Sheet</h2>
+        <input type="file" id="fileInput" accept="image/*">
+        <div id="originalContainer" style="display:none;">
+            <h3>Original:</h3>
+            <canvas id="originalCanvas"></canvas>
+        </div>
+    </div>
+
+    <div class="section" id="processSection" style="display:none;">
+        <h2>Step 2: Process</h2>
+        <label>
+            Background Tolerance (0-255):
+            <input type="range" id="tolerance" min="0" max="100" value="30">
+            <span id="toleranceVal">30</span>
+        </label>
+        <br><br>
+        <button onclick="processImage()">🔧 Apply Magic Fix</button>
+    </div>
+
+    <div class="section" id="resultSection" style="display:none;">
+        <h2>Step 3: Result</h2>
+        <div id="preview">
+            <div class="preview-box">
+                <h3>Before:</h3>
+                <canvas id="beforeCanvas"></canvas>
+            </div>
+            <div class="preview-box">
+                <h3>After:</h3>
+                <canvas id="afterCanvas"></canvas>
+            </div>
+        </div>
+        <br>
+        <button onclick="downloadResult()">💾 Download Processed Sprite</button>
+    </div>
+
+    <script>
+        let originalImage = null;
+        let processedImageData = null;
+
+        const fileInput = document.getElementById('fileInput');
+        const tolerance = document.getElementById('tolerance');
+        const toleranceVal = document.getElementById('toleranceVal');
+
+        tolerance.oninput = () => toleranceVal.textContent = tolerance.value;
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+
+                    const canvas = document.getElementById('originalCanvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+
+                    document.getElementById('originalContainer').style.display = 'block';
+                    document.getElementById('processSection').style.display = 'block';
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        function processImage() {
+            if (!originalImage) return;
+
+            const tol = parseInt(tolerance.value);
+            const w = originalImage.width;
+            const h = originalImage.height;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(originalImage, 0, 0);
+
+            let imageData = tempCtx.getImageData(0, 0, w, h);
+            let data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                if (r > 255 - tol && g > 255 - tol && b > 255 - tol) {
+                    data[i + 3] = 0;
+                }
+            }
+            tempCtx.putImageData(imageData, 0, 0);
+
+            const halfCanvas = document.createElement('canvas');
+            halfCanvas.width = Math.floor(w / 2);
+            halfCanvas.height = Math.floor(h / 2);
+            const halfCtx = halfCanvas.getContext('2d');
+            halfCtx.imageSmoothingEnabled = false;
+            halfCtx.drawImage(tempCanvas, 0, 0, halfCanvas.width, halfCanvas.height);
+
+            const resultCanvas = document.getElementById('afterCanvas');
+            resultCanvas.width = halfCanvas.width * 2;
+            resultCanvas.height = halfCanvas.height * 2;
+            const resultCtx = resultCanvas.getContext('2d');
+            resultCtx.imageSmoothingEnabled = false;
+            resultCtx.drawImage(halfCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
+
+            const beforeCanvas = document.getElementById('beforeCanvas');
+            beforeCanvas.width = w;
+            beforeCanvas.height = h;
+            const beforeCtx = beforeCanvas.getContext('2d');
+            beforeCtx.drawImage(originalImage, 0, 0);
+
+            document.getElementById('resultSection').style.display = 'block';
+            processedImageData = resultCanvas.toDataURL('image/png');
+        }
+
+        function downloadResult() {
+            if (!processedImageData) return;
+            const link = document.createElement('a');
+            link.download = 'processed_sprite.png';
+            link.href = processedImageData;
+            link.click();
+        }
+    </script>
+</body>
+
+</html>

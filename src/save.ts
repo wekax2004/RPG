@@ -1,5 +1,5 @@
 import { World } from './engine';
-import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell, Passives } from './components';
+import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell, Passives, Sprite } from './components';
 import { SPRITES } from './assets';
 
 import { UIManager } from './ui';
@@ -30,11 +30,27 @@ interface SaveData {
         agility: number;
         might: number;
     };
+    seed?: number; // Added for map regeneration
 }
 
 const SAVE_KEY = 'retro-rpg-save-v2';
 
-export function saveGame(world: World, ui?: UIManager) {
+export function hasSave(): boolean {
+    return !!localStorage.getItem(SAVE_KEY);
+}
+
+export function getSavedSeed(): number | null {
+    const json = localStorage.getItem(SAVE_KEY);
+    if (!json) return null;
+    try {
+        const data: SaveData = JSON.parse(json);
+        return data.seed || null;
+    } catch {
+        return null;
+    }
+}
+
+export function saveGame(world: World, ui: UIManager, seed: number) {
     const playerEntity = world.query([PlayerControllable, Position, Health, Inventory, QuestLog, Experience])[0];
     if (playerEntity === undefined) return;
 
@@ -72,6 +88,7 @@ export function saveGame(world: World, ui?: UIManager) {
     }));
 
     const data: SaveData = {
+        seed: seed, // Save the current world seed
         position: { x: pos.x, y: pos.y },
         health: { current: hp.current, max: hp.max },
         mana: { current: mana ? mana.current : 0, max: mana ? mana.max : 0 },
@@ -147,8 +164,8 @@ export function loadGame(world: World, ui: UIManager): boolean {
             }
         }
 
-        // Restore Vocation (Update Component)
-        // If data.vocation exists, update the Vocation component to match gains
+        // Restore Vocation (Update Component AND Sprite)
+        // If data.vocation exists, update the Vocation component and sprite to match
         if (data.vocation) {
             const vocKey = data.vocation.toLowerCase();
             const vocData = VOCATIONS[vocKey];
@@ -161,6 +178,19 @@ export function loadGame(world: World, ui: UIManager): boolean {
                     currentVoc.capGain = vocData.capGain;
                 } else {
                     world.addComponent(playerEntity, new Vocation(vocData.name, vocData.hpGain, vocData.manaGain, vocData.capGain));
+                }
+
+                // Update sprite based on vocation
+                const vocationSpriteMap: Record<string, number> = {
+                    'knight': SPRITES.PLAYER,  // 0
+                    'mage': SPRITES.MAGE,      // 1
+                    'ranger': SPRITES.RANGER,  // 2
+                    'paladin': SPRITES.GUARD   // 5
+                };
+                const spriteIndex = vocationSpriteMap[vocKey] ?? SPRITES.PLAYER;
+                const spriteComp = world.getComponent(playerEntity, Sprite);
+                if (spriteComp) {
+                    spriteComp.uIndex = spriteIndex;
                 }
             }
         }
