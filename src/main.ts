@@ -453,7 +453,9 @@ class Game {
 
             // Create Map Entity
             const mapEntity = this.world.createEntity();
-            this.world.addComponent(mapEntity, new TileMap(mapData.width, mapData.height, mapData.tileSize, mapData.data as number[]));
+            const tileMap = new TileMap(mapData.width, mapData.height, mapData.tileSize);
+            tileMap.tiles = mapData.tiles;
+            this.world.addComponent(mapEntity, tileMap);
 
             this.mapWidthPixels = mapData.width * mapData.tileSize;
             this.mapHeightPixels = mapData.height * mapData.tileSize;
@@ -992,7 +994,9 @@ class Game {
                     const ty = playerTileY + dy;
                     if (tx < 0 || tx >= map.width || ty < 0 || ty >= map.height) continue;
 
-                    const tileId = map.data[ty * map.width + tx];
+                    const tileId = map.tiles[ty * map.width + tx].items.length > 0
+                        ? map.tiles[ty * map.width + tx].items[map.tiles[ty * map.width + tx].items.length - 1].id
+                        : 0;
                     const mx = mapX + (tx * tileScale);
                     const my = mapY + (ty * tileScale);
 

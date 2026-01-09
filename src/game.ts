@@ -887,38 +887,57 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
 
             if (blockedByEntity) continue;
 
-            // --- TILE-BASED COLLISION CHECK ---
-            const centerX = nextX + 8;
-            const centerY = nextY + 8;
-            const tileX = Math.floor(centerX / map.tileSize);
-            const tileY = Math.floor(centerY / map.tileSize);
+            const checkCollision = (x: number, y: number): boolean => {
+                if (!map) return false;
 
-            if (tileX < 0 || tileX >= map.width || tileY < 0 || tileY >= map.height) continue;
-            const tileId = map.data[tileY * map.width + tileX];
+                // Map Bounds
+                if (x < 0 || x >= map.width * map.tileSize || y < 0 || y >= map.height * map.tileSize) return true;
 
-            // Collision Check (Walls 17, Water 18, Trees 34)
-            if (tileId === 17) continue;
-            if (tileId === 18) continue;
-            if (tileId === 34) continue; // Trees are solid
+                const tileX = Math.floor(x / map.tileSize);
+                const tileY = Math.floor(y / map.tileSize);
+                const idx = tileY * map.width + tileX;
 
+                if (idx < 0 || idx >= map.tiles.length) return true;
 
-            // Update Position
-            // --- DEEP FOREST UNLOCK CHECK ---
-            const cx = map ? (map.width * map.tileSize) / 2 : 2048;
-            const cy = map ? (map.height * map.tileSize) / 2 : 2048;
-            const currentDist = Math.sqrt((pos.x - cx) ** 2 + (pos.y - cy) ** 2);
-            const nextDist = Math.sqrt((nextX - cx) ** 2 + (nextY - cy) ** 2);
+                const tile = map.tiles[idx];
 
-            // Limit 1550 (approx 50 tiles) -> DISABLED for verification
-            const limitDist = 9999;
-            if (nextDist > limitDist) {
-                // Disabled logic
+                // Check Stack for Solids
+                for (const item of tile.items) {
+                    // Hardcoded Solids for Phase 1
+                    if ([17, 18, 34, 37, 57, 100, 200, 202].includes(item.id)) {
+                        return true;
+                    }
+                }
+
+                // Check Entities (NPCs/Enemies) - existing logic might handle this or we add it later
+                // Existing logic checked map.data only.
+
+                return false;
+            };
+
+            // X Axis
+            if (!checkCollision(nextX + (vel.x > 0 ? 12 : 4), pos.y + 12) &&
+                !checkCollision(nextX + (vel.x > 0 ? 12 : 4), pos.y + 28)) {
+                // No collision
+                pos.x = nextX;
+            } else {
+                // Collision!
+                vel.x = 0;
             }
 
-            pos.x = nextX;
-            pos.y = nextY;
+            // Y Axis checks need separate nextY calculation if X moved... 
+            // Actually typical ECS updates X then Y or both. 
+            // Current logic calculated nextX and nextY upfront.
+            // Let's keep X update then Check Y.
 
-            // Network Update (Player Only)
+            const nextYAfterX = pos.y + vel.y * dt;
+
+            if (!checkCollision(pos.x + 4, nextYAfterX + (vel.y > 0 ? 28 : 12)) &&
+                !checkCollision(pos.x + 12, nextYAfterX + (vel.y > 0 ? 28 : 12))) {
+                pos.y = nextYAfterX;
+            } else {
+                vel.y = 0;
+            }      // Network Update (Player Only)
             if (world.getComponent(id, PlayerControllable)) {
                 if (network) network.sendMove(pos.x, pos.y);
 
@@ -938,12 +957,23 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                 }
 
                 // Footsteps
+                // Footsteps
                 const pc = world.getComponent(id, PlayerControllable)!;
                 pc.footstepTimer -= dt;
                 if (pc.footstepTimer <= 0) {
                     let material: 'grass' | 'stone' | 'wood' = 'grass';
-                    if (tileId === 19 || tileId === 20) material = 'wood';
-                    else if (tileId >= 23 || tileId === 17) material = 'stone';
+
+                    if (map) {
+                        const tx = Math.floor((pos.x + 8) / map.tileSize);
+                        const ty = Math.floor((pos.y + 8) / map.tileSize);
+                        if (tx >= 0 && tx < map.width && ty >= 0 && ty < map.height) {
+                            const tile = map.tiles[ty * map.width + tx];
+                            const top = tile.items.length > 0 ? tile.items[tile.items.length - 1].id : 0;
+
+                            if (top === 19 || top === 20) material = 'wood';
+                            else if (top >= 23 || top === 17) material = 'stone';
+                        }
+                    }
 
                     audio.playFootstep(material);
                     pc.footstepTimer = 0.4;
@@ -1403,45 +1433,11 @@ export function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
         camX = Math.floor(cam.x + shakeOffsetX);
         camY = Math.floor(cam.y + shakeOffsetY);
     }
+    // --- Tile Rendering ---
     const mapEntities = world.query([TileMap]);
-    for (const id of mapEntities) {
+    if (mapEntities.length > 0) {
+        const id = mapEntities[0];
         const map = world.getComponent(id, TileMap)!;
-        for (let y = 0; y < map.height; y++) {
-            for (let x = 0; x < map.width; x++) {
-                const tileId = map.data[y * map.width + x];
-                const drawX = x * map.tileSize - camX;
-                const drawY = y * map.tileSize - camY;
-
-                // Culling: Skip tiles outside visible area
-                if (drawX < -map.tileSize || drawX > 320 || drawY < -map.tileSize || drawY > 240) continue;
-
-                if (tileId === 17) {
-                    // Tall Wall: Draw wood floor behind, then tall wall
-                    drawSprite(ctx, 19, drawX, drawY, map.tileSize); // Wood floor background
-                    drawSprite(ctx, 17, drawX, drawY, map.tileSize); // Tall Wall
-                }
-                else if (tileId === 16) {
-                    // Grass: Use terrain variation for visual variety
-                    const variant = getTileVariant(x, y, GRASS_VARIANTS.length);
-                    drawSprite(ctx, GRASS_VARIANTS[variant], drawX, drawY, map.tileSize);
-
-                    // Occasionally add small decorative rocks
-                    if (getTileVariant(x + 100, y + 100, 20) === 0) {
-                        drawSprite(ctx, 66, drawX, drawY, map.tileSize); // ROCK_SMALL
-                    }
-                }
-                else if (tileId === 34) {
-                    // Tree: Draw varied grass background first, then tall tree
-                    const variant = getTileVariant(x, y, GRASS_VARIANTS.length);
-                    drawSprite(ctx, GRASS_VARIANTS[variant], drawX, drawY, map.tileSize);
-                    drawSprite(ctx, tileId, drawX, drawY, map.tileSize);
-                }
-                else {
-                    // Default: Direct map (Sprite ID matches Tile ID)
-                    drawSprite(ctx, tileId, drawX, drawY, map.tileSize);
-                }
-            }
-        }
     }
 }
 
@@ -1821,7 +1817,7 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
         map.width = mapData.width;
         map.height = mapData.height;
         map.tileSize = mapData.tileSize;
-        map.data = mapData.data; // Replace array
+        map.tiles = mapData.tiles; // Replace array
     }
 
     // 3. Spawn Entities (from Map Data)

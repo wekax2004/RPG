@@ -13,13 +13,47 @@ export class Sprite {
     constructor(public uIndex: number, public size: number = 16, public flipX: boolean = false) { }
 }
 
+export class TileItem {
+    constructor(
+        public id: number, // Sprite/Type ID
+        public count: number = 1 // Support stacking items later
+    ) { }
+}
+
+export class Tile {
+    items: TileItem[] = []; // Stack: [Ground, ..., TopItem]
+
+    // Helper to add items easily
+    add(id: number) {
+        this.items.push(new TileItem(id));
+    }
+
+    // Helper to get top item
+    top(): TileItem | null {
+        return this.items.length > 0 ? this.items[this.items.length - 1] : null;
+    }
+
+    // Helper to check if stack has a specific item ID
+    has(id: number): boolean {
+        return this.items.some(i => i.id === id);
+    }
+
+    // Helper to remove top item
+    pop(): TileItem | undefined {
+        return this.items.pop();
+    }
+}
+
 export class TileMap {
+    public tiles: Tile[];
+
     constructor(
         public width: number,
         public height: number,
-        public tileSize: number,
-        public data: number[]
-    ) { }
+        public tileSize: number
+    ) {
+        this.tiles = Array(width * height).fill(null).map(() => new Tile());
+    }
 }
 
 export class PlayerControllable {
