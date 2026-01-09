@@ -1,174 +1,53 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Retro RPG Client</title>
-    <link rel="stylesheet" href="./src/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tibia-Style Engine</title>
     <style>
-        /* Retro Dialogue Box */
-        #dialogue-ui {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 600px;
-            height: 150px;
+        body {
+            margin: 0;
+            padding: 0;
             background-color: #000;
-            border: 4px solid #fff;
-            padding: 20px;
-            font-family: 'Press Start 2P', monospace;
-            color: #fff;
-            display: none;
-            /* Hidden by default */
-            z-index: 100;
-            box-shadow: 0 0 0 4px #000, 0 0 0 8px #fff;
-            /* Double border effect */
+            overflow: hidden;
+            /* Prevent scrollbars */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
         }
 
-        #dialogue-name {
-            color: #ffd700;
-            /* Gold name */
-            font-size: 16px;
-            margin-bottom: 10px;
-            text-transform: uppercase;
+        /* The Game Screen */
+        #gameCanvas {
+            image-rendering: pixelated;
+            /* Keeps sprites crisp */
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            background-color: #1a1a1a;
         }
 
-        #dialogue-text {
-            font-size: 18px;
-            line-height: 1.5;
-        }
-
-        #dialogue-hint {
+        /* Simple UI Overlay (for right-click debugs) */
+        #ui-layer {
             position: absolute;
-            bottom: 10px;
-            right: 20px;
-            font-size: 10px;
-            color: #888;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            50% {
-                opacity: 0;
-            }
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+            pointer-events: none;
+            /* Let clicks pass through to canvas */
         }
     </style>
 </head>
 
 <body>
 
-    <!-- Left: The Game Viewport -->
-    <div id="game-viewport">
-        <canvas id="game-canvas" width="320" height="240"></canvas>
-        <!-- Overlay UI (Floating Text) -->
-        <div id="dialogue-box" class="hidden">
-            <p id="dialogue-text"></p>
-        </div>
+    <div id="ui-layer">
+        Tibia Engine v0.1<br>
+        WASD to Move | Right Click to Interact
     </div>
 
-    <!-- Dialogue UI -->
-    <div id="dialogue-ui" style="display: none;">
-        <div id="dialogue-name"></div>
-        <div id="dialogue-text"></div>
-        <div id="dialogue-hint">Press E to continue</div>
-    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
 
-
-    <!-- Right: The Sidebar -->
-    <div id="sidebar">
-        <div class="panel" id="minimap-panel">
-            <div class="panel-header">Minimap</div>
-            <div id="minimap-placeholder">
-                <canvas id="minimap-canvas" width="96" height="96" style="background: #111; display: block;"></canvas>
-            </div>
-        </div>
-
-        <div class="panel" id="status-panel">
-            <div class="panel-header">Status</div>
-            <div class="status-row"><span>GP:</span> <span class="val" id="gold-val" style="color:#ffd700">0</span>
-            </div>
-            <div class="status-row"><span>Level:</span> <span class="val" id="level-val">1</span></div>
-            <div class="status-row"><span>XP:</span> <span class="val" id="xp-val">0/100</span></div>
-            <div class="status-row"><span>Health:</span> <span class="val" id="hp-val">100/100</span></div>
-            <div class="status-row"><span>Mana:</span> <span class="val" id="mana-val">50/50</span></div>
-            <div class="status-row"><span>Cap:</span> <span class="val" id="cap-val">400</span></div>
-        </div>
-
-        <div class="panel" id="inventory-panel">
-            <div class="panel-header">Inventory</div>
-            <div class="slots-grid">
-                <div class="slot head"></div>
-                <div class="slot backpack" title="Backpack"></div>
-                <div class="slot body"></div>
-                <div class="slot rhand"></div>
-                <div class="slot lhand"></div>
-                <div class="slot feet"></div>
-                <div class="slot potion" title="Potion (H)"></div>
-                <div id="loading" style="display:none;">Loading...</div>
-            </div>
-        </div>
-
-        <div class="panel hidden" id="bag-panel">
-            <div class="panel-header">Backpack</div>
-            <div id="bag-grid">
-                <!-- Dynamic slots -->
-            </div>
-        </div>
-
-        <div class="panel hidden" id="quest-panel">
-            <div class="panel-header">Quests (Q)</div>
-            <div id="quest-list" style="max-height: 150px; overflow-y: auto; font-size: 12px;">
-                <div class="quest-empty" style="color: #888; padding: 8px; text-align: center;">No active quests</div>
-            </div>
-        </div>
-    </div>
-    </div>
-
-
-    <!-- Shop Panel (Hidden by default) -->
-    <div class="panel hidden" id="shop-panel"
-        style="display: flex; flex-direction: column; gap: 4px; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; height: 300px; z-index: 6000; background: #2d2d2d; box-shadow: 0 0 20px #000;">
-        <div class="panel-header">Village Shop <span style="font-size: 10px; float: right; color: #888;">(ESC to
-                Close)</span></div>
-        <div style="flex: 1; display: flex; gap: 4px; overflow: hidden;">
-            <div style="flex: 1; border: 1px solid #444; background: #111; display: flex; flex-direction: column;">
-                <div style="background: #333; padding: 2px; font-size: 12px; text-align: center; color: #8f8;">Buying
-                </div>
-                <div id="shop-buy-list" style="overflow-y: auto; flex: 1;"></div>
-            </div>
-            <div style="flex: 1; border: 1px solid #444; background: #111; display: flex; flex-direction: column;">
-                <div style="background: #333; padding: 2px; font-size: 12px; text-align: center; color: #f88;">Selling
-                </div>
-                <div id="shop-sell-list" style="overflow-y: auto; flex: 1;"></div>
-            </div>
-        </div>
-        <div style="text-align: center; font-size: 12px; color: #aaa;">Click item to Trade</div>
-    </div>
-
-    <!-- Bottom: Chat Console -->
-    <!-- Bottom: Chat Console -->
-    <div id="console-panel"
-        style="position: fixed; bottom: 0; left: 0; width: 100%; height: 150px; background: rgba(0,0,0,0.9); border-top: 2px solid #555; display: flex; flex-direction: column; z-index: 2000;">
-        <div id="console-log"
-            style="flex: 1; overflow-y: auto; padding: 5px; font-family: 'VT323', monospace; font-size: 16px; color: #aaa;">
-            <div class="msg system">14:50: Welcome to Retro RPG.</div>
-        </div>
-
-
-
-        <div id="chat-input-bar" style="border-top: 1px solid #444; padding: 5px; background: #222; display: none;">
-            <input type="text" id="console-input" placeholder="Say something... (Press Enter)"
-                style="width: 100%; background: transparent; border: none; color: white; font-family: 'VT323', monospace; font-size: 18px; outline: none;">
-        </div>
-    </div>
-
-    </div>
     <script type="module" src="/src/main.ts"></script>
 </body>
 
