@@ -9,6 +9,10 @@ export class Player {
     queuedDx: number = 0;
     queuedDy: number = 0;
 
+    // Visual State
+    spriteId: number = 0; // Default: 0 (SPRITES.PLAYER)
+    flipX: boolean = false;
+
     constructor(startX: number, startY: number) {
         this.x = startX;
         this.y = startY;

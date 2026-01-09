@@ -1,6 +1,7 @@
 import { WorldMap } from '../core/map';
 import { TILE_SIZE } from '../core/types';
 import { Player } from '../core/player';
+import { assetManager } from '../assets';
 
 export class PixelRenderer {
     ctx: CanvasRenderingContext2D;
@@ -27,7 +28,6 @@ export class PixelRenderer {
         this.ctx.fillRect(0, 0, screenWidth, screenHeight);
 
         // Calculate Camera Position (Centered on Player)
-        // CameraX = PlayerPixelX - ScreenHalf
         const camX = Math.floor((player.x * TILE_SIZE) - (screenWidth / 2) + (TILE_SIZE / 2));
         const camY = Math.floor((player.y * TILE_SIZE) - (screenHeight / 2) + (TILE_SIZE / 2));
 
@@ -49,21 +49,26 @@ export class PixelRenderer {
                 for (let i = 0; i < tile.items.length; i++) {
                     const item = tile.items[i];
 
-                    // Fallback Rendering
-                    if (item.id === 16) { // Grass
-                        this.ctx.fillStyle = '#2dba4e'; // Github Green
-                    } else if (item.id === 17) { // Wall
-                        this.ctx.fillStyle = '#6e7681'; // Github Grey
-                    } else if (item.id === 200) { // Bush
-                        this.ctx.fillStyle = '#2288cc'; // Blueish
-                    } else if (item.id === 201) { // Empty Bush
-                        this.ctx.fillStyle = '#445544';
-                    } else {
-                        // Unknown / Other Items
-                        this.ctx.fillStyle = '#ff0000';
-                    }
+                    // Try to get sprite
+                    const sprite = assetManager.getSpriteSource(item.id);
 
-                    this.ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
+                    if (sprite) {
+                        this.ctx.drawImage(
+                            sprite.image,
+                            sprite.sx, sprite.sy, TILE_SIZE, TILE_SIZE, // Source (Force 32x32 for now)
+                            drawX, drawY, TILE_SIZE, TILE_SIZE          // Dest
+                        );
+                    } else {
+                        // Fallback Rendering
+                        if (item.id === 16) { // Grass
+                            this.ctx.fillStyle = '#2dba4e';
+                        } else if (item.id === 17) { // Wall
+                            this.ctx.fillStyle = '#6e7681';
+                        } else {
+                            this.ctx.fillStyle = '#ff0000';
+                        }
+                        this.ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
+                    }
 
                     // Draw Count if stacked > 1
                     if (item.count > 1) {
@@ -76,10 +81,27 @@ export class PixelRenderer {
             }
         }
 
-        // Draw Player (Simple Blue Square for now, on top)
+        // Draw Player
         const pDrawX = Math.floor(player.x * TILE_SIZE - camX);
         const pDrawY = Math.floor(player.y * TILE_SIZE - camY);
-        this.ctx.fillStyle = '#3fb950'; // Player Color
-        this.ctx.fillRect(pDrawX + 4, pDrawY + 4, TILE_SIZE - 8, TILE_SIZE - 8); // Slightly smaller
+
+        const pSprite = assetManager.getSpriteSource(player.spriteId);
+
+        if (pSprite) {
+            this.ctx.save();
+            if (player.flipX) {
+                // Flip Logic: Scale(-1, 1) and translate coordinate
+                this.ctx.translate(pDrawX + TILE_SIZE, pDrawY);
+                this.ctx.scale(-1, 1);
+                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, TILE_SIZE, TILE_SIZE, 0, 0, TILE_SIZE, TILE_SIZE);
+            } else {
+                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, TILE_SIZE, TILE_SIZE, pDrawX, pDrawY, TILE_SIZE, TILE_SIZE);
+            }
+            this.ctx.restore();
+        } else {
+            // Fallback Box
+            this.ctx.fillStyle = '#3fb950'; // Player Color
+            this.ctx.fillRect(pDrawX + 4, pDrawY + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+        }
     }
 }

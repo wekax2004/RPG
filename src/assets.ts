@@ -140,117 +140,33 @@ export class AssetManager {
     }
 
     async load(): Promise<void> {
-        console.log('[AssetManager] Loading Placeholder Assets...');
+        console.log('[AssetManager] Loading Spritesheets...');
 
-        // 1. Load the Placeholders you just generated
-        // Note: We use 'sprites/' because Vite serves 'public/' as root
-        await this.loadImage('knight', 'sprites/player_knight.png');
-        await this.loadImage('mage', 'sprites/player_mage.png');
-        await this.loadImage('ranger', 'sprites/player_ranger.png');
-        await this.loadImage('orc', 'sprites/enemy_orc.png');
-        await this.loadImage('grass', 'sprites/tile_grass.png');
-        await this.loadImage('wall', 'sprites/tile_wall.png');
+        // 1. Load Main Sheets
+        // Note: You must ensure these files exist in public/sprites/ or public/assets/
+        // I will assume they are in 'sprites/' for consistency with previous setup.
+        await this.loadImage('knight_sheet', 'sprites/knight_sheet.png');
+        await this.loadImage('world_tiles', 'sprites/world_tiles.png');
+        await this.loadImage('monsters', 'sprites/monsters.png');
 
-        // Define how to read them (Simple 32x32 single tiles)
-        const singleTile = { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
+        // 2. Configure Sheets (32x32 Grid, 32px Stride)
+        const sheet32 = { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
+        this.sheetConfigs.set('knight_sheet', sheet32);
+        this.sheetConfigs.set('world_tiles', sheet32);
+        this.sheetConfigs.set('monsters', sheet32);
 
-        this.sheetConfigs.set('knight', singleTile);
-        this.sheetConfigs.set('mage', singleTile);
-        this.sheetConfigs.set('ranger', singleTile);
-        this.sheetConfigs.set('orc', singleTile);
-        this.sheetConfigs.set('grass', singleTile);
-        this.sheetConfigs.set('wall', singleTile);
-
-        // Load Items (fallback to keep inventory working)
+        // Load Items (Legacy support / Inventory)
         await this.loadItems();
 
         this.loaded = true;
         this.buildSpriteCache();
-        console.log('[AssetManager] Placeholders loaded.');
+        console.log('[AssetManager] Assets loaded.');
     }
 
     async loadImage(key: string, src: string) {
         const img = new Image();
         img.src = src;
         await new Promise(r => img.onload = r);
-        this.images.set(key, img);
-    }
-
-    async loadAIAsset(key: string, src: string, size: number) {
-        return new Promise<void>((resolve) => {
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.src = src;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d')!;
-
-                // RESIZE
-                canvas.width = size;
-                canvas.height = size;
-
-                // Draw Resized (Nearest Neighbor for Pixel Art feel)
-                ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(img, 0, 0, size, size);
-
-                // CHROMA KEY: Remove White Background
-                const imageData = ctx.getImageData(0, 0, size, size);
-                const data = imageData.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i];
-                    const g = data[i + 1];
-                    const b = data[i + 2];
-                    // If pixel is white/near-white, make transparent
-                    if (r > 240 && g > 240 && b > 240) {
-                        data[i + 3] = 0;
-                    }
-
-                    // Special Case for AI Grass/Water/Walls (Don't transparent the whole thing if it's white? 
-                    // Actually, texture gen usually has no bg. 
-                    // But if it DOES have white highlights, Chroma Key might kill them.
-                    // Let's assume Generated Images "Background: Solid white background" works for sprites.
-                    // For textures (Prompt said "seamless", "no dark borders").
-                    // Let's keep Chroma Key for now, hoping prompt didn't put white INSIDE the texture.
-                    // Actually, Grass/Water might need to be OPAQUE.
-                }
-
-                // If it's a seamless tile (Grass/Water/Floor/Wall), we probably want it OPAQUE.
-                // Hacks based on key name.
-                if (key.includes('grass') || key.includes('water') || key.includes('wall') || key.includes('floor')) {
-                    // Restore original alpha (unless it was actually transparent)
-                    ctx.putImageData(imageData, 0, 0);
-                    // Wait, if we chroma keyed it we lost it.
-                    // For seamless tiles, we typically DON'T want chroma keying if the generator made a full tile.
-                    // Let's just reloading the image if we messed up? 
-                    // Better: Conditional Chroma Key.
-                    ctx.drawImage(img, 0, 0, size, size); // Redraw over cleanly
-                } else {
-                    ctx.putImageData(imageData, 0, 0);
-                }
-
-                const cleanImg = new Image();
-                cleanImg.src = canvas.toDataURL();
-                this.images.set(key, cleanImg);
-
-                // Config for AI Asset
-                this.sheetConfigs.set(key, { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
-                console.log(`[AssetManager] Processed AI Asset: ${key}`);
-                resolve();
-            };
-        });
-    }
-
-    // Using the Lush Generator for better quality characters
-    private generateLushCharacter(key: string, main: string, accent: string) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 32; canvas.height = 32;
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(16, 28, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(16, 12, 11, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(7, 18, 18, 11);
-        ctx.fillStyle = main; ctx.fillRect(8, 19, 16, 9);
-        ctx.fillStyle = '#ffccaa'; ctx.beginPath(); ctx.arc(16, 12, 10, 0, Math.PI * 2); ctx.fill();
-        if (key === 'mage') { ctx.fillStyle = main; ctx.beginPath(); ctx.arc(16, 12, 11, Math.PI, 0); ctx.fill(); }
-        const img = new Image(); img.src = canvas.toDataURL();
         this.images.set(key, img);
     }
 
@@ -269,61 +185,35 @@ export class AssetManager {
     private buildSpriteCache() {
         if (!this.images.size) return;
 
-        // CHARACTERS (Mapped to Phase 1-4 AI Assets)
-        // PLAYER MAPPED TO SHEET (Cols: 3, Rows: 1)
-        // Load the sheet first in load()!
+        // --- MAPPING CORE SPRITES ---
 
-        // Mapping PLAYER to the sheet. 
-        // 0,0 is Front. 
-        // We will need logic in Renderer to pick the right column based on Facing.
-        // For now, map sprite 0 to the whole sheet or first frame?
-        // mapSprite takes (id, sheet, col, row, cols, rows)
-        // Let's map ID 0 to the First Frame (Front)
-        this.mapSprite(SPRITES.PLAYER, 'ai_mage_sheet', 0, 0);
+        // 1. Player (Knight Sheet)
+        // Col 0, Row 0 = Default Front
+        this.mapSprite(SPRITES.PLAYER, 'knight_sheet', 0, 0);
+        // Col 1, Row 0 = Back
+        this.mapSprite(SPRITES.PLAYER_BACK, 'knight_sheet', 1, 0);
+        // Col 2, Row 0 = Side (Use flipX in renderer for Left/Right)
+        this.mapSprite(SPRITES.PLAYER_SIDE, 'knight_sheet', 2, 0);
 
-        // We might need separate IDs for directions if the renderer isn't smart yet.
-        // OR we rely on the Renderer to use (BaseID + Offset).
-        // Standard RPGs often use: ID (Front), ID+1 (Back), ID+2 (Side).
-        // ASSETS.TS SPRITES: PLAYER=0.
-        // So let's map:
-        // 0 -> Front
-        // 1 -> Back? No, 1 is Mage (which is also Player).
-        // game.ts inputSystem sets facingX/Y.
+        this.mapSprite(SPRITES.KNIGHT, 'knight_sheet', 0, 0);
 
-        // Let's Check Renderer Logic or Sprite Component.
-        // Viewed files: game.ts uses `new Sprite(spriteIndex)`.
-        // It doesn't seem to dynamically change Sprite ID based on facing yet.
-        // Phase 6 Goal: "Directional Sprites".
-        // I need to UPDATE game.ts/renderer.ts to support this.
-        // --- MAP THE IDS TO YOUR NEW FILES ---
+        // 2. World Tiles (Ground, Walls)
+        // Grass -> Col 1, Row 0
+        this.mapSprite(SPRITES.GRASS, 'world_tiles', 1, 0);
+        // Wall -> Col 2, Row 4
+        this.mapSprite(SPRITES.WALL, 'world_tiles', 2, 4);
 
-        // Characters
-        this.mapSprite(SPRITES.PLAYER, 'knight', 0, 0); // Default Knight
-        this.mapSprite(SPRITES.KNIGHT, 'knight', 0, 0);
-        this.mapSprite(SPRITES.MAGE, 'mage', 0, 0);
-        this.mapSprite(SPRITES.RANGER, 'ranger', 0, 0);
-        this.mapSprite(SPRITES.ORC, 'orc', 0, 0);
+        // 3. Monsters
+        // Orc -> Col 0, Row 1
+        this.mapSprite(SPRITES.ORC, 'monsters', 0, 1);
+        // Map other enemies to Orc for visibility until we have their sprites
+        this.mapSprite(SPRITES.SKELETON, 'monsters', 0, 1);
 
-        // Map other enemies to Orc for now (so they aren't invisible)
-        this.mapSprite(SPRITES.SKELETON, 'orc', 0, 0);
-        this.mapSprite(SPRITES.ZOMBIE, 'orc', 0, 0);
-
-        // Terrain
-        this.mapSprite(SPRITES.GRASS, 'grass', 0, 0);      // ID 16
-        this.mapSprite(SPRITES.WALL, 'wall', 0, 0);      // ID 17
-
-        // Map "Town" tiles to standard tiles for now
-        this.mapSprite(SPRITES.TOWN_FLOOR, 'grass', 0, 0);
-        this.mapSprite(SPRITES.TOWN_WALL, 'wall', 0, 0);
-
-        // Fallbacks for missing generated files
-        // Use 'grass' for things like Water/Wood so they aren't black
-        this.mapSprite(SPRITES.WATER, 'grass', 0, 0);
-        this.mapSprite(SPRITES.WOOD, 'grass', 0, 0);
-
-        // Directional Fallbacks (until proper sheets exist)
-        this.mapSprite(SPRITES.PLAYER_BACK, 'knight', 0, 0);
-        this.mapSprite(SPRITES.PLAYER_SIDE, 'knight', 0, 0);
+        // --- FALLBACKS ---
+        // Map critical missing IDs to something visible to prevent crashes
+        this.mapSprite(SPRITES.TOWN_FLOOR, 'world_tiles', 1, 0); // Grass
+        this.mapSprite(SPRITES.TOWN_WALL, 'world_tiles', 2, 4);  // Wall
+        this.mapSprite(SPRITES.WATER, 'world_tiles', 1, 0);      // Blue? Use Grass for now.
     }
 
     private mapSprite(id: number, sheet: string, col: number, row: number, cols: number = 1, rows: number = 1) {

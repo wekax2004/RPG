@@ -46,23 +46,30 @@ window.addEventListener('keydown', (e) => {
     }
 
     // Map Keys to Directions
-    // In Tibia, we don't move "x--", we request "MOVE_WEST"
     switch (e.key) {
         case 'w':
         case 'ArrowUp':
             player.queueMove(0, -1); // North
+            player.spriteId = 900; // PLAYER_BACK
+            player.flipX = false;
             break;
         case 's':
         case 'ArrowDown':
             player.queueMove(0, 1);  // South
+            player.spriteId = 0;   // PLAYER (Front)
+            player.flipX = false;
             break;
         case 'a':
         case 'ArrowLeft':
             player.queueMove(-1, 0); // West
+            player.spriteId = 901; // PLAYER_SIDE
+            player.flipX = true;   // Flip for Left
             break;
         case 'd':
         case 'ArrowRight':
             player.queueMove(1, 0);  // East
+            player.spriteId = 901; // PLAYER_SIDE
+            player.flipX = false;  // No Flip for Right
             break;
     }
 });
