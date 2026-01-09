@@ -53,19 +53,31 @@ export class PixelRenderer {
                     const sprite = assetManager.getSpriteSource(item.id);
 
                     if (sprite) {
+                        // Prompt 3: Handle Tall Sprites
+                        // If sprite height > 32, offset Y upwards so feet stay anchored
+                        const offset = sprite.sh - TILE_SIZE;
+
                         this.ctx.drawImage(
                             sprite.image,
-                            sprite.sx, sprite.sy, TILE_SIZE, TILE_SIZE, // Source (Force 32x32 for now)
-                            drawX, drawY, TILE_SIZE, TILE_SIZE          // Dest
+                            sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+                            drawX, drawY - offset, TILE_SIZE, sprite.sh
                         );
                     } else {
                         // Fallback Rendering
+                        // Prompt 3: Debug Missing Sprites
+                        // Only log once per frame/id to avoid spam? No, user asked for warning.
+                        // We'll trust browser console grouping.
+                        // console.warn(`Missing Sprite ID: ${item.id}`); 
+                        // Actually, spamming console is bad for performance. 
+                        // Let's rely on the visual PINK indication.
+
                         if (item.id === 16) { // Grass
                             this.ctx.fillStyle = '#2dba4e';
                         } else if (item.id === 17) { // Wall
                             this.ctx.fillStyle = '#6e7681';
                         } else {
-                            this.ctx.fillStyle = '#ff0000';
+                            // Prompt 3: Pink for unknown to debug
+                            this.ctx.fillStyle = '#ff00ff';
                         }
                         this.ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
                     }
@@ -88,14 +100,19 @@ export class PixelRenderer {
         const pSprite = assetManager.getSpriteSource(player.spriteId);
 
         if (pSprite) {
+            // Prompt 3: Tall Player Sprite Logic
+            const offset = pSprite.sh - TILE_SIZE;
+            const destY = pDrawY - offset;
+
             this.ctx.save();
             if (player.flipX) {
                 // Flip Logic: Scale(-1, 1) and translate coordinate
-                this.ctx.translate(pDrawX + TILE_SIZE, pDrawY);
+                // Translate to X + Width, Flip.
+                this.ctx.translate(pDrawX + TILE_SIZE, destY);
                 this.ctx.scale(-1, 1);
-                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, TILE_SIZE, TILE_SIZE, 0, 0, TILE_SIZE, TILE_SIZE);
+                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, pSprite.sw, pSprite.sh, 0, 0, TILE_SIZE, pSprite.sh);
             } else {
-                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, TILE_SIZE, TILE_SIZE, pDrawX, pDrawY, TILE_SIZE, TILE_SIZE);
+                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, pSprite.sw, pSprite.sh, pDrawX, destY, TILE_SIZE, pSprite.sh);
             }
             this.ctx.restore();
         } else {

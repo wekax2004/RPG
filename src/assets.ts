@@ -143,17 +143,17 @@ export class AssetManager {
         console.log('[AssetManager] Loading Spritesheets...');
 
         // 1. Load Main Sheets
-        // Note: You must ensure these files exist in public/sprites/ or public/assets/
-        // I will assume they are in 'sprites/' for consistency with previous setup.
         await this.loadImage('knight_sheet', 'sprites/knight_sheet.png');
         await this.loadImage('world_tiles', 'sprites/world_tiles.png');
         await this.loadImage('monsters', 'sprites/monsters.png');
+        await this.loadImage('grass_tile', 'sprites/grass_tile.png'); // Renamed manually
 
         // 2. Configure Sheets (32x32 Grid, 32px Stride)
         const sheet32 = { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
         this.sheetConfigs.set('knight_sheet', sheet32);
         this.sheetConfigs.set('world_tiles', sheet32);
         this.sheetConfigs.set('monsters', sheet32);
+        this.sheetConfigs.set('grass_tile', sheet32);
 
         // Load Items (Legacy support / Inventory)
         await this.loadItems();
@@ -188,32 +188,38 @@ export class AssetManager {
         // --- MAPPING CORE SPRITES ---
 
         // 1. Player (Knight Sheet)
-        // Col 0, Row 0 = Default Front
-        this.mapSprite(SPRITES.PLAYER, 'knight_sheet', 0, 0);
-        // Col 1, Row 0 = Back
-        this.mapSprite(SPRITES.PLAYER_BACK, 'knight_sheet', 1, 0);
-        // Col 2, Row 0 = Side (Use flipX in renderer for Left/Right)
-        this.mapSprite(SPRITES.PLAYER_SIDE, 'knight_sheet', 2, 0);
+        // Prompt 1: Front=C1R0, Back=C1R1, Side=C1R2
+        this.mapSprite(SPRITES.PLAYER, 'knight_sheet', 1, 0);       // Front
+        this.mapSprite(SPRITES.PLAYER_BACK, 'knight_sheet', 1, 1);  // Back
+        this.mapSprite(SPRITES.PLAYER_SIDE, 'knight_sheet', 1, 2);  // Side
 
-        this.mapSprite(SPRITES.KNIGHT, 'knight_sheet', 0, 0);
+        this.mapSprite(SPRITES.KNIGHT, 'knight_sheet', 1, 0);
 
         // 2. World Tiles (Ground, Walls)
-        // Grass -> Col 1, Row 0
-        this.mapSprite(SPRITES.GRASS, 'world_tiles', 1, 0);
-        // Wall -> Col 2, Row 4
+        // Prompt 2: Grass -> grass_tile Col 0, Row 0
+        this.mapSprite(SPRITES.GRASS, 'grass_tile', 0, 0);
+
+        // Wall -> Col 2, Row 4 (Keep existing)
         this.mapSprite(SPRITES.WALL, 'world_tiles', 2, 4);
 
         // 3. Monsters
-        // Orc -> Col 0, Row 1
+        // Orc -> Col 0, Row 1 (Keep existing for now)
         this.mapSprite(SPRITES.ORC, 'monsters', 0, 1);
-        // Map other enemies to Orc for visibility until we have their sprites
         this.mapSprite(SPRITES.SKELETON, 'monsters', 0, 1);
 
         // --- FALLBACKS ---
         // Map critical missing IDs to something visible to prevent crashes
-        this.mapSprite(SPRITES.TOWN_FLOOR, 'world_tiles', 1, 0); // Grass
+        this.mapSprite(SPRITES.TOWN_FLOOR, 'grass_tile', 0, 0); // Grass
         this.mapSprite(SPRITES.TOWN_WALL, 'world_tiles', 2, 4);  // Wall
-        this.mapSprite(SPRITES.WATER, 'world_tiles', 1, 0);      // Blue? Use Grass for now.
+        this.mapSprite(SPRITES.WATER, 'grass_tile', 0, 0);      // Blue? Use Grass for now.
+    }
+
+    public getSheetConfig(key: string): SheetConfig | undefined {
+        return this.sheetConfigs.get(key);
+    }
+
+    public rebuildCache() {
+        this.buildSpriteCache();
     }
 
     private mapSprite(id: number, sheet: string, col: number, row: number, cols: number = 1, rows: number = 1) {

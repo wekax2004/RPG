@@ -154,3 +154,35 @@ async function start() {
 }
 
 start();
+
+// --- SPRITE SLIDER TOOL (Debug) ---
+// Use SHIFT + Arrow Keys / W / S to tune offsets
+const DEBUG_SHEET = 'world_tiles';
+
+window.addEventListener('keydown', (e) => {
+    if (!e.shiftKey) return;
+
+    const config = assetManager.getSheetConfig(DEBUG_SHEET);
+    if (!config) return;
+
+    let changed = false;
+
+    // Offsets
+    if (e.key === 'ArrowUp') { config.offsetY -= 1; changed = true; }
+    if (e.key === 'ArrowDown') { config.offsetY += 1; changed = true; }
+    if (e.key === 'ArrowLeft') { config.offsetX -= 1; changed = true; }
+    if (e.key === 'ArrowRight') { config.offsetX += 1; changed = true; }
+
+    // Stride
+    if (config.stride === undefined) config.stride = 32;
+    if (e.key === 'w' || e.key === 'W') { config.stride += 1; changed = true; }
+    if (e.key === 's' || e.key === 'S') { config.stride -= 1; changed = true; }
+
+    if (changed) {
+        e.preventDefault();
+        assetManager.rebuildCache();
+        console.clear();
+        console.log(`[Sprite Tool] Sheet: ${DEBUG_SHEET} | Stride: ${config.stride} | Offset: ${config.offsetX}, ${config.offsetY}`);
+        console.log(`COPY: this.sheetConfigs.set('${DEBUG_SHEET}', { tileSize: 32, stride: ${config.stride}, offsetX: ${config.offsetX}, offsetY: ${config.offsetY} });`);
+    }
+});
