@@ -1,4 +1,5 @@
 import { World, Entity, InputHandler } from './engine';
+import { PHYSICS } from './physics';
 import { UIManager } from './ui';
 import { AudioController } from './audio';
 
@@ -57,21 +58,63 @@ export function inputSystem(world: World, input: InputHandler) {
 
         const sprite = world.getComponent(id, Sprite);
 
+        // Directional Movement & Animation
+        // console.log(`[Game] Entity ${id} Sprite uIndex: ${sprite?.uIndex}`);
+        // Directional Movement & Animation
+        // Directional Movement & Animation - "Knight Movement Sync"
+        // Force uIndex updates immediately
         if (input.isDown('ArrowLeft') || input.isDown('KeyA')) {
             vel.x = -speed; pc.facingX = -1; pc.facingY = 0;
-            if (sprite) { sprite.uIndex = SPRITES.PLAYER_SIDE; sprite.flipX = true; }
+            if (sprite) {
+                sprite.uIndex = 2; // Right (Flipped)
+                sprite.flipX = true; // Flip for Left
+            }
         }
-        if (input.isDown('ArrowRight') || input.isDown('KeyD')) {
+        else if (input.isDown('ArrowRight') || input.isDown('KeyD')) {
             vel.x = speed; pc.facingX = 1; pc.facingY = 0;
-            if (sprite) { sprite.uIndex = SPRITES.PLAYER_SIDE; sprite.flipX = false; }
+            if (sprite) {
+                sprite.uIndex = 2; // Right
+                sprite.flipX = false;
+            }
         }
-        if (input.isDown('ArrowUp') || input.isDown('KeyW')) {
+        else if (input.isDown('ArrowUp') || input.isDown('KeyW')) {
             vel.y = -speed; pc.facingX = 0; pc.facingY = -1;
-            if (sprite) { sprite.uIndex = SPRITES.PLAYER_BACK; sprite.flipX = false; }
+            if (sprite) {
+                sprite.uIndex = 1; // Up
+                sprite.flipX = false;
+            }
         }
-        if (input.isDown('ArrowDown') || input.isDown('KeyS')) {
+        else if (input.isDown('ArrowDown') || input.isDown('KeyS')) {
             vel.y = speed; pc.facingX = 0; pc.facingY = 1;
-            if (sprite) { sprite.uIndex = SPRITES.PLAYER; sprite.flipX = false; }
+            if (sprite) {
+                sprite.uIndex = 0; // Down
+                sprite.flipX = false;
+            }
+        }
+
+        // --- ANIMATION FRAME CYCLING ---
+        if (sprite) {
+            const isMoving = vel.x !== 0 || vel.y !== 0;
+
+            if (isMoving) {
+                // Cycle Frames 0, 1, 2
+                // Use built-in timer or date
+                const now = Date.now();
+                const frameDuration = 150; // 150ms per frame
+                const frameIndex = Math.floor(now / frameDuration) % 3; // 0, 1, 2
+                sprite.frame = 1; // Idle Frame (Center)
+            }
+
+            // FORCE VISIBILITY (Natural World Debug)
+            // "Force player's sprite uIndex to 0 and frame to 1"
+            sprite.uIndex = 0; // Down Row
+            sprite.frame = 1;  // Center Column
+        }
+
+        // --- IDLE LOGIC (Legacy Cleanup) ---
+        // If no keys pressed, we just rely on the else block above for frame=1
+        if (vel.x === 0 && vel.y === 0) {
+            // No op, handled above
         }
 
         // Unstuck
@@ -903,8 +946,7 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
 
                 // Check Stack for Solids
                 for (const item of tile.items) {
-                    // Hardcoded Solids for Phase 1
-                    if ([17, 18, 34, 37, 57, 100, 200, 202].includes(item.id)) {
+                    if (PHYSICS.isSolid(item.id)) {
                         return true;
                     }
                 }
@@ -1351,6 +1393,7 @@ export function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: nu
 
         const manager = assetManager as any;
         const img = manager.images.get(sheetName);
+        // console.log(`DEBUG: Drawing id ${uIndex} from sheet ${sheetName}, found: ${!!img}`);
 
         if (img) {
             const config = manager.sheetConfigs.get(sheetName) || { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
@@ -1417,8 +1460,8 @@ export function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: nu
             );
         }
     } else {
-        // Fallback or Missing - Draw Black
-        ctx.fillStyle = '#000000';
+        // Fallback or Missing - Draw PINK for Debugging Visibility
+        ctx.fillStyle = '#ff00ff';
         ctx.fillRect(Math.floor(dx), Math.floor(dy), size, size);
     }
 }

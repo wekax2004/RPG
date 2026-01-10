@@ -33,7 +33,7 @@ interface SaveData {
     seed?: number; // Added for map regeneration
 }
 
-const SAVE_KEY = 'retro-rpg-save-v2';
+const SAVE_KEY = 'retro-rpg-save-v3';
 
 export function hasSave(): boolean {
     return !!localStorage.getItem(SAVE_KEY);

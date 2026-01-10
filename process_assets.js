@@ -21,8 +21,8 @@ async function process() {
     // We only need one 32x32 tile.
     await sharp(INPUT)
         .extract({ left: 300, top: 100, width: 32, height: 32 }) // Trying to hit the middle of the "Green Patch"
-        .toFile(`${OUT_DIR}/ai_grass.png`);
-    console.log('Saved ai_grass.png (Guessing coordinates)');
+        .toFile(`${OUT_DIR}/grass_tile.png`);
+    console.log('Saved grass_tile.png (Guessing coordinates)');
 }
 
 process().catch(console.error);

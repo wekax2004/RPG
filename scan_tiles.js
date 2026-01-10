@@ -1,101 +1,49 @@
 
-import fs from 'fs';
+import sharp from 'sharp';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-async function scanTiles() {
-    let sharp;
+const TILES_PATH = path.join(__dirname, 'public/sprites/final_tiles.png');
+
+async function scanEdges() {
+    console.log(`Scanning Edges of ${TILES_PATH}...`);
     try {
-        sharp = (await import('sharp')).default;
-    } catch (e) {
-        console.error("Sharp not found");
-        return;
-    }
+        const { data, info } = await sharp(TILES_PATH)
+            .ensureAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
 
-    // We scan 'forest.png' (32x32 grid) and 'dungeon.png' (32x32 grid)
-    const sheets = [
-        { name: 'forest.png', tileSize: 32 },
-        { name: 'dungeon.png', tileSize: 32 }
-    ];
+        const width = info.width;
 
-    const inputDir = path.join(__dirname, 'public', 'assets', 'processed'); // Use processed
+        const checkPixel = (x, y) => {
+            const idx = (y * width + x) * 4;
+            return [data[idx], data[idx + 1], data[idx + 2], data[idx + 3]];
+        };
 
-    for (const sheet of sheets) {
-        const inputPath = path.join(inputDir, sheet.name);
-        if (!fs.existsSync(inputPath)) continue;
-
-        console.log(`\nScanning ${sheet.name}...`);
-        const image = sharp(inputPath);
-        const { width, height } = await image.metadata();
-        const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
-
-        const cols = Math.floor(width / sheet.tileSize);
-        const rows = Math.floor(height / sheet.tileSize);
-
-        let bestGreen = { score: -1, col: 0, row: 0 };
-        let bestGrey = { score: -1, col: 0, row: 0 };
-        let bestBrown = { score: -1, col: 0, row: 0 };
-
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                // Sample pixels in this tile
-                let rSum = 0, gSum = 0, bSum = 0, count = 0;
-
-                // Scan center 16x16 to avoid edges
-                const startX = c * sheet.tileSize + 8;
-                const startY = r * sheet.tileSize + 8;
-
-                for (let y = startY; y < startY + 16; y++) {
-                    for (let x = startX; x < startX + 16; x++) {
-                        const idx = (y * width + x) * 4;
-                        // Check alpha
-                        if (data[idx + 3] > 200) {
-                            rSum += data[idx];
-                            gSum += data[idx + 1];
-                            bSum += data[idx + 2];
-                            count++;
-                        }
-                    }
-                }
-
-                if (count > 100) { // Enough pixels
-                    const avgR = rSum / count;
-                    const avgG = gSum / count;
-                    const avgB = bSum / count;
-
-                    // Green Score: High G, Low R/B
-                    const greenScore = avgG - (avgR + avgB) / 2;
-                    if (greenScore > bestGreen.score) {
-                        bestGreen = { score: greenScore, col: c, row: r };
-                    }
-
-                    // Grey Score: Low variance, moderate brightness
-                    const variance = Math.abs(avgR - avgG) + Math.abs(avgG - avgB) + Math.abs(avgB - avgR);
-                    if (variance < 20 && avgG > 50 && avgG < 200) {
-                        // Prefer lighter grey?
-                        const score = 1000 - variance; // lower var is better
-                        if (score > bestGrey.score) {
-                            bestGrey = { score, col: c, row: r };
-                        }
-                    }
-
-                    // Brown Score: R > G > B
-                    if (avgR > avgG && avgG > avgB) {
-                        const score = (avgR - avgG) + (avgG - avgB);
-                        if (score > bestBrown.score) {
-                            bestBrown = { score, col: c, row: r };
-                        }
-                    }
-                }
-            }
+        // Check Tile 0 (Grass) Boundaries (0,0 to 32,32)
+        console.log("--- Tile 0 (Grass) Edge Check ---");
+        // Right Edge (x=31)
+        let rightEdgeVars = 0;
+        for (let y = 0; y < 32; y++) {
+            const p = checkPixel(31, y);
+            const pNext = checkPixel(32, y); // Start of next tile (Flower)
+            // Just comparing to see if there's a 'fading' line
         }
 
-        console.log(`  Best Green (Grass?): col=${bestGreen.col}, row=${bestGreen.row}`);
-        console.log(`  Best Grey (Floor/Wall?): col=${bestGrey.col}, row=${bestGrey.row}`);
-        console.log(`  Best Brown (Dirt/Wood?): col=${bestBrown.col}, row=${bestBrown.row}`);
+        // Bottom Edge (y=31)
+        console.log("Bottom Row (y=31) vs Next Row (y=32):");
+        for (let x = 10; x < 20; x++) { // Sample center
+            const p = checkPixel(x, 31);
+            const pNext = checkPixel(x, 32);
+            console.log(`x=${x}: [${p}] vs [${pNext}]`);
+        }
+
+    } catch (e) {
+        console.error(e);
     }
 }
 
-scanTiles().catch(console.error);
+scanEdges();

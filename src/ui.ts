@@ -410,7 +410,7 @@ export class UIManager {
         if (this.xpVal) this.xpVal.innerText = `${xp}/${nextXp}`;
 
         const goldEl = document.getElementById('gold-val');
-        if (goldEl) goldEl.innerText = gold.toString();
+        if (goldEl) goldEl.innerText = gold.toString() + ' GP';
 
         if (skills) this.renderSkills(skills);
     }
@@ -597,7 +597,7 @@ export class UIManager {
             console.log(`[Shop Render] ${item.name} ID: ${item.uIndex} Price: ${item.price}`);
 
             div.onclick = () => {
-                console.log(`[Shop] Buy Click: ${item.name} (${item.price}gp) vs Player Gold: ${playerInv.gold}`);
+                console.log(`[Shop] Buy Click: ${item.name} (${item.price}₪) vs Player Gold: ${playerInv.gold}`);
                 if (playerInv.gold >= item.price) {
                     playerInv.gold -= item.price;
                     // Add copy of item to player
@@ -635,14 +635,14 @@ export class UIManager {
             div.style.boxSizing = 'border-box';
             div.style.userSelect = 'none';
             const sellPrice = Math.floor(item.price / 2);
-            div.innerText = `${item.name} - ${sellPrice}gp`;
+            div.innerText = `${item.name} - ${sellPrice}₪`;
 
             div.onmouseover = () => this.inspectItem(item);
             div.onmouseleave = () => this.closeInspect();
 
             div.onclick = () => {
                 try {
-                    console.log(`[Shop] Sell Click: ${item.name} for ${sellPrice}gp`);
+                    console.log(`[Shop] Sell Click: ${item.name} for ${sellPrice}₪`);
                     playerInv.gold += sellPrice;
                     playerInv.storage.splice(index, 1);
                     if (this.console) this.console.sendMessage(`Sold ${item.name}.`);

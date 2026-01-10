@@ -13,6 +13,10 @@ export class PixelRenderer {
         this.ctx = canvas.getContext('2d')!;
         // Disable smoothing for pixel art
         this.ctx.imageSmoothingEnabled = false;
+
+        // Force Resolution (Canvas Size Fix)
+        this.canvas.width = 800;
+        this.canvas.height = 600;
     }
 
     getScale(): number {
@@ -22,6 +26,10 @@ export class PixelRenderer {
     draw(map: WorldMap, player: Player) {
         const screenWidth = this.canvas.width;
         const screenHeight = this.canvas.height;
+
+        // PIXEL ART SHARPNESS LOCK
+        this.ctx.imageSmoothingEnabled = false;
+        this.ctx.globalAlpha = 1.0; // Force Opacity
 
         // Clear Screen
         this.ctx.fillStyle = '#000000';
@@ -49,37 +57,35 @@ export class PixelRenderer {
                 for (let i = 0; i < tile.items.length; i++) {
                     const item = tile.items[i];
 
+                    // JITTER FIX: If this is the Player, use their SMOOTH coordinates
+                    const isPlayer = (item.id === 0);
+
+                    let finalX = drawX;
+                    let finalY = drawY;
+
+                    if (isPlayer) {
+                        finalX = Math.floor(player.x - camX);
+                        finalY = Math.floor(player.y - camY);
+                    }
+
                     // Try to get sprite
                     const sprite = assetManager.getSpriteSource(item.id);
 
                     if (sprite) {
-                        // Prompt 3: Handle Tall Sprites
-                        // If sprite height > 32, offset Y upwards so feet stay anchored
+                        // Handle Tall Sprites
                         const offset = sprite.sh - TILE_SIZE;
 
+                        // STANDARD DRAW (64x64 UPSCALE)
+                        // All sprites are drawn 64x64 (2x Zoom) for Sharpness
                         this.ctx.drawImage(
                             sprite.image,
                             sprite.sx, sprite.sy, sprite.sw, sprite.sh,
-                            drawX, drawY - offset, TILE_SIZE, sprite.sh
+                            finalX, finalY - offset, 64, 64
                         );
                     } else {
                         // Fallback Rendering
-                        // Prompt 3: Debug Missing Sprites
-                        // Only log once per frame/id to avoid spam? No, user asked for warning.
-                        // We'll trust browser console grouping.
-                        // console.warn(`Missing Sprite ID: ${item.id}`); 
-                        // Actually, spamming console is bad for performance. 
-                        // Let's rely on the visual PINK indication.
-
-                        if (item.id === 16) { // Grass
-                            this.ctx.fillStyle = '#2dba4e';
-                        } else if (item.id === 17) { // Wall
-                            this.ctx.fillStyle = '#6e7681';
-                        } else {
-                            // Prompt 3: Pink for unknown to debug
-                            this.ctx.fillStyle = '#ff00ff';
-                        }
-                        this.ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
+                        this.ctx.fillStyle = '#ff00ff'; // Pink background
+                        this.ctx.fillRect(drawX, drawY, 64, 64);
                     }
 
                     // Draw Count if stacked > 1
@@ -100,25 +106,30 @@ export class PixelRenderer {
         const pSprite = assetManager.getSpriteSource(player.spriteId);
 
         if (pSprite) {
-            // Prompt 3: Tall Player Sprite Logic
+            // Animation Frame Offset
+            // STRIDE UPDATE: User Calibration says 48px width, so stride is likely 48
+            // Animation Frame Offset
+            // STRIDE UPDATE: Reverted to 32px (Standard)
+            const frameOffset = (player.frame || 0) * 32;
             const offset = pSprite.sh - TILE_SIZE;
             const destY = pDrawY - offset;
 
             this.ctx.save();
             if (player.flipX) {
-                // Flip Logic: Scale(-1, 1) and translate coordinate
-                // Translate to X + Width, Flip.
-                this.ctx.translate(pDrawX + TILE_SIZE, destY);
+                // Flip Left
+                this.ctx.translate(pDrawX + 64, destY);
                 this.ctx.scale(-1, 1);
-                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, pSprite.sw, pSprite.sh, 0, 0, TILE_SIZE, pSprite.sh);
+                this.ctx.drawImage(pSprite.image, pSprite.sx + frameOffset, pSprite.sy, pSprite.sw, pSprite.sh, 0, 0, 64, 64); // Upscaled Height
             } else {
-                this.ctx.drawImage(pSprite.image, pSprite.sx, pSprite.sy, pSprite.sw, pSprite.sh, pDrawX, destY, TILE_SIZE, pSprite.sh);
+                // Normal
+                this.ctx.drawImage(pSprite.image, pSprite.sx + frameOffset, pSprite.sy, pSprite.sw, pSprite.sh, pDrawX, destY, 64, 64); // Upscaled Height
             }
             this.ctx.restore();
         } else {
             // Fallback Box
-            this.ctx.fillStyle = '#3fb950'; // Player Color
-            this.ctx.fillRect(pDrawX + 4, pDrawY + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+            this.ctx.fillStyle = '#3fb950';
+            this.ctx.fillRect(pDrawX + 4, pDrawY + 4, 64 - 8, 64 - 8);
         }
+
     }
 }

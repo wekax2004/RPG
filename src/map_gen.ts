@@ -26,16 +26,24 @@ export function generateOverworld(width: number, height: number, seed: number): 
                 continue;
             }
 
-            // Always add Ground first
-            tiles[index].add(GRASS);
+            // Always add Ground first - RANDOM VARIATION (Natural World)
+            // if (Math.random() > 0.9) tile = 161; else if (Math.random() > 0.9) tile = 162; else tile = 16;
+            const rand = rng.next();
+            if (rand > 0.9) tiles[index].add(161); // Flowers
+            else if (rand > 0.8) tiles[index].add(162); // Pebbles
+            else tiles[index].add(GRASS); // Plain (16)
 
-            // Random obstacles (Trees/Rocks) outside town
-            // We check if we are FAR from the center
+            // Natural World: Obstacles (Trees/Rocks)
+            // Dist > 5 allows some space for town, but let's make it closer for testing
+            // Town Radius logic:
             const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
-            if (dist > townRadius + 5) {
-                if (rng.next() > 0.9) {
-                    // Add Wall ON TOP of Grass
-                    tiles[index].add(WALL);
+
+            // Randomly place trees everywhere except immediate start (3 tile radius)
+            if (dist > 3) {
+                if (rng.next() > 0.85) { // 15% chance
+                    // Add Oak Tree (5) or Large Rock (6)
+                    const obs = rng.next() > 0.6 ? 5 : 6;
+                    tiles[index].add(obs);
                 }
             }
         }
@@ -53,25 +61,49 @@ export function generateOverworld(width: number, height: number, seed: number): 
                 y === centerY - townRadius || y === centerY + townRadius;
 
             if (isBorder) {
-                // Check if we already have wall? Just push it.
-                // If it was grass, now it has a wall on top.
-                if (!tiles[index].has(WALL)) {
-                    tiles[index].add(WALL);
-                }
+                if (!tiles[index].has(WALL)) tiles[index].add(WALL);
             } else {
-                // Inside town: ensure it's clean (remove walls if any were added by random noise)
-                // Since we rebuilt, we can just ensure top is grass.
-                // But our logic above added grass then maybe random wall.
-                // Let's clear stacks if they have walls?
-                // Actually, simplest is to pop if top is wall.
-                while (tiles[index].has(WALL)) {
-                    tiles[index].pop();
-                }
-                // Ensure at least grass
+                while (tiles[index].has(WALL)) tiles[index].pop();
                 if (tiles[index].items.length === 0) tiles[index].add(GRASS);
             }
         }
     }
+
+    // --- TEMPLE GENERATION (5x5 around Center) ---
+    const templeRadius = 2; // 5x5 = Center +/- 2
+    const FLOOR_MARBLE = 201;
+
+    for (let y = centerY - templeRadius; y <= centerY + templeRadius; y++) {
+        for (let x = centerX - templeRadius; x <= centerX + templeRadius; x++) {
+            const index = y * width + x;
+
+            // 1. Clear existing
+            tiles[index].items = [];
+
+            // 2. Add Marble Floor
+            tiles[index].add(FLOOR_MARBLE);
+
+            // 3. Add Walls on perimeter
+            if (x === centerX - templeRadius || x === centerX + templeRadius ||
+                y === centerY - templeRadius || y === centerY + templeRadius) {
+
+                // Door Logic: Bottom Center
+                if (x === centerX && y === centerY + templeRadius) {
+                    // Doorway - No Wall
+                } else {
+                    tiles[index].add(WALL); // ID 17
+                }
+            }
+        }
+    }
+
+    // 4. Place Altar (Center of Temple)
+    const altarIdx = centerY * width + centerX;
+    tiles[altarIdx].add(21); // Add Altar (ID 21)
+
+    // 5. Place Treasure Chest (ID 50) to the right of Altar
+    const chestIdx = centerY * width + (centerX + 1);
+    tiles[chestIdx].add(50);
 
     // 3. Create Gates (Openings in the wall)
     const openGate = (x: number, y: number) => {

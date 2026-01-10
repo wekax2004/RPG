@@ -5,9 +5,16 @@ export const SHEET_COLS = 8; // Restored for compatibility
 // Map sprite names to IDs
 export const SPRITES = {
     // Characters (Procedural)
+    // Characters (Procedural)
     PLAYER: 0,
-    PLAYER_BACK: 900, // New reserved ID for directional
-    PLAYER_SIDE: 901,
+    // Directional mappings (Mapped to Knight Sheet Rows)
+    PLAYER_DOWN: 900,
+    PLAYER_UP: 901,
+    PLAYER_RIGHT: 902,
+    PLAYER_LEFT: 903,
+
+    PLAYER_BACK: 901, // Alias for legacy code
+    PLAYER_SIDE: 902, // Alias for legacy code
     MAGE: 1,
     RANGER: 2,
     NPC: 3,
@@ -62,6 +69,7 @@ export const SPRITES = {
     WATER_FLOOR: 108,
     EARTH_WALL: 109,
     EARTH_CRYSTAL: 110,
+    CHEST: 50, // Added Chest ID
 
     // Terrain Variety
     GRASS_DARK: 62,
@@ -139,40 +147,80 @@ export class AssetManager {
         });
     }
 
+    getImage(key: string): HTMLImageElement | undefined {
+        return this.images.get(key);
+    }
+
     async load(): Promise<void> {
         console.log('[AssetManager] Loading Spritesheets...');
 
-        // 1. Load Main Sheets
-        await this.loadImage('knight_sheet', 'sprites/knight_sheet.png');
-        await this.loadImage('world_tiles', 'sprites/world_tiles.png');
-        await this.loadImage('monsters', 'sprites/monsters.png');
-        await this.loadImage('grass_tile', 'sprites/grass_tile.png'); // Renamed manually
+        // 1. Load Main Sheets (Resized & Cleaned)
+        await this.loadImage('knight_sheet', '/sprites/final_knight.png?v=6', false); // Transparency baked in
+        await this.loadImage('world_tiles', '/sprites/final_tiles.png?v=7', false);   // Transparency baked in, preserves Marble Floor
+        await this.loadImage('monsters', '/sprites/monsters.png?v=2', true);
+        await this.loadImage('grass_tile', '/sprites/grass_tile.png?v=2', true);
 
         // 2. Configure Sheets (32x32 Grid, 32px Stride)
         const sheet32 = { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
         this.sheetConfigs.set('knight_sheet', sheet32);
-        this.sheetConfigs.set('world_tiles', sheet32);
         this.sheetConfigs.set('monsters', sheet32);
         this.sheetConfigs.set('grass_tile', sheet32);
 
-        // Load Items (Legacy support / Inventory)
-        await this.loadItems();
+        // 2. Tiles (32x32 per tile on sheet, map 16=MainGrass)
+        await this.loadImage('tiles', '/sprites/final_tiles.png?v=8', true);
+        this.sheetConfigs.set('tiles', sheet32); // Configure the new 'tiles' sheet
+
+        // 3. Props (Trees, Rocks, Bushes) -- 64x64 High Res
+        await this.loadImage('props', '/sprites/props.png?v=40', true);
+        // Explicitly set 64px tile size for props
+        this.sheetConfigs.set('props', { tileSize: 64, stride: 64, offsetX: 0, offsetY: 0 }); // (64x64)
+        // Col 0: Tree, Col 1: Rock, Col 2: Bush
 
         this.loaded = true;
         this.buildSpriteCache();
         console.log('[AssetManager] Assets loaded.');
     }
 
-    async loadImage(key: string, src: string) {
-        const img = new Image();
-        img.src = src;
-        await new Promise(r => img.onload = r);
-        this.images.set(key, img);
+    async loadImage(key: string, src: string, applyChroma: boolean = false) {
+        return new Promise<void>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous'; // Required for canvas manimpulation
+            img.src = src;
+            img.onload = () => {
+                console.log('Successfully loaded:', src); // Log success
+                console.log('Successfully loaded:', src); // Log success
+                // Chroma Key REMOVED per user request
+                this.images.set(key, img);
+                resolve();
+            };
+            img.onerror = (e) => {
+                console.error(`Failed to load image: ${src}`, e);
+
+                // FALLBACK: Generate Placeholder so mapSprite doesn't fail
+                const canvas = document.createElement('canvas');
+                canvas.width = 32; canvas.height = 32;
+                const ctx = canvas.getContext('2d')!;
+
+                // Color Code Fallback
+                if (key === 'grass_tile') ctx.fillStyle = '#00FF00'; // Lime Green
+                else if (key === 'knight_sheet') ctx.fillStyle = '#0000FF'; // Blue
+                else ctx.fillStyle = '#FF0000'; // Red
+
+                ctx.fillRect(0, 0, 32, 32);
+
+                const fallbackImg = new Image();
+                fallbackImg.src = canvas.toDataURL();
+                fallbackImg.onload = () => {
+                    this.images.set(key, fallbackImg); // Set valid image
+                    resolve();
+                };
+            };
+        });
     }
 
     private async loadItems() {
         return new Promise<void>((resolve) => {
-            const img = new Image(); img.src = 'assets/items.png';
+            const img = new Image(); img.src = '/assets/items.png'; // Added slash here too
             img.onload = () => { this.images.set('items', img); resolve(); };
             img.onerror = () => {
                 const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32;
@@ -183,35 +231,52 @@ export class AssetManager {
     }
 
     private buildSpriteCache() {
-        if (!this.images.size) return;
+        this.spriteCache.clear();
 
-        // --- MAPPING CORE SPRITES ---
+        // 1. KNIGHT (Standard 32x32 Grid)
+        // Row 0: Down, Row 1: Up, Row 2: Right, Row 3: Left
+        this.mapSprite(SPRITES.PLAYER_DOWN, 'knight_sheet', 0, 0); // Down
+        this.mapSprite(SPRITES.PLAYER_UP, 'knight_sheet', 0, 1);   // Up
+        this.mapSprite(SPRITES.PLAYER_RIGHT, 'knight_sheet', 0, 2); // Right
+        this.mapSprite(SPRITES.PLAYER_LEFT, 'knight_sheet', 0, 3);  // Left (Row 3 assumed)
 
-        // 1. Player (Knight Sheet)
-        // Prompt 1: Front=C1R0, Back=C1R1, Side=C1R2
-        this.mapSprite(SPRITES.PLAYER, 'knight_sheet', 1, 0);       // Front
-        this.mapSprite(SPRITES.PLAYER_BACK, 'knight_sheet', 1, 1);  // Back
-        this.mapSprite(SPRITES.PLAYER_SIDE, 'knight_sheet', 1, 2);  // Side
+        // Direct IDs mapping
+        this.mapSprite(0, 'knight_sheet', 0, 0); // Down
+        this.mapSprite(1, 'knight_sheet', 0, 1); // Up
 
-        this.mapSprite(SPRITES.KNIGHT, 'knight_sheet', 1, 0);
+        // ... (Other mappings)
 
-        // 2. World Tiles (Ground, Walls)
-        // Prompt 2: Grass -> grass_tile Col 0, Row 0
-        this.mapSprite(SPRITES.GRASS, 'grass_tile', 0, 0);
+        this.mapSprite(5, 'props', 0, 0); // Oak Tree (ID 5)
+        this.mapSprite(6, 'props', 1, 0); // Large Rock (ID 6)
+        this.mapSprite(7, 'props', 2, 0); // Bush (ID 7)
+        this.mapSprite(18, 'props', 0, 0); // Tree
+        this.mapSprite(19, 'props', 1, 0); // Rock
+        this.mapSprite(34, 'props', 2, 0); // Bush
+        this.mapSprite(50, 'props', 3, 0); // Chest
+        this.mapSprite(21, 'props', 4, 0); // Altar (ID 21)
+        this.mapSprite(2, 'knight_sheet', 0, 2); // Right
+        this.mapSprite(3, 'knight_sheet', 0, 3); // Left
 
-        // Wall -> Col 2, Row 4 (Keep existing)
-        this.mapSprite(SPRITES.WALL, 'world_tiles', 2, 4);
+        // 2. WORLD TILES (Standard 32x32 Grid)
+        // Row 0: Grass (0,0), Flowers (1,0), Pebbles (2,0)
+        this.mapSprite(16, 'world_tiles', 0, 0);   // Grass
+        this.mapSprite(161, 'world_tiles', 1, 0);  // Flower Grass
+        this.mapSprite(162, 'world_tiles', 2, 0);  // Pebble Grass
 
-        // 3. Monsters
-        // Orc -> Col 0, Row 1 (Keep existing for now)
+        // Row 1: Wall (0,1), Floor (1,1), Altar (2,1)
+        this.mapSprite(17, 'world_tiles', 0, 1);   // Wall
+        this.mapSprite(SPRITES.TOWN_FLOOR, 'world_tiles', 1, 1); // Floor
+        this.mapSprite(201, 'world_tiles', 1, 1);  // Floor ID
+        this.mapSprite(20, 'world_tiles', 2, 1);   // Altar
+        this.mapSprite(202, 'world_tiles', 2, 1);  // Legacy Altar
+
+        // 3. MONSTERS
         this.mapSprite(SPRITES.ORC, 'monsters', 0, 1);
         this.mapSprite(SPRITES.SKELETON, 'monsters', 0, 1);
 
         // --- FALLBACKS ---
-        // Map critical missing IDs to something visible to prevent crashes
-        this.mapSprite(SPRITES.TOWN_FLOOR, 'grass_tile', 0, 0); // Grass
-        this.mapSprite(SPRITES.TOWN_WALL, 'world_tiles', 2, 4);  // Wall
-        this.mapSprite(SPRITES.WATER, 'grass_tile', 0, 0);      // Blue? Use Grass for now.
+        this.mapSprite(SPRITES.TOWN_WALL, 'world_tiles', 0, 1);
+        this.mapSprite(SPRITES.WATER, 'world_tiles', 0, 0);
     }
 
     public getSheetConfig(key: string): SheetConfig | undefined {
@@ -226,15 +291,19 @@ export class AssetManager {
         const img = this.images.get(sheet);
         if (!img) return;
 
-        const config = this.sheetConfigs.get(sheet) || { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
-        const stride = config.stride || config.tileSize;
+        // Dynamic Grid Calculation
+        const config = this.sheetConfigs.get(sheet);
+        const tileSize = config ? config.tileSize : 32;
+
+        let finalSx = col * tileSize;
+        let finalSy = row * tileSize;
 
         this.spriteCache.set(id, {
             image: img,
-            sx: config.offsetX + col * stride,
-            sy: config.offsetY + row * stride,
-            sw: cols * config.tileSize,
-            sh: rows * config.tileSize
+            sx: finalSx,
+            sy: finalSy,
+            sw: cols * tileSize,
+            sh: rows * tileSize
         });
     }
 
