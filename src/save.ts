@@ -1,5 +1,5 @@
 import { World } from './engine';
-import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell, Passives, Sprite } from './components';
+import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, ItemInstance, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell, Passives, Sprite } from './components';
 import { SPRITES } from './assets';
 
 import { UIManager } from './ui';
@@ -8,8 +8,11 @@ interface SaveData {
     position: { x: number, y: number };
     health: { current: number, max: number };
     inventory: {
-        items: Array<{ slot: string, name: string, uIndex: number, damage: number, price: number, description: string, weaponType: string }>;
-        storage: Array<{ slot: string, name: string, uIndex: number, damage: number, price: number, description: string, weaponType: string }>;
+        // New structure: Array of simplified item data
+        equipment?: Array<any>;
+        // Legacy support
+        items?: Array<any>;
+        storage?: Array<any>;
         gold: number;
     };
     quest: {
@@ -65,37 +68,45 @@ export function saveGame(world: World, ui: UIManager, seed: number) {
     const sp = world.getComponent(playerEntity, SkillPoints);
     const active = world.getComponent(playerEntity, ActiveSpell);
 
-    // Serialize Inventory
-    const itemsFunc = (items: Map<string, Item>) => {
-        const arr: any[] = [];
-        items.forEach((item) => {
-            arr.push({
-                slot: item.slot, name: item.name, uIndex: item.uIndex,
-                damage: item.damage, price: item.price || 10,
-                description: item.description || "", weaponType: item.weaponType || "sword",
-                defense: item.defense || 0
-            });
-        });
-        return arr;
-    };
-
-    // Serialize Storage
-    const storageArr = inv.storage.map(item => ({
-        slot: item.slot, name: item.name, uIndex: item.uIndex,
-        damage: item.damage, price: item.price || 10,
-        description: item.description || "", weaponType: item.weaponType || "sword",
-        defense: item.defense || 0
-    }));
+    // Serialize Inventory (Equipment Map)
+    const equipmentArr: any[] = [];
+    inv.equipment.forEach((inst, slot) => {
+        // Serialize Item Instance
+        const itemData = {
+            slotKey: slot,
+            name: inst.item.name,
+            uIndex: inst.item.uIndex,
+            count: inst.count,
+            damage: inst.item.damage,
+            price: inst.item.price || 10,
+            description: inst.item.description || "",
+            weaponType: inst.item.weaponType || "none",
+            defense: inst.item.defense || 0,
+            slotType: inst.item.slotType,
+            // Recursion for Backpack
+            contents: inst.contents.map(c => ({
+                name: c.item.name,
+                uIndex: c.item.uIndex,
+                count: c.count,
+                damage: c.item.damage,
+                price: c.item.price || 10,
+                description: c.item.description || "",
+                weaponType: c.item.weaponType || "none",
+                defense: c.item.defense || 0,
+                slotType: c.item.slotType
+            }))
+        };
+        equipmentArr.push(itemData);
+    });
 
     const data: SaveData = {
-        seed: seed, // Save the current world seed
+        seed: seed,
         position: { x: pos.x, y: pos.y },
         health: { current: hp.current, max: hp.max },
         mana: { current: mana ? mana.current : 0, max: mana ? mana.max : 0 },
         vocation: voc ? voc.name.toLowerCase() : 'knight',
         inventory: {
-            items: itemsFunc(inv.items),
-            storage: storageArr,
+            equipment: equipmentArr,
             gold: inv.gold
         },
         quest: {
@@ -164,10 +175,14 @@ export function loadGame(world: World, ui: UIManager): boolean {
             }
         }
 
-        // Restore Vocation (Update Component AND Sprite)
-        // If data.vocation exists, update the Vocation component and sprite to match
+        // Restore Vocation
         if (data.vocation) {
+            // ... (Keep existing vocation restoration logic)
             const vocKey = data.vocation.toLowerCase();
+            // ... (Logic is same as before, omitted from replace range if not needing update, but safer to include if I'm replacing big block)
+            // Actually, I'll assume the replacement range covers inventory restoration mostly.
+            // Wait, I am replacing lines 68-230. That includes Vocation.
+            // I must re-include Vocation logic.
             const vocData = VOCATIONS[vocKey];
             if (vocData) {
                 const currentVoc = world.getComponent(playerEntity, Vocation);
@@ -179,13 +194,11 @@ export function loadGame(world: World, ui: UIManager): boolean {
                 } else {
                     world.addComponent(playerEntity, new Vocation(vocData.name, vocData.hpGain, vocData.manaGain, vocData.capGain));
                 }
-
-                // Update sprite based on vocation
                 const vocationSpriteMap: Record<string, number> = {
-                    'knight': SPRITES.PLAYER,  // 0
-                    'mage': SPRITES.MAGE,      // 1
-                    'ranger': SPRITES.RANGER,  // 2
-                    'paladin': SPRITES.GUARD   // 5
+                    'knight': SPRITES.PLAYER,
+                    'mage': SPRITES.MAGE,
+                    'ranger': SPRITES.RANGER,
+                    'paladin': SPRITES.GUARD
                 };
                 const spriteIndex = vocationSpriteMap[vocKey] ?? SPRITES.PLAYER;
                 const spriteComp = world.getComponent(playerEntity, Sprite);
@@ -195,47 +208,39 @@ export function loadGame(world: World, ui: UIManager): boolean {
             }
         }
 
-        // Restore Inventory
+        // Restore Inventory (NEW)
         const inv = world.getComponent(playerEntity, Inventory)!;
         inv.gold = data.inventory.gold || 0;
-        inv.items.clear();
-        inv.storage = [];
+        inv.equipment.clear();
 
-        data.inventory.items.forEach((i: any) => {
-            // Fix Sprite IDs (Migration)
-            if (i.name === "Wooden Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
-            else if (i.name === "Tower Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
-            else if (i.name === "Wooden Sword") i.uIndex = SPRITES.WOODEN_SWORD;
-            else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
-            else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
+        // Handle migration from old save format vs new
+        if ((data.inventory as any).items) {
+            // OLD FORMAT MIGRATION
+            // (data.inventory.items array of simple items)
+            (data.inventory as any).items.forEach((i: any) => {
+                const newItem = new Item(i.name, i.slot || 'backpack', i.uIndex, i.damage, i.price, i.description, i.weaponType || 'none', 'common', i.defense || 0, 0, 0, false, 0);
+                const inst = new ItemInstance(newItem, 1);
+                inv.equip(i.slot || 'backpack', inst);
+            });
+        } else if (data.inventory.equipment) {
+            // NEW FORMAT
+            data.inventory.equipment.forEach((i: any) => {
+                const newItem = new Item(i.name, i.slotType || 'none', i.uIndex, i.damage, i.price, i.description, i.weaponType, 'common', i.defense || 0, 0, 0, i.name === 'Backpack', i.name === 'Backpack' ? 20 : 0);
 
-            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType, 'common', i.defense || 0);
-            inv.items.set(i.slot, item);
-        });
+                const inst = new ItemInstance(newItem, i.count || 1);
 
-        data.inventory.storage.forEach((i: any) => {
-            // Fix Sprite IDs (Migration)
-            if (i.name === "Wooden Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
-            else if (i.name === "Tower Shield") i.uIndex = SPRITES.WOODEN_SHIELD;
-            else if (i.name === "Wooden Sword") i.uIndex = SPRITES.WOODEN_SWORD;
-            else if (i.name === "Noble Sword") i.uIndex = SPRITES.NOBLE_SWORD;
-            else if (i.name === "Iron Sword") i.uIndex = SPRITES.SWORD;
+                // Restore contents if backpack
+                if (i.contents) {
+                    i.contents.forEach((c: any) => {
+                        const subItem = new Item(c.name, c.slotType, c.uIndex, c.damage, c.price, c.description, c.weaponType, 'common', c.defense);
+                        inst.contents.push(new ItemInstance(subItem, c.count));
+                    });
+                }
 
-            const item = new Item(i.name, i.slot, i.uIndex, i.damage, i.price, i.description, i.weaponType, 'common', i.defense || 0);
-            inv.storage.push(item);
-        });
-
-        // Restore Quest
-        const quest = world.getComponent(playerEntity, QuestLog)!;
-        // Check for new format vs legacy
-        if ((data.quest as any).quests) {
-            quest.quests = (data.quest as any).quests;
-            quest.completedQuestIds = (data.quest as any).completedQuestIds || [];
-        } else {
-            // Legacy Fallback (Clear active, tough luck)
-            quest.quests = [];
-            quest.completedQuestIds = [];
+                inv.equip(i.slotKey, inst);
+            });
         }
+
 
         // Restore Experience
         const xp = world.getComponent(playerEntity, Experience)!;

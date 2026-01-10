@@ -27,20 +27,19 @@ export function generateOverworld(width: number, height: number, seed: number): 
             }
 
             // Always add Ground first - RANDOM VARIATION (Natural World)
-            // if (Math.random() > 0.9) tile = 161; else if (Math.random() > 0.9) tile = 162; else tile = 16;
+            // 90% Clean Grass (16), 5% Flowers (161), 5% Pebbles (162)
             const rand = rng.next();
-            if (rand > 0.9) tiles[index].add(161); // Flowers
-            else if (rand > 0.8) tiles[index].add(162); // Pebbles
-            else tiles[index].add(GRASS); // Plain (16)
+            if (rand > 0.95) tiles[index].add(161); // Flowers (5%)
+            else if (rand > 0.90) tiles[index].add(162); // Pebbles (5%)
+            else tiles[index].add(16); // Plain Grass (90%)
 
             // Natural World: Obstacles (Trees/Rocks)
             // Dist > 5 allows some space for town, but let's make it closer for testing
             // Town Radius logic:
             const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
 
-            // Randomly place trees everywhere except immediate start (3 tile radius)
             if (dist > 3) {
-                if (rng.next() > 0.85) { // 15% chance
+                if (rng.next() > 0.96) { // 4% chance (Sparse Forest - Better for navigation)
                     // Add Oak Tree (5) or Large Rock (6)
                     const obs = rng.next() > 0.6 ? 5 : 6;
                     tiles[index].add(obs);

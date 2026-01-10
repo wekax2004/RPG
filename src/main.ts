@@ -5,7 +5,7 @@ import { WorldMap } from './core/map';
 import { Player } from './core/player';
 import { TILE_SIZE, Item, Tile } from './core/types';
 import { World, InputHandler } from './engine';
-import { inputSystem, interactionSystem, createNPC } from './game';
+import { inputSystem, interactionSystem, createNPC, autoAttackSystem } from './game';
 import { UIManager } from './ui';
 import { Position, PlayerControllable, Inventory, Passives, Velocity, Sprite, Health, Mana, Experience, QuestLog, AI, Name, SpellBook, SkillPoints, ActiveSpell } from './components';
 import { useItem } from './core/interaction';
@@ -28,14 +28,19 @@ let input: InputHandler;
 let ui: UIManager;
 
 // --- THE GAME LOOP ---
+let lastTime = Date.now();
+
 function gameLoop() {
     const now = Date.now();
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
 
     // 1. Systems Update
     if (world && input) {
         // Core Systems
         inputSystem(world, input);
         interactionSystem(world, input, ui);
+        autoAttackSystem(world, dt, ui); // NEW: Auto Combat
 
         // Sync ECS Position back to Visual Player
         // This ensures the Renderer (which uses 'player' class) sees the ECS movement
@@ -123,6 +128,15 @@ canvas.addEventListener('contextmenu', (e) => {
     const tileY = Math.floor((my + camY) / TILE_SIZE);
 
     console.log(`Right Clicked Tile: ${tileX}, ${tileY}`);
+
+    // MOUSE INSPECTOR: Log what is actually here
+    if (map && tileX >= 0 && tileX < map.width && tileY >= 0 && tileY < map.height) {
+        const tile = map.getTile(tileX, tileY);
+        console.log(`[INSPECTOR] Tile at ${tileX},${tileY} contains:`);
+        tile?.items.forEach((item, idx) => {
+            console.log(`   - Item ${idx}: ID ${item.id} (Count: ${item.count})`);
+        });
+    }
 
     // Trigger Interaction
     const playerEntities = world.query([PlayerControllable]);

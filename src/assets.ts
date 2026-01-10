@@ -155,7 +155,7 @@ export class AssetManager {
         console.log('[AssetManager] Loading Spritesheets...');
 
         // 1. Load Main Sheets (Resized & Cleaned)
-        await this.loadImage('knight_sheet', '/sprites/final_knight.png?v=6', false); // Transparency baked in
+        await this.loadImage('knight_sheet', '/sprites/final_knight.png?v=7', false); // Transparency baked in
         await this.loadImage('world_tiles', '/sprites/final_tiles.png?v=7', false);   // Transparency baked in, preserves Marble Floor
         await this.loadImage('monsters', '/sprites/monsters.png?v=2', true);
         await this.loadImage('grass_tile', '/sprites/grass_tile.png?v=2', true);
@@ -170,50 +170,83 @@ export class AssetManager {
         await this.loadImage('tiles', '/sprites/final_tiles.png?v=8', true);
         this.sheetConfigs.set('tiles', sheet32); // Configure the new 'tiles' sheet
 
-        // 3. Props (Trees, Rocks, Bushes) -- 64x64 High Res
-        await this.loadImage('props', '/sprites/props.png?v=40', true);
-        // Explicitly set 64px tile size for props
-        this.sheetConfigs.set('props', { tileSize: 64, stride: 64, offsetX: 0, offsetY: 0 }); // (64x64)
-        // Col 0: Tree, Col 1: Rock, Col 2: Bush
+        // 3. FOREST PROPS & TILES (The "Tibia Forest" Set)
+        // -------------------------------------------------
 
-        this.loaded = true;
+        // Props
+        await this.loadImage('tree', '/sprites/tree.png?v=FOREST', true);
+        await this.loadImage('chest', '/sprites/chest.png?v=FOREST', true);
+        await this.loadImage('rock', '/sprites/rock.png?v=FOREST', true);
+
+        // Floors (Isolated & Seamless)
+        await this.loadImage('wall', '/sprites/wall.png?v=FOREST', true);
+        await this.loadImage('grass', '/sprites/grass.png?v=FOREST', true);
+        await this.loadImage('flowers', '/sprites/grass_flowers.png?v=FOREST', true);
+        await this.loadImage('pebbles', '/sprites/grass_pebbles.png?v=FOREST', true);
+
+        // Legacy Support (Tibia Floors strip still used for Marble)
+        await this.loadImage('tibia_floors', '/sprites/tibia_floors.png?v=MARBLE', true);
+
+        // No shared config needed for individual mappings, but we set strides just in case
+        this.sheetConfigs.set('tree', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('chest', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('rock', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+
+        // Map Props [Tree, Chest, Rock]
+
+        // Tree (5): tibia_tree.png (32x64)
+        this.mapSprite(5, 'tree', 0, 0, 1, 2);
+
+        // Chest (50): chest.png. Full image (32x32).
+        this.mapSprite(50, 'chest', 0, 0, 1, 1);
+
+        // Rock (6): rock.png. Full image (32x32).
+        this.mapSprite(6, 'rock', 0, 0, 1, 1);
+
+        // Bush (7): Fallback to Rock
+        this.mapSprite(7, 'rock', 0, 0, 1, 1);
         this.buildSpriteCache();
         console.log('[AssetManager] Assets loaded.');
     }
 
     async loadImage(key: string, src: string, applyChroma: boolean = false) {
         return new Promise<void>((resolve, reject) => {
+            // Sanitize Base64: Remove any whitespace/newlines that might have crept in
+            if (src.startsWith('data:')) {
+                src = src.replace(/\s/g, '');
+            }
+
             const img = new Image();
             img.crossOrigin = 'Anonymous'; // Required for canvas manimpulation
             img.src = src;
             img.onload = () => {
-                console.log('Successfully loaded:', src); // Log success
-                console.log('Successfully loaded:', src); // Log success
-                // Chroma Key REMOVED per user request
+                console.log(`Successfully loaded: ${key}`);
                 this.images.set(key, img);
                 resolve();
             };
             img.onerror = (e) => {
-                console.error(`Failed to load image: ${src}`, e);
+                console.error(`[AssetManager] FAILED to load: ${key}`, e);
+                // Create a placeholder based on type
+                const placeholder = document.createElement('canvas');
+                placeholder.width = 32;
+                placeholder.height = 32;
+                const ctx = placeholder.getContext('2d');
+                if (ctx) {
+                    if (key === 'tree') ctx.fillStyle = '#2ecc71'; // Green
+                    else if (key === 'rock') ctx.fillStyle = '#95a5a6'; // Grey
+                    else if (key === 'chest') ctx.fillStyle = '#e67e22'; // Brown
+                    else ctx.fillStyle = '#ff00ff'; // Pink (Generic Error)
 
-                // FALLBACK: Generate Placeholder so mapSprite doesn't fail
-                const canvas = document.createElement('canvas');
-                canvas.width = 32; canvas.height = 32;
-                const ctx = canvas.getContext('2d')!;
-
-                // Color Code Fallback
-                if (key === 'grass_tile') ctx.fillStyle = '#00FF00'; // Lime Green
-                else if (key === 'knight_sheet') ctx.fillStyle = '#0000FF'; // Blue
-                else ctx.fillStyle = '#FF0000'; // Red
-
-                ctx.fillRect(0, 0, 32, 32);
-
-                const fallbackImg = new Image();
-                fallbackImg.src = canvas.toDataURL();
-                fallbackImg.onload = () => {
-                    this.images.set(key, fallbackImg); // Set valid image
-                    resolve();
-                };
+                    ctx.fillRect(0, 0, 32, 32);
+                    // Add a border so we know it's a fallback
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(0, 0, 32, 32);
+                }
+                const pImg = new Image();
+                pImg.src = placeholder.toDataURL();
+                this.images.set(key, pImg);
+                resolve();
             };
         });
     }
@@ -235,48 +268,87 @@ export class AssetManager {
 
         // 1. KNIGHT (Standard 32x32 Grid)
         // Row 0: Down, Row 1: Up, Row 2: Right, Row 3: Left
-        this.mapSprite(SPRITES.PLAYER_DOWN, 'knight_sheet', 0, 0); // Down
-        this.mapSprite(SPRITES.PLAYER_UP, 'knight_sheet', 0, 1);   // Up
-        this.mapSprite(SPRITES.PLAYER_RIGHT, 'knight_sheet', 0, 2); // Right
-        this.mapSprite(SPRITES.PLAYER_LEFT, 'knight_sheet', 0, 3);  // Left (Row 3 assumed)
+        // Add Padding 2 to remove "black box" artifacts
+        this.mapSprite(SPRITES.PLAYER_DOWN, 'knight_sheet', 0, 0, 1, 1, 2);
+        this.mapSprite(SPRITES.PLAYER_UP, 'knight_sheet', 0, 1, 1, 1, 2);
+        this.mapSprite(SPRITES.PLAYER_RIGHT, 'knight_sheet', 0, 2, 1, 1, 2);
+        this.mapSprite(SPRITES.PLAYER_LEFT, 'knight_sheet', 0, 3, 1, 1, 2);
 
         // Direct IDs mapping
-        this.mapSprite(0, 'knight_sheet', 0, 0); // Down
-        this.mapSprite(1, 'knight_sheet', 0, 1); // Up
+        this.mapSprite(0, 'knight_sheet', 0, 0, 1, 1, 2);
+        this.mapSprite(1, 'knight_sheet', 0, 1, 1, 1, 2);
 
         // ... (Other mappings)
 
-        this.mapSprite(5, 'props', 0, 0); // Oak Tree (ID 5)
-        this.mapSprite(6, 'props', 1, 0); // Large Rock (ID 6)
-        this.mapSprite(7, 'props', 2, 0); // Bush (ID 7)
-        this.mapSprite(18, 'props', 0, 0); // Tree
-        this.mapSprite(19, 'props', 1, 0); // Rock
-        this.mapSprite(34, 'props', 2, 0); // Bush
-        this.mapSprite(50, 'props', 3, 0); // Chest
-        this.mapSprite(21, 'props', 4, 0); // Altar (ID 21)
+        // ... (Other mappings)
+
+        // ---------------------------------------------------------
+        // 3. PROPS (NEW 2.5D ASSETS) - FIXED MAPPINGS
+        // ---------------------------------------------------------
+
+        // Define Configs (Ensure they exist)
+        this.sheetConfigs.set('tibia_floors', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('wall', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('grass', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('flowers', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('pebbles', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('tree', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('chest', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+        this.sheetConfigs.set('rock', { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 });
+
+        // Tree (ID 5) -> 'tree' sheet (32x64)
+        this.mapSprite(5, 'tree', 0, 0, 1, 2);
+        this.mapSprite(SPRITES.TREE, 'tree', 0, 0, 1, 2);
+
+        // Rock (ID 6) -> 'rock' sheet (32x32)
+        this.mapSprite(6, 'rock', 0, 0, 1, 1);
+        this.mapSprite(SPRITES.ROCK, 'rock', 0, 0, 1, 1);
+
+        // Chest (ID 50) -> 'chest' sheet (32x32)
+        this.mapSprite(50, 'chest', 0, 0, 1, 1);
+        this.mapSprite(SPRITES.CHEST, 'chest', 0, 0, 1, 1);
+
+        // Bush (ID 7) -> Mapping to Rock for now to prevent glitches (or create a bush sheet later)
+        this.mapSprite(7, 'rock', 0, 0, 1, 1);
+        this.mapSprite(SPRITES.BUSH, 'rock', 0, 0, 1, 1);
+
+        // Altar (ID 21) -> 'world_tiles' (2,1)
+        this.mapSprite(21, 'world_tiles', 2, 1);
+
+        // Character Directions (Legacy)
         this.mapSprite(2, 'knight_sheet', 0, 2); // Right
         this.mapSprite(3, 'knight_sheet', 0, 3); // Left
 
         // 2. WORLD TILES (Standard 32x32 Grid)
         // Row 0: Grass (0,0), Flowers (1,0), Pebbles (2,0)
-        this.mapSprite(16, 'world_tiles', 0, 0);   // Grass
-        this.mapSprite(161, 'world_tiles', 1, 0);  // Flower Grass
-        this.mapSprite(162, 'world_tiles', 2, 0);  // Pebble Grass
 
-        // Row 1: Wall (0,1), Floor (1,1), Altar (2,1)
-        this.mapSprite(17, 'world_tiles', 0, 1);   // Wall
-        this.mapSprite(SPRITES.TOWN_FLOOR, 'world_tiles', 1, 1); // Floor
-        this.mapSprite(201, 'world_tiles', 1, 1);  // Floor ID
-        this.mapSprite(20, 'world_tiles', 2, 1);   // Altar
-        this.mapSprite(202, 'world_tiles', 2, 1);  // Legacy Altar
+        // Grass (16) -> 'grass.png' (32x32) [HD Texture]
+        this.mapSprite(16, 'grass', 0, 0);
+        this.mapSprite(SPRITES.GRASS, 'grass', 0, 0);
 
-        // 3. MONSTERS
-        this.mapSprite(SPRITES.ORC, 'monsters', 0, 1);
-        this.mapSprite(SPRITES.SKELETON, 'monsters', 0, 1);
+        // Wall (17) -> 'wall.png' (32x64) [Tall Object]
+        this.mapSprite(17, 'wall', 0, 0, 1, 2);
+        this.mapSprite(200, 'wall', 0, 0, 1, 2);
+        this.mapSprite(SPRITES.WALL, 'wall', 0, 0, 1, 2);
+
+        // Variants (New Isolated Forest Files)
+        this.mapSprite(161, 'flowers', 0, 0);  // Flower Grass
+        this.mapSprite(162, 'pebbles', 0, 0);  // Pebble Grass
+        this.mapSprite(SPRITES.FLOWERS, 'flowers', 0, 0);
+
+        // Floor (Marble)
+        this.mapSprite(201, 'tibia_floors', 4, 0);  // Marble
+        this.mapSprite(1, 'tibia_floors', 4, 0);
+
+        // Altar (Legacy fallback)
+        this.mapSprite(20, 'world_tiles', 2, 1);
+        this.mapSprite(202, 'world_tiles', 2, 1);
+
+        // ... (Other mappings)
 
         // --- FALLBACKS ---
-        this.mapSprite(SPRITES.TOWN_WALL, 'world_tiles', 0, 1);
-        this.mapSprite(SPRITES.WATER, 'world_tiles', 0, 0);
+        this.mapSprite(SPRITES.WATER, 'grass', 0, 0); // Fallback water to grass
+
     }
 
     public getSheetConfig(key: string): SheetConfig | undefined {
@@ -287,7 +359,7 @@ export class AssetManager {
         this.buildSpriteCache();
     }
 
-    private mapSprite(id: number, sheet: string, col: number, row: number, cols: number = 1, rows: number = 1) {
+    private mapSprite(id: number, sheet: string, col: number, row: number, cols: number = 1, rows: number = 1, padding: number = 0) {
         const img = this.images.get(sheet);
         if (!img) return;
 
@@ -295,15 +367,17 @@ export class AssetManager {
         const config = this.sheetConfigs.get(sheet);
         const tileSize = config ? config.tileSize : 32;
 
-        let finalSx = col * tileSize;
-        let finalSy = row * tileSize;
+        let finalSx = (col * tileSize) + padding;
+        let finalSy = (row * tileSize) + padding;
+        let finalSw = (cols * tileSize) - (padding * 2);
+        let finalSh = (rows * tileSize) - (padding * 2);
 
         this.spriteCache.set(id, {
             image: img,
             sx: finalSx,
             sy: finalSy,
-            sw: cols * tileSize,
-            sh: rows * tileSize
+            sw: finalSw,
+            sh: finalSh
         });
     }
 

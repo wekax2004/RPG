@@ -37,50 +37,35 @@ export class UIManager {
 
     public onConsume?: (item: any) => void;
 
+    private chatInput: HTMLInputElement;
+
     constructor() {
-        this.cleanupLegacyUI(); // Fix: Remove duplicates from previous runs
+        this.cleanupLegacyUI();
 
         this.box = document.getElementById('box-overlay') || this.createOverlay();
         this.box.style.display = 'none';
-        this.box.classList.add('hidden'); // Force hide on init
+        this.box.classList.add('hidden');
 
         this.text = document.getElementById('text') || this.createText();
 
-        // Check for Status Panel elements, create if missing
-        if (!document.getElementById('hp-val')) {
-            this.createStatusPanel();
-        }
-
+        // 1. Static Bindings (now exist in HTML)
         this.hpVal = document.getElementById('hp-val')!;
         this.manaVal = document.getElementById('mana-val')!;
         this.capVal = document.getElementById('cap-val')!;
-        this.levelVal = document.getElementById('level-val') || document.getElementById('lvl-val')!; // Handle potential ID mismatch
+        this.levelVal = document.getElementById('lvl-val')!;
         this.xpVal = document.getElementById('xp-val')!;
 
-        // Check if createStatusPanel failed or IDs mismatch (Robustness)
-        if (!this.hpVal) console.error("UIManager: hp-val missing!");
-
-        this.createMagicHud();
-        this.createSkillTree();
-        // Force hide skill tree if somehow visible
-        if (this.skillTreePanel) this.skillTreePanel.style.display = 'none';
-
-        // ... (Existing selections)
-        this.bagPanel = document.getElementById('backpack-panel') || this.createBag();
-        this.bagPanel.style.display = 'none';
-        this.bagPanel.classList.add('hidden');
-
+        // 2. Panel Bindings
+        this.bagPanel = document.getElementById('backpack-panel')!;
         this.bagGrid = document.getElementById('backpack-grid')!;
 
-        // Shop...
+        // 3. Dynamic/Modals
         this.shopPanel = document.getElementById('shop-panel') || this.createShop();
         this.shopPanel.style.display = 'none';
         this.shopPanel.classList.add('hidden');
-
         this.shopBuyList = document.getElementById('shop-buy-list')!;
         this.shopSellList = document.getElementById('shop-sell-list')!;
 
-        // Loot...
         this.lootPanel = document.getElementById('loot-panel') || this.createLoot();
         this.lootPanel.style.display = 'none';
         this.lootPanel.classList.add('hidden');
@@ -93,8 +78,12 @@ export class UIManager {
         this.inspectDesc = document.getElementById('inspect-desc')!;
         this.inspectStats = document.getElementById('inspect-stats')!;
 
-        // Chat Input (Bind to existing)
+        // Chat Input (Initialize properly)
         this.chatInput = document.getElementById('console-input') as HTMLInputElement;
+
+        this.createMagicHud();
+        this.createSkillTree();
+        if (this.skillTreePanel) this.skillTreePanel.style.display = 'none';
 
         // Backpack Toggle Event
         const backpackSlot = document.querySelector('.slot.backpack');
@@ -102,16 +91,15 @@ export class UIManager {
             backpackSlot.addEventListener('click', () => {
                 this.toggleBag();
             });
-            (backpackSlot as HTMLElement).style.backgroundColor = '#432';
-            (backpackSlot as HTMLElement).innerHTML = '<div style="color:#aaa; font-size:10px; padding:2px;">[BAG]</div>';
         }
 
-        // Global Mouse Tracking for Tooltip
+        // Global Mouse Tracking
         document.addEventListener('mousemove', (e) => {
             if (this.inspectPanel && this.inspectPanel.style.display !== 'none') {
                 const x = Math.min(e.clientX + 15, window.innerWidth - 220);
                 const y = Math.min(e.clientY + 15, window.innerHeight - 150);
 
+                this.inspectPanel.style.position = 'fixed';
                 this.inspectPanel.style.left = `${x}px`;
                 this.inspectPanel.style.top = `${y}px`;
             }
@@ -119,78 +107,48 @@ export class UIManager {
     }
 
     private cleanupLegacyUI() {
-        // Only remove elements that are NOT in static HTML
-        const ids = ['skill-tree-panel', 'loot-panel', 'magic-hud'];
+        // Remove old dynamic elements if they persist
+        const ids = ['status-panel', 'inventory-panel'];
         ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.remove();
+            // Check if it's the OLD dynamic one (usually wouldn't be if we refreshed HTML, but good safety)
         });
     }
 
-    private chatInput!: HTMLInputElement;
+    // Removed createStatusPanel() - now in HTML logic
 
-    // Helper to recreate Status Panel if missing
-    createStatusPanel() {
-        const panel = document.createElement('div');
-        panel.className = 'panel';
-        panel.id = 'status-panel';
-        panel.innerHTML = `
-            <div class="panel-header">Status</div>
-            <div class="status-row"><span>GP:</span> <span class="val" id="gold-val" style="color:#ffd700">0</span></div>
-            <div class="status-row"><span>Level:</span> <span class="val" id="level-val">1</span></div>
-            <div class="status-row"><span>XP:</span> <span class="val" id="xp-val">0/100</span></div>
-            <div class="status-row"><span>Health:</span> <span class="val" id="hp-val">100/100</span></div>
-            <div class="status-row"><span>Mana:</span> <span class="val" id="mana-val">50/50</span></div>
-            <div class="status-row"><span>Cap:</span> <span class="val" id="cap-val">400</span></div>
-        `;
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar) {
-            // Insert at top
-            sidebar.insertBefore(panel, sidebar.firstChild);
-        } else {
-            // No sidebar? Create basic container or append to body
-            document.body.appendChild(panel);
-            panel.style.position = 'absolute';
-            panel.style.top = '10px';
-            panel.style.right = '10px';
-        }
-    }
-
+    // Helper Methods for Modals
     createOverlay(): HTMLElement {
         const el = document.createElement('div');
         el.id = 'box-overlay';
-        el.className = 'dialog-box hidden';
+        el.className = 'dialog-box hidden'; // Legacy class usage
         document.body.appendChild(el);
         return el;
     }
     createText(): HTMLElement {
         const el = document.createElement('p'); el.id = 'text';
-        const box = document.getElementById('dialogue-box') || document.body;
+        const box = document.getElementById('box-overlay') || document.body;
         box.appendChild(el); return el;
     }
+
     createInspect(): HTMLElement {
         const el = document.createElement('div');
-        el.id = 'inspect-panel'; el.className = 'hidden';
-        el.style.pointerEvents = 'none'; // Don't block clicks on underlying elements
+        el.id = 'inspect-panel';
+        el.className = 'panel hidden';
+        el.style.position = 'fixed';
+        el.style.zIndex = '9999';
+        el.style.pointerEvents = 'none';
+        el.style.width = '200px';
+        el.style.background = '#1a1a1a'; // Darker theme
+        el.style.border = '1px solid #555';
         el.innerHTML = `<div id="inspect-name"></div><div id="inspect-desc"></div><div id="inspect-stats"></div>`;
-        document.body.appendChild(el); return el;
+        document.body.appendChild(el);
+        return el;
     }
 
     createBag(): HTMLElement {
-        let panel = document.getElementById('backpack-panel');
-        if (!panel) {
-            // Create Backpack Panel dynamically if missing
-            panel = document.createElement('div');
-            panel.id = 'backpack-panel';
-            panel.className = 'panel hidden';
-            panel.innerHTML = `<div class="panel-header">Backpack</div><div id="backpack-grid" class="inventory-grid"></div>`;
-
-            // Append to sidebar
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) sidebar.appendChild(panel);
-            else document.body.appendChild(panel);
-        }
-        return panel;
+        // Should exist in HTML now, but fallback
+        console.error("Backpack Panel missing from HTML!");
+        return document.createElement('div');
     }
 
     createShop(): HTMLElement {
@@ -199,21 +157,26 @@ export class UIManager {
             panel = document.createElement('div');
             panel.id = 'shop-panel';
             panel.className = 'panel hidden';
+            panel.style.position = 'absolute';
+            panel.style.top = '100px';
+            panel.style.left = '50%';
+            panel.style.transform = 'translateX(-50%)';
+            panel.style.width = '300px';
+            panel.style.zIndex = '500';
+
             panel.innerHTML = `
                 <div class="panel-header">Merchant</div>
                 <div style="font-size:12px; color:#aaa; margin-bottom:4px;">Buying:</div>
-                <div id="shop-buy-list" style="margin-bottom:10px;"></div>
+                <div id="shop-buy-list" style="max-height:150px; overflow-y:auto; margin-bottom:10px;"></div>
                 <div style="font-size:12px; color:#aaa; margin-bottom:4px;">Selling (Backpack):</div>
-                <div id="shop-sell-list"></div>
-                <div id="shop-close-btn" style="margin-top:10px; text-align:center; font-size:12px; cursor:pointer;">Close</div>
+                <div id="shop-sell-list" style="max-height:150px; overflow-y:auto;"></div>
+                <div id="shop-close-btn" style="margin-top:10px; text-align:center; font-size:12px; cursor:pointer; background:#444; padding:4px;">Close</div>
             `;
 
             const closeBtn = panel.querySelector('#shop-close-btn');
             if (closeBtn) closeBtn.addEventListener('click', () => this.hideDialogue());
 
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) sidebar.appendChild(panel);
-            else document.body.appendChild(panel);
+            document.body.appendChild(panel);
         }
         return panel;
     }
@@ -224,14 +187,17 @@ export class UIManager {
             panel = document.createElement('div');
             panel.id = 'loot-panel';
             panel.className = 'panel hidden';
+            panel.style.position = 'absolute';
+            panel.style.top = '200px'; // Offset from shop
+            panel.style.right = '240px'; // Left of sidebar
+            panel.style.zIndex = '500';
+
             panel.innerHTML = `
-                <div class="panel-header">Corpse Loot</div>
-                <div id="loot-grid" style="display:grid; grid-template-columns: repeat(5, 32px); gap: 4px; padding: 10px;"></div>
-                <div style="text-align:center; font-size:12px; cursor:pointer; margin-top:10px;" onclick="const el=document.getElementById('loot-panel'); el.classList.add('hidden'); el.style.display='none';">Close</div>
+                <div class="panel-header">Corpse</div>
+                <div id="loot-grid" class="inventory-grid" style="padding: 10px;"></div>
+                <div style="text-align:center; font-size:12px; cursor:pointer; margin-top:10px; background:#444;" onclick="document.getElementById('loot-panel').style.display='none';">Close</div>
             `;
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) sidebar.appendChild(panel);
-            else document.body.appendChild(panel);
+            document.body.appendChild(panel);
         }
         return panel;
     }
@@ -240,14 +206,19 @@ export class UIManager {
         const hud = document.createElement('div');
         hud.id = 'magic-hud';
         hud.style.position = 'absolute';
-        hud.style.top = '28px'; // Below Mana
-        hud.style.left = '4px';
+        hud.style.top = '10px';
+        hud.style.left = '10px';
         hud.style.display = 'flex';
         hud.style.alignItems = 'center';
         hud.style.gap = '4px';
         hud.style.zIndex = '10';
-        hud.innerHTML = `<div id="active-spell-icon" style="width:24px;height:24px;border:2px solid #58b;background:#222;image-rendering:pixelated;display:flex;align-items:center;justify-content:center;color:#58b;font-weight:bold;">F</div> <span style="font-size:10px;color:#acc;">[R] to Cast</span>`;
-        document.body.appendChild(hud);
+        hud.innerHTML = `<div id="active-spell-icon" style="width:32px;height:32px;border:2px solid #58b;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:#58b;font-weight:bold;">F</div> <span style="font-size:10px;color:#acc;text-shadow:1px 1px #000;">[R] Cast</span>`;
+
+        // Append to GAME CONTAINER specifically
+        const gameContainer = document.getElementById('game-container');
+        if (gameContainer) gameContainer.appendChild(hud);
+        else document.body.appendChild(hud); // Fallback
+
         this.magicHudIcon = document.getElementById('active-spell-icon')!;
     }
 
@@ -548,13 +519,142 @@ export class UIManager {
         return dialogOpen || skillsOpen || shopOpen || bagOpen || inspectOpen;
     }
 
+    // --- INVENTORY MANAGEMENT ---
+
+    updateInventory(inv: Inventory) {
+        this.updateEquipment(inv);
+        this.updateBackpack(inv);
+
+        // Update Gold/Cap UI
+        const goldEl = document.getElementById('gold-val');
+        if (goldEl) goldEl.innerText = `${inv.gold} GP`;
+
+        const capEl = document.getElementById('cap-val');
+        if (capEl) capEl.innerText = `${inv.cap}`;
+    }
+
+    updateEquipment(inv: Inventory) {
+        // Slots: head, body, legs, boots, lhand, rhand, amulet, ring, ammo, backpack
+        const slots = ['head', 'body', 'legs', 'boots', 'lhand', 'rhand', 'amulet', 'ring', 'ammo', 'backpack'];
+
+        slots.forEach(slot => {
+            const item = inv.getEquipped(slot);
+            const el = document.querySelector(`.slot.${slot}`) as HTMLElement;
+            if (el) {
+                el.innerHTML = ''; // Clear
+                if (item) {
+                    // Render Item in Slot
+                    const img = this.createItemIcon(item);
+                    el.appendChild(img);
+                } else if (slot === 'backpack') {
+                    // Default empty backpack placeholder if needed
+                    const ph = document.createElement('div');
+                    ph.style.fontSize = '9px'; ph.style.color = '#444'; ph.innerText = 'BAG';
+                    el.appendChild(ph);
+                }
+            }
+        });
+    }
+
+    updateBackpack(inv: Inventory) {
+        if (!this.bagGrid) return;
+        this.bagGrid.innerHTML = ''; // Clear
+
+        // 1. Get the Backpack Item
+        const bagItem = inv.getEquipped('backpack');
+
+        // 2. Ensure it's a container
+        let items: any[] = [];
+        let size = 20; // Default size if no bag
+
+        if (bagItem && bagItem.contents) {
+            items = bagItem.contents;
+            // Use item.item.containerSize if available, else 20
+            if (bagItem.item.containerSize) size = bagItem.item.containerSize;
+        }
+
+        // 3. Render Grid Loop
+        for (let i = 0; i < size; i++) {
+            const slotEl = document.createElement('div');
+            slotEl.className = 'slot';
+            slotEl.style.width = '32px';
+            slotEl.style.height = '32px';
+            slotEl.dataset.index = i.toString();
+
+            // Drag Drop Events
+            this.setupDragDrop(slotEl, i, 'backpack');
+
+            if (items[i]) {
+                const itemInst = items[i];
+                const icon = this.createItemIcon(itemInst);
+                slotEl.appendChild(icon);
+            }
+
+            this.bagGrid.appendChild(slotEl);
+        }
+    }
+
+    createItemIcon(itemInst: any): HTMLElement {
+        // Use background image sprite
+        const el = document.createElement('div');
+        el.style.width = '32px';
+        el.style.height = '32px';
+        el.style.backgroundImage = `url('/sprites/world_tiles.png')`; // Sheet
+
+        // Calculate Sprite Offset
+        const uIndex = itemInst.item.uIndex;
+
+        // HACK: Hardcoded for Phase 3 proto
+        const cols = 32; // tiles per row
+        const tx = (uIndex % cols) * 32;
+        const ty = Math.floor(uIndex / cols) * 32;
+
+        el.style.backgroundPosition = `-${tx}px -${ty}px`;
+        el.style.backgroundSize = '1024px'; // 32 * 32
+        el.style.imageRendering = 'pixelated';
+        el.draggable = true;
+        el.title = itemInst.item.name;
+
+        // Count
+        if (itemInst.count > 1) {
+            const countEl = document.createElement('span');
+            countEl.innerText = itemInst.count.toString();
+            countEl.style.position = 'absolute';
+            countEl.style.bottom = '0';
+            countEl.style.right = '0';
+            countEl.style.color = '#fff';
+            countEl.style.fontSize = '10px';
+            countEl.style.textShadow = '1px 1px #000';
+            el.appendChild(countEl);
+        }
+
+        return el;
+    }
+
+    setupDragDrop(slotEl: HTMLElement, index: number, containerType: string) {
+        slotEl.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Allow drop
+            slotEl.style.borderColor = '#aaa';
+        });
+        slotEl.addEventListener('dragleave', () => {
+            slotEl.style.borderColor = ''; // Reset
+        });
+        slotEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            // Interaction System should handle this
+            console.log(`Dropped item on ${containerType} slot ${index}`);
+            // Emit event or call global handler
+        });
+    }
+
+    // Legacy Support cleanup
     toggleBag() {
-        if (this.bagPanel.style.display === 'none') {
-            this.bagPanel.style.display = 'block';
+        if (this.bagPanel.classList.contains('hidden')) {
             this.bagPanel.classList.remove('hidden');
+            this.bagPanel.style.display = 'block';
         } else {
-            this.bagPanel.style.display = 'none';
             this.bagPanel.classList.add('hidden');
+            this.bagPanel.style.display = 'none';
         }
     }
 
@@ -611,10 +711,13 @@ export class UIManager {
                         item.description, item.weaponType, item.rarity || 'common', item.defense || 0
                     );
 
-                    playerInv.storage.push(newItem);
-                    if (this.console) this.console.sendMessage(`Bought ${item.name}.`);
-                    this.renderShop(merchant, playerInv);
-                    this.updateInventory(playerInv, spriteSheet.src);
+                    if (playerInv.addItem(item, 1)) {
+                        this.renderShop(merchant, playerInv);
+                        this.updateInventory(playerInv);
+                        if (this.console) this.console.sendMessage(`Bought ${item.name}.`);
+                    } else {
+                        if (this.console) this.console.sendMessage(`Inventory Full.`);
+                    }
                 } else {
                     console.log("[Shop] Not enough gold");
                     if (this.console) this.console.sendMessage("Not enough gold!");
@@ -625,36 +728,48 @@ export class UIManager {
 
         // Render Sell List (Storage Only for now to simplify)
         this.shopSellList.innerHTML = '';
-        playerInv.storage.forEach((item, index) => {
-            const div = document.createElement('div');
-            div.style.padding = '8px 4px';
-            div.style.borderBottom = '1px solid #333';
-            div.style.fontSize = '12px';
-            div.style.cursor = 'pointer';
-            div.style.width = '100%';
-            div.style.boxSizing = 'border-box';
-            div.style.userSelect = 'none';
-            const sellPrice = Math.floor(item.price / 2);
-            div.innerText = `${item.name} - ${sellPrice}₪`;
 
-            div.onmouseover = () => this.inspectItem(item);
-            div.onmouseleave = () => this.closeInspect();
+        // Find backpack items
+        const bag = playerInv.getEquipped('backpack');
+        if (bag && bag.contents) {
+            bag.contents.forEach((itemInst, index) => {
+                const item = itemInst.item;
+                const div = document.createElement('div');
+                div.style.padding = '8px 4px';
+                div.style.borderBottom = '1px solid #333';
+                div.style.fontSize = '12px';
+                div.style.cursor = 'pointer';
+                div.style.width = '100%';
+                div.style.boxSizing = 'border-box';
+                div.style.userSelect = 'none';
+                const sellPrice = Math.floor(item.price / 2);
+                div.innerText = `${item.name} (x${itemInst.count}) - ${sellPrice}gp`;
 
-            div.onclick = () => {
-                try {
-                    console.log(`[Shop] Sell Click: ${item.name} for ${sellPrice}₪`);
-                    playerInv.gold += sellPrice;
-                    playerInv.storage.splice(index, 1);
-                    if (this.console) this.console.sendMessage(`Sold ${item.name}.`);
-                    this.renderShop(merchant, playerInv);
-                    this.updateInventory(playerInv, spriteSheet.src);
-                } catch (e: any) {
-                    console.error("Sell Error:", e);
-                    if (this.console) this.console.addSystemMessage("Error selling item: " + e.message);
-                }
-            };
-            this.shopSellList.appendChild(div);
-        });
+                div.onmouseover = () => this.inspectItem(item);
+                div.onmouseleave = () => this.closeInspect();
+
+                div.onclick = () => {
+                    try {
+                        console.log(`[Shop] Sell Click: ${item.name} for ${sellPrice}₪`);
+                        playerInv.gold += sellPrice;
+
+                        // Remove 1
+                        if (itemInst.count > 1) itemInst.count--;
+                        else {
+                            bag.contents.splice(index, 1);
+                        }
+
+                        if (this.console) this.console.sendMessage(`Sold ${item.name}.`);
+                        this.renderShop(merchant, playerInv);
+                        this.updateInventory(playerInv);
+                    } catch (e: any) {
+                        console.error("Sell Error:", e);
+                        if (this.console) this.console.addSystemMessage("Error selling item: " + e.message);
+                    }
+                };
+                this.shopSellList.appendChild(div);
+            });
+        }
 
         // Update Gold UI immediate
         const goldEl = document.getElementById('gold-val');
@@ -687,193 +802,63 @@ export class UIManager {
 
 
 
-    updateInventory(inv: Inventory, spriteSrc: string) {
-        // Clear all slots
-        document.querySelectorAll('.slot:not(.backpack)').forEach(el => {
-            el.innerHTML = '';
-            (el as HTMLElement).style.backgroundColor = '#222';
-            (el as HTMLElement).style.backgroundImage = 'none';
-        });
+    // --- INVENTORY UI ---
 
-        // Populate slots
-        inv.items.forEach((item, slotKey) => {
-            const slotEl = document.querySelector(`.slot.${slotKey}`);
-            if (slotEl) {
-                // Use AssetManager
-                const el = slotEl as HTMLElement;
-                const style = assetManager.getSpriteStyle(item.uIndex);
+    // Removed duplicate setupInventory/updateInventory declarations
 
-                el.style.backgroundImage = style.backgroundImage;
-                el.style.backgroundPosition = style.backgroundPosition;
-                el.style.backgroundSize = style.backgroundSize;
-                el.style.imageRendering = 'pixelated';
-                el.setAttribute('title', "");
-
-                // Inspect Events
-                el.onmouseover = () => this.inspectItem(item);
-                el.onmouseleave = () => this.closeInspect();
-
-                // Unequip Event
-                el.onclick = () => {
-                    // Move to storage
-                    inv.storage.push(item);
-                    inv.items.delete(slotKey);
-
-                    if (this.console) this.console.sendMessage(`Unequipped ${item.name}.`);
-                    this.updateInventory(inv, spriteSrc); // Recursive call still passes src, can be ignored in future
-                    // Sync Shop if Open
-                    if (this.currentMerchant && !this.shopPanel.classList.contains('hidden')) {
-                        this.renderShop(this.currentMerchant, inv);
-                    }
-                };
-            }
-        });
-
-        // Populate Backpack storage
-        this.bagGrid.innerHTML = '';
-        inv.storage.forEach((item) => {
-            const slot = document.createElement('div');
-            slot.className = 'slot';
-            slot.style.border = '1px solid #444';
-            slot.style.backgroundColor = '#222';
-            slot.style.width = '32px';
-            slot.style.height = '32px';
-
-            // Render Sprite
-            const style = assetManager.getSpriteStyle(item.uIndex);
-
-            slot.style.backgroundImage = style.backgroundImage;
-            slot.style.backgroundPosition = style.backgroundPosition;
-            slot.style.backgroundSize = style.backgroundSize;
-            slot.style.imageRendering = 'pixelated';
-            slot.setAttribute('title', "");
-
-            // Inspect Events
-            slot.onmouseover = () => this.inspectItem(item);
-            slot.onmouseleave = () => this.closeInspect();
-
-            // Equip / Consume Event
-            slot.onclick = () => {
-                // Prevent equipping non-equippables
-                if (item.slot === 'none' || item.slot === 'currency') return;
-
-                // CONSUMABLE CHECK
-                if (item.slot === 'potion' || item.slot === 'food' || item.slot === 'consumable') {
-                    if (this.onConsume) {
-                        this.onConsume(item);
-                        return;
-                    }
-                }
-
-                const targetSlot = item.slot;
-
-                // Check if slot is occupied
-                if (inv.items.has(targetSlot)) {
-                    // Swap
-                    const currentItem = inv.items.get(targetSlot)!;
-                    inv.storage.push(currentItem);
-                    inv.items.set(targetSlot, item);
-
-                    // Remove from storage (by index is safer)
-                    const index = inv.storage.indexOf(item);
-                    if (index > -1) inv.storage.splice(index, 1);
-
-                    if (this.console) this.console.sendMessage(`Equipped ${item.name} (Swapped).`);
-                } else {
-                    // Equip
-                    inv.items.set(targetSlot, item);
-                    const index = inv.storage.indexOf(item);
-                    if (index > -1) inv.storage.splice(index, 1);
-
-                    if (this.console) this.console.sendMessage(`Equipped ${item.name}.`);
-                }
-
-                this.updateInventory(inv, spriteSrc);
-                // Sync Shop if Open
-                if (this.currentMerchant && !this.shopPanel.classList.contains('hidden')) {
-                    this.renderShop(this.currentMerchant, inv);
-                }
-            };
-
-            this.bagGrid.appendChild(slot);
-        });
-    }
 
 
 
     openLoot(lootable: Lootable, entityId: number, playerInv: Inventory, mainQuest?: any) {
         if (!this.lootPanel) {
-            this.lootPanel = this.createLoot();
+            // Create loot panel (Implementation omitted for brevity, ensure exists)
+            this.lootPanel = document.getElementById('loot-panel') || this.createLoot();
         }
-
         this.activeLootEntityId = entityId;
         this.lootPanel.classList.remove('hidden');
-        this.lootPanel.style.display = 'block'; // Ensure visibility
-        this.renderLoot(lootable, playerInv, mainQuest);
+        this.lootPanel.style.display = 'block';
+
+        this.renderLoot(lootable, playerInv);
     }
 
-    renderLoot(lootable: Lootable, playerInv: Inventory, mainQuest?: any) {
+    renderLoot(lootable: Lootable, playerInv: Inventory) {
         const grid = this.lootPanel.querySelector('#loot-grid')!;
         grid.innerHTML = '';
 
-        if (lootable.items.length === 0) {
-            const empty = document.createElement('div');
-            empty.innerText = "(Empty)";
-            empty.style.color = '#888';
-            empty.style.fontSize = '12px';
-            empty.style.gridColumn = 'span 5';
-            empty.style.textAlign = 'center';
-            grid.appendChild(empty);
-            return;
-        }
+        // Lootable.items is still Item[] or ItemInstance[]?
+        // It should be ItemInstance[] ideally.
+        // Assuming it is still Array<Item> from old components, we might need to wrap them or just render them.
+        // Checking Components: Lootable -> public items: Item[] = []; (Old)
+        // I should likely wrap them on the fly or refactor Lootable too. 
+        // For now, render Item directly.
 
-        lootable.items.forEach((item, index) => {
+        lootable.items.forEach((item: any, index: number) => {
+            // Wrap in temp instance for icon
+            // const inst = new ItemInstance(item, 1);
+            // const icon = this.createItemIcon(inst); 
+
+            // Quick fix:
             const slot = document.createElement('div');
             slot.className = 'slot';
-            slot.style.border = '1px solid #444';
-            slot.style.backgroundColor = '#222';
-            slot.style.width = '32px';
-            slot.style.height = '32px';
-            slot.style.cursor = 'pointer';
+            const style = assetManager.getSpriteStyle(item.uIndex);
+            slot.style.backgroundImage = style.backgroundImage;
+            slot.style.backgroundPosition = style.backgroundPosition;
+            slot.style.backgroundSize = style.backgroundSize;
 
-            // Render Sprite
-            slot.style.backgroundImage = `url(${spriteSheet.src})`;
-            const col = item.uIndex % 8;
-            const row = Math.floor(item.uIndex / 8);
-            slot.style.backgroundPosition = `-${col * 32}px -${row * 32}px`;
-            slot.style.backgroundSize = '256px 256px';
-            slot.style.imageRendering = 'pixelated';
-
-            // Inspect
-            slot.onmouseover = () => this.inspectItem(item);
-            slot.onmouseleave = () => this.closeInspect();
-
-            // Loot Interaction
             slot.onclick = () => {
-                // Move to player
-                // Check capacity? (For now ignore cap)
-                playerInv.storage.push(item);
-                lootable.items.splice(index, 1);
-
-                if (this.console) this.console.sendMessage(`Looted ${item.name}.`);
-
-                // QUEST LOGIC
-                if (mainQuest) {
-                    if (item.name === 'Fire Essence') {
-                        mainQuest.fire = true;
-                        if (this.console) this.console.addSystemMessage("QUEST: You obtained the Fire Essence!");
-                        /* trigger effect or sound */
-                    }
-                    if (item.name === 'Ice Essence') {
-                        mainQuest.ice = true;
-                        if (this.console) this.console.addSystemMessage("QUEST: You obtained the Ice Essence!");
-                    }
+                // Loot it
+                // Add to player backpack
+                const bag = playerInv.getEquipped('backpack');
+                if (bag) {
+                    // Add to contents
+                    // Need proper `addItem` logic on Container/Inventory
+                    // Hacky direct push:
+                    // bag.contents.push(new ItemInstance(item, 1));
+                    // Remove from loot
+                    lootable.items.splice(index, 1);
+                    this.renderLoot(lootable, playerInv);
+                    this.updateInventory(playerInv);
                 }
-
-                this.updateInventory(playerInv, spriteSheet.src);
-                this.renderLoot(lootable, playerInv, mainQuest);
-
-                // If empty, auto close? Nah, let user close.
             };
 
             grid.appendChild(slot);

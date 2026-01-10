@@ -121,31 +121,170 @@ export const RARITY_MULTIPLIERS: Record<ItemRarity, number> = {
     legendary: 2.0
 };
 
+
 export class Item {
     constructor(
         public name: string,
-        public slot: string,
+        // slotType: Where it fits (head, body, etc)
+        public slotType: string,
         public uIndex: number,
         public damage: number = 0,
         public price: number = 10,
         public description: string = "",
-        public weaponType: string = "sword",
+        public weaponType: string = "none",
         public rarity: ItemRarity = 'common',
         public defense: number = 0,
         public bonusHp: number = 0,
         public bonusMana: number = 0,
-        public glowColor: string | null = null,
+        // If this item IS a container (e.g. Backpack), it might need unique ID or just be treated as a container type
+        public isContainer: boolean = false,
+        public containerSize: number = 0,
+        // Optional Glow Properties
+        public glowColor: string | undefined = undefined,
         public glowRadius: number = 0
     ) { }
 }
 
+// Runtime Instance of an item (Stacks, etc)
+export class ItemInstance {
+    constructor(
+        public item: Item,
+        public count: number = 1,
+        // If this instance handles a persistent inner container (like a specific bag with items)
+        // We might store that data here or link to an Entity.
+        // For simplicity Phase 3: We will generate a UUID for containers or just use nested arrays if we don't need persistent world entities yet.
+        // Let's use a simple nested array approach for "Container Data"
+        public contents: ItemInstance[] = []
+    ) { }
+}
+
+export class Container {
+    // Represents a grid of items
+    // Fixed size (e.g. 20 for backpack)
+    public items: (ItemInstance | null)[];
+
+    constructor(public size: number = 20) {
+        this.items = new Array(size).fill(null);
+    }
+
+    addItem(newItem: ItemInstance): boolean {
+        // 1. Try to stack
+        for (let i = 0; i < this.items.length; i++) {
+            const slot = this.items[i];
+            if (slot && slot.item.name === newItem.item.name && slot.count < 100) { // Max Stack 100
+                slot.count += newItem.count;
+                return true;
+            }
+        }
+        // 2. Find empty slot
+        for (let i = 0; i < this.items.length; i++) {
+            if (this.items[i] === null) {
+                this.items[i] = newItem;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 export class Inventory {
-    items: Map<string, Item> = new Map();
-    storage: Item[] = [];
+    // Equipment Slots
+    // key: 'head', 'body', 'legs', 'boots', 'lhand', 'rhand', 'amulet', 'ring', 'ammo', 'backpack'
+    equipment: Map<string, ItemInstance> = new Map();
+
     gold: number = 0;
-    cap: number = 400; // Capacity (oz)
-    constructor(initialItems: Item[] = []) {
-        initialItems.forEach(item => this.items.set(item.name, item));
+    cap: number = 400;
+
+    // The Main Backpack Container is usually the item in the 'backpack' slot.
+    // However, for ease of access, we might reference the "Active Container" here.
+    // Or we just read equipment.get('backpack').contents
+
+    constructor() { }
+
+    // Helper
+    getEquipped(slot: string): ItemInstance | undefined {
+        return this.equipment.get(slot);
+    }
+
+    equip(slot: string, item: ItemInstance) {
+        this.equipment.set(slot, item);
+    }
+
+    // --- Legacy / Convenience Helpers ---
+
+    // Find an item instance by name (searches equipment + backpack)
+    findItemByName(name: string): { instance: ItemInstance, container: 'equipment' | 'backpack' | 'none', slot?: string, parent?: ItemInstance } | null {
+        // 1. Check Equipment
+        for (const [slot, inst] of this.equipment) {
+            if (inst.item.name === name) return { instance: inst, container: 'equipment', slot };
+        }
+
+        // 2. Check Backpack
+        const bag = this.equipment.get('backpack');
+        if (bag && bag.contents) {
+            const found = bag.contents.find(i => i && i.item.name === name);
+            if (found) return { instance: found, container: 'backpack', parent: bag };
+        }
+
+        return null; // Not found
+    }
+
+    // Check if player has item
+    hasItem(name: string): boolean {
+        return !!this.findItemByName(name);
+    }
+
+    // Remove item (Decrements count or removes)
+    removeItem(name: string, count: number = 1): boolean {
+        // Find it
+        const result = this.findItemByName(name);
+        if (!result) return false;
+
+        const { instance, container, slot, parent } = result;
+
+        if (instance.count > count) {
+            instance.count -= count;
+            return true;
+        } else {
+            // Remove entirely
+            if (container === 'equipment' && slot) {
+                this.equipment.delete(slot);
+            } else if (container === 'backpack' && parent) {
+                parent.contents = parent.contents.filter(i => i !== instance);
+            }
+            return true;
+        }
+    }
+
+    // Add item to backpack (or first empty slot logic later)
+    addItem(item: Item, count: number = 1): boolean {
+        const bag = this.equipment.get('backpack');
+        // If no backpack, fail or add to "storage" (deprecated)?
+        // For Phase 3: Must have backpack.
+        if (!bag) {
+            // Check if we can equip it directly? (e.g. it IS a backpack)
+            if (item.name === 'Backpack') {
+                this.equip('backpack', new ItemInstance(item, count));
+                return true;
+            }
+            return false; // No space
+        }
+
+        // Add to bag contents
+        // Check stackability
+        const stackMatch = bag.contents.find(i => i.item.name === item.name);
+        if (stackMatch) {
+            stackMatch.count += count;
+            return true;
+        }
+
+        // Add new
+        if (bag.contents.length < 20) {
+            bag.contents.push(new ItemInstance(item, count));
+            return true;
+        }
+
+        return false; // Full
     }
 }
 

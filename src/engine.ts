@@ -1,18 +1,27 @@
 export class InputHandler {
     keys: Set<string> = new Set();
-    justPressed: Set<string> = new Set();
+    justPressedMap: Set<string> = new Set();
     mouse: { x: number, y: number } = { x: 0, y: 0 };
+    mouseKeys: Set<number> = new Set();
 
     constructor() {
+        // 1. Key Down
         window.addEventListener('keydown', (e) => {
-            if (this.shouldIgnoreInput()) return;
             if (!this.keys.has(e.code)) {
-                this.justPressed.add(e.code);
+                this.justPressedMap.add(e.code);
             }
             this.keys.add(e.code);
         });
+
+        // 2. Key Up
         window.addEventListener('keyup', (e) => {
             this.keys.delete(e.code);
+        });
+
+        // 3. Blur (Clear all)
+        window.addEventListener('blur', () => {
+            this.keys.clear();
+            this.mouseKeys.clear();
         });
 
         // Mouse Support
@@ -28,14 +37,19 @@ export class InputHandler {
         });
 
         window.addEventListener('mousedown', (e) => {
+            this.mouseKeys.add(e.button);
+            // Map MouseLeft to key-like behavior if needed for existing code
             if (e.button === 0) {
-                if (!this.keys.has('MouseLeft')) this.justPressed.add('MouseLeft');
+                if (!this.keys.has('MouseLeft')) this.justPressedMap.add('MouseLeft');
                 this.keys.add('MouseLeft');
             }
         });
 
         window.addEventListener('mouseup', (e) => {
-            if (e.button === 0) this.keys.delete('MouseLeft');
+            this.mouseKeys.delete(e.button);
+            if (e.button === 0) {
+                this.keys.delete('MouseLeft');
+            }
         });
     }
 
@@ -44,11 +58,21 @@ export class InputHandler {
     }
 
     isJustPressed(code: string): boolean {
-        return this.justPressed.has(code);
+        return this.justPressedMap.has(code);
+    }
+
+    getDirection(): { x: number, y: number } {
+        let dx = 0;
+        let dy = 0;
+        if (this.keys.has('ArrowUp') || this.keys.has('KeyW')) dy = -1;
+        if (this.keys.has('ArrowDown') || this.keys.has('KeyS')) dy = 1;
+        if (this.keys.has('ArrowLeft') || this.keys.has('KeyA')) dx = -1;
+        if (this.keys.has('ArrowRight') || this.keys.has('KeyD')) dx = 1;
+        return { x: dx, y: dy };
     }
 
     update() {
-        this.justPressed.clear();
+        this.justPressedMap.clear();
     }
 
     private shouldIgnoreInput(): boolean {
