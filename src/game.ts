@@ -1,7 +1,8 @@
 import { World, Entity, InputHandler } from './engine';
 import { PHYSICS } from './physics';
-import { UIManager } from './ui';
+import { UIManager } from './client/ui_manager';
 import { AudioController } from './audio';
+import { ItemRegistry } from './data/items';
 
 // --- Components (Re-exported from separate file) ---
 // --- Components (Re-exported from separate file) ---
@@ -25,6 +26,8 @@ export const DEBUG_COLLIDERS = true;
 // Debug flag to show AI state names above enemies
 // Debug flag to show AI state names above enemies
 export const DEBUG_AI_STATES = true;
+
+export const TEMPLE_POS = { x: 25 * 32, y: 25 * 32 }; // Default Temple Position (Center of 50x50 map)
 
 // --- Components: Dialogue ---
 export class Dialogue {
@@ -124,14 +127,35 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager) {
                 world.removeComponent(player, Target);
 
                 // Gain XP
-                // ... (XP logic handled in death processing usually, or here)
                 const pXp = world.getComponent(player, Experience);
                 if (pXp) {
-                    const gain = 50; // hardcoded for now or get from Enemy Component
+                    const gain = 50;
                     pXp.current += gain;
-                    // Level up logic is in quest/interaction system currently, consolidate later
                     if ((ui as any).console) (ui as any).console.addSystemMessage(`You dealt ${damage} damage. Target died.`);
                 }
+
+                // --- LOOT LOGIC ---
+                const loot: Item[] = [];
+
+                // 50% Chance: Gold Coin (ID 3)
+                if (Math.random() < 0.5) {
+                    loot.push(createItemFromRegistry(3));
+                }
+                // 20% Chance: Short Sword (ID 1)
+                if (Math.random() < 0.2) {
+                    loot.push(createItemFromRegistry(1));
+                }
+                // 20% Chance: Apple (ID 16)
+                if (Math.random() < 0.2) {
+                    loot.push(createItemFromRegistry(16));
+                }
+
+                if (loot.length > 0) {
+                    createCorpse(world, tPos.x, tPos.y, loot);
+                } else {
+                    createCorpse(world, tPos.x, tPos.y, []);
+                }
+                // ------------------
             } else {
                 // Log (optional, can span console)
                 // console.log(`Hit target for ${damage}`);
@@ -141,71 +165,104 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager) {
 }
 
 export function inputSystem(world: World, input: InputHandler) {
-    const entities = world.query([PlayerControllable, Velocity, Sprite]); // Added Sprite to query
+    // query includes Target so we can use it
+    const entities = world.query([PlayerControllable, Velocity]);
 
     for (const id of entities) {
-        let speed = 100; // Base Speed
+        let speed = 100;
 
-        // Passive Bonus
         const passives = world.getComponent(id, Passives);
-        if (passives) {
-            speed += (passives.agility * 5); // +5 Speed per level
-        }
+        if (passives) speed += (passives.agility * 5);
+
         const vel = world.getComponent(id, Velocity)!;
         const pc = world.getComponent(id, PlayerControllable)!;
-        const sprite = world.getComponent(id, Sprite); // Get sprite component
+        const sprite = world.getComponent(id, Sprite);
+        const pos = world.getComponent(id, Position)!;
 
-        // Directional Movement using getDirection (Robust Fix)
-        // STRICT ZERO-RESET: Start with 0 intent.
+        // 1. Reset Velocity Default
         vel.x = 0;
         vel.y = 0;
 
-        const dir = input.getDirection();
-        const isMoving = dir.x !== 0 || dir.y !== 0;
+        // 2. Check Input
+        let dir = input.getDirection();
+        let isMoving = dir.x !== 0 || dir.y !== 0;
 
+        // --- 3. AUTO-CHASE LOGIC ---
+        // If not manually moving, check for a Target
+        if (!isMoving) {
+            const targetComp = world.getComponent(id, Target);
+            if (targetComp) {
+                const tPos = world.getComponent(targetComp.targetId, Position);
+                const tHp = world.getComponent(targetComp.targetId, Health);
+
+                // Check if target exists and is alive
+                if (tPos && tHp && tHp.current > 0) {
+                    const dx = (tPos.x + 8) - (pos.x + 8); // Center offset
+                    const dy = (tPos.y + 8) - (pos.y + 8);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    // STOP DISTANCE: 20px (Close enough to hit with sword)
+                    if (dist > 20) {
+                        const moveX = (dx / dist);
+                        const moveY = (dy / dist);
+
+                        vel.x = moveX * speed;
+                        vel.y = moveY * speed;
+
+                        // Fake the "dir" so sprites face the right way
+                        dir = {
+                            x: Math.abs(moveX) > 0.5 ? Math.sign(moveX) : 0,
+                            y: Math.abs(moveY) > 0.5 ? Math.sign(moveY) : 0
+                        };
+                        isMoving = true;
+                    }
+                } else {
+                    // Target dead? Stop chasing.
+                    world.removeComponent(id, Target);
+                }
+            }
+        }
+
+        // 4. Apply Movement & Animations
         if (isMoving) {
-            vel.x = dir.x * speed;
-            vel.y = dir.y * speed;
+            // Manual input overwrites chase
+            if (input.getDirection().x !== 0 || input.getDirection().y !== 0) {
+                vel.x = dir.x * speed;
+                vel.y = dir.y * speed;
+            }
 
-            // Update Facing and Sprite
-            // Priority: X over Y for sprite direction usually, or diagonals
-            if (dir.x < 0) { pc.facingX = -1; pc.facingY = 0; if (sprite) { sprite.uIndex = 2; sprite.flipX = true; } }
-            else if (dir.x > 0) { pc.facingX = 1; pc.facingY = 0; if (sprite) { sprite.uIndex = 2; sprite.flipX = false; } }
-            else if (dir.y < 0) { pc.facingX = 0; pc.facingY = -1; if (sprite) { sprite.uIndex = 1; sprite.flipX = false; } }
-            else if (dir.y > 0) { pc.facingX = 0; pc.facingY = 1; if (sprite) { sprite.uIndex = 0; sprite.flipX = false; } }
+            // Update Facing
+            if (dir.x < 0) {
+                pc.facingX = -1; pc.facingY = 0;
+                if (sprite) { sprite.uIndex = 2; sprite.direction = 2; sprite.flipX = true; }
+            }
+            else if (dir.x > 0) {
+                pc.facingX = 1; pc.facingY = 0;
+                if (sprite) { sprite.uIndex = 2; sprite.direction = 3; sprite.flipX = false; }
+            }
+            else if (dir.y < 0) {
+                pc.facingX = 0; pc.facingY = -1;
+                if (sprite) { sprite.uIndex = 1; sprite.direction = 1; sprite.flipX = false; }
+            }
+            else if (dir.y > 0) {
+                pc.facingX = 0; pc.facingY = 1;
+                if (sprite) { sprite.uIndex = 0; sprite.direction = 0; sprite.flipX = false; }
+            }
 
             if (sprite) {
-                // Animation Cycle
                 const now = Date.now();
                 sprite.frame = 1 + (Math.floor(now / 150) % 2);
             }
         } else {
             // Idle Frame
-            if (sprite) sprite.frame = 1; // Center/Idle frame
+            if (sprite) sprite.frame = 1;
         }
 
-        // FORCE VISIBILITY (Natural World Debug)
-        // "Force player's sprite uIndex to 0 and frame to 1"
-        // sprite.uIndex = 0; // Down Row
-        // sprite.frame = 1;  // Center Column
-
-
-        // Unstuck
-        if (input.isDown('KeyU')) {
-            const pos = world.getComponent(id, Position)!;
-            pos.x = 4096;
-            pos.y = 4096;
-        }
-
-        // Debug: Home / Stairs
-        if (input.isDown('KeyH')) {
-            if (input.isJustPressed('KeyH')) {
-                const pos = world.getComponent(id, Position)!;
-                pos.x = 4096;
-                pos.y = 4096;
-                console.log("Teleported to Village Center.");
-                spawnFloatingText(world, 4096, 4096, "↓↓ VILLAGE ↓↓", '#ff00ff');
-            }
+        // Unstuck & Debug
+        if (input.isDown('KeyU')) { pos.x = 4096; pos.y = 4096; }
+        if (input.isDown('KeyH') && input.isJustPressed('KeyH')) {
+            pos.x = 4096; pos.y = 4096;
+            spawnFloatingText(world, 4096, 4096, "↓↓ VILLAGE ↓↓", '#ff00ff');
         }
     }
 }
@@ -240,57 +297,47 @@ export function createNPC(world: World, x: number, y: number, text: string = "He
 }
 
 export function interactionSystem(world: World, input: InputHandler, ui: UIManager) {
-    // Dialogue Interaction (E key)
+    // 1. Dialogue Interaction (E key) - Unchanged
     if (input.isJustPressed('e')) {
         const player = world.query([PlayerControllable, Position])[0];
         if (player === undefined) return;
         const pPos = world.getComponent(player, Position)!;
 
-        // Check Dialogue NPCs
         const talkers = world.query([Dialogue, Position]);
         for (const eid of talkers) {
             const dPos = world.getComponent(eid, Position)!;
             const dist = Math.sqrt(Math.pow(dPos.x - pPos.x, 2) + Math.pow(dPos.y - pPos.y, 2));
 
-            if (dist < 48) { // 1.5 tiles
+            if (dist < 48) {
                 const dialogue = world.getComponent(eid, Dialogue)!;
-
-                // Interaction Logic
-                // If UI is closed, Open it with Line 0
-                // If UI is open, Advance Line
-                // If End of Lines, Close UI & Reset
-
                 const uiEl = document.getElementById('dialogue-ui');
                 const nameEl = document.getElementById('dialogue-name');
                 const textEl = document.getElementById('dialogue-text');
 
                 if (uiEl && nameEl && textEl) {
                     if (uiEl.style.display === 'none') {
-                        // Open
                         uiEl.style.display = 'block';
                         dialogue.currentLine = 0;
                         nameEl.innerText = dialogue.name;
                         textEl.innerText = dialogue.lines[dialogue.currentLine];
                     } else {
-                        // Advance
                         dialogue.currentLine++;
                         if (dialogue.currentLine >= dialogue.lines.length) {
-                            // End
                             uiEl.style.display = 'none';
                             dialogue.currentLine = 0;
                         } else {
-                            // Show Next
                             textEl.innerText = dialogue.lines[dialogue.currentLine];
                         }
                     }
                 }
-                return; // Block other interactions if dialogue is handled
+                return;
             }
         }
     }
 
-    // Targeting Logic (Left Click)
-    if (input.isDown('MouseLeft')) {
+    // 2. TARGETING LOGIC (Left Click) - FIXED
+    // Changed isDown -> isJustPressed to prevent "machine gun" clicking
+    if (input.isJustPressed('MouseLeft')) {
         const mx = input.mouse.x;
         const my = input.mouse.y;
 
@@ -298,23 +345,24 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
         const cam = world.query([Camera])[0];
         if (cam !== undefined) {
             const cPos = world.getComponent(cam, Camera)!;
-            camX = Math.floor(cPos.x); // Align with rendering
+            camX = Math.floor(cPos.x);
             camY = Math.floor(cPos.y);
         }
 
         const worldX = mx + camX;
         const worldY = my + camY;
 
+        console.log(`[Interaction] Clicked Screen: ${mx},${my} -> World: ${worldX},${worldY}`);
+
         const interactables = world.query([Interactable, Position]);
         let clickedInteractable = false;
 
-        // Priority: Interactions > Targeting
+        // A. Check Interactables (Loot, NPCs, etc)
         for (const id of interactables) {
             const pos = world.getComponent(id, Position)!;
-            // console.log("Check Int:", id, pos.x, pos.y, worldX, worldY);
+            // Standard 32x32 hit box
             if (worldX >= pos.x && worldX <= pos.x + 32 &&
                 worldY >= pos.y && worldY <= pos.y + 32) {
-                console.log("Clicked Interactable:", id);
 
                 const player = world.query([PlayerControllable, Position])[0];
                 if (player) {
@@ -324,27 +372,21 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                     const dist = Math.sqrt(dx * dx + dy * dy);
 
                     if (dist <= 80) {
-                        // Execute Interaction
                         const lootable = world.getComponent(id, Lootable);
                         const merchant = world.getComponent(id, Merchant);
                         const questGiver = world.getComponent(id, QuestGiver);
-
-                        console.log("Interaction Check:", id, "Lootable:", !!lootable, "Merchant:", !!merchant, "Quest:", !!questGiver);
 
                         if (lootable) {
                             const playerInv = world.getComponent(player, Inventory)!;
                             ui.openLoot(lootable, id, playerInv);
                             clickedInteractable = true;
                         } else if (merchant) {
-                            console.log("Opening Shop UI...");
                             const playerInv = world.getComponent(player, Inventory)!;
                             ui.currentMerchant = merchant;
                             ui.activeMerchantId = id;
                             ui.renderShop(merchant, playerInv);
                             ui.shopPanel.classList.remove('hidden');
-                            ui.shopPanel.style.display = 'flex'; // Force visibility
-                            ui.shopPanel.style.zIndex = '10000'; // Force on top
-                            console.log("Forced Shop Visible");
+                            ui.shopPanel.style.display = 'flex';
                             clickedInteractable = true;
                         } else if (questGiver) {
                             // Quest Interaction
@@ -790,7 +832,6 @@ export function aiSystem(world: World, dt: number) {
             continue;
         }
 
-        // Calculate distance to player
         const dx = playerPos.x - pos.x;
         const dy = playerPos.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -941,8 +982,45 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
     for (const id of entities) {
         const pos = world.getComponent(id, Position)!;
         const vel = world.getComponent(id, Velocity)!;
+        const sprite = world.getComponent(id, Sprite);
 
-        // Direction logic ...
+        // DEBUG: Trace Velocity
+        if (Math.random() < 0.01 && (vel.x !== 0 || vel.y !== 0)) {
+            console.log(`[MoveSys] Entity ${id} Attempting Move. Vel: ${vel.x}, ${vel.y}`);
+        }
+
+        // --- NEW: Animation Logic ---
+        if (sprite) {
+            // 1. Update Direction
+            // 1. Update Direction (Strict User Logic)
+            if (Math.abs(vel.x) > 0 || Math.abs(vel.y) > 0) {
+                if (Math.abs(vel.x) > Math.abs(vel.y)) {
+                    // Moving Horizontal
+                    sprite.direction = (vel.x > 0) ? 3 : 2; // 3=Right, 2=Left
+                } else {
+                    // Moving Vertical
+                    sprite.direction = (vel.y > 0) ? 0 : 1; // 0=Down, 1=Up
+                }
+                sprite.animState = 'walk';
+            } else {
+                sprite.animState = 'idle';
+            }
+
+            // 2. Update Frame
+            if (sprite.animState === 'walk') {
+                sprite.animTimer += dt;
+                if (sprite.animTimer >= sprite.frameDuration) {
+                    sprite.animTimer = 0;
+                    sprite.frame = (sprite.frame + 1) % 4; // Assume 4 frames
+                }
+            } else {
+                // Idle
+                sprite.frame = 1; // Or specific idle frame? Usually 1 is stand
+                sprite.animTimer = 0;
+            }
+        }
+
+        // Direction logic (Legacy Facing)
         if (vel.x !== 0 || vel.y !== 0) {
             const facing = world.getComponent(id, Facing);
             if (facing) {
@@ -999,11 +1077,14 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
 
             if (blockedByEntity) continue;
 
-            const checkCollision = (x: number, y: number): boolean => {
+            const checkCollision = (x: number, y: number, debug: boolean = false): boolean => {
                 if (!map) return false;
 
                 // Map Bounds
-                if (x < 0 || x >= map.width * map.tileSize || y < 0 || y >= map.height * map.tileSize) return true;
+                if (x < 0 || x >= map.width * map.tileSize || y < 0 || y >= map.height * map.tileSize) {
+                    if (debug) console.log(`[Collision] Out of bounds: ${x}, ${y}`);
+                    return true;
+                }
 
                 const tileX = Math.floor(x / map.tileSize);
                 const tileY = Math.floor(y / map.tileSize);
@@ -1016,13 +1097,10 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                 // Check Stack for Solids
                 for (const item of tile.items) {
                     if (PHYSICS.isSolid(item.id)) {
+                        if (debug) console.log(`[Collision] Solid Item: ${item.id} at ${tileX},${tileY}`);
                         return true;
                     }
                 }
-
-                // Check Entities (NPCs/Enemies) - existing logic might handle this or we add it later
-                // Existing logic checked map.data only.
-
                 return false;
             };
 
@@ -1051,13 +1129,20 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
             };
 
             // X Axis
-            if (!checkCollision(nextX + (vel.x > 0 ? 12 : 4), pos.y + 12) &&
-                !checkCollision(nextX + (vel.x > 0 ? 12 : 4), pos.y + 28)) {
+            const cx1 = nextX + (vel.x > 0 ? 12 : 4);
+            const cy1 = pos.y + 12;
+            const cx2 = nextX + (vel.x > 0 ? 12 : 4);
+            const cy2 = pos.y + 28;
+
+            if (!checkCollision(cx1, cy1) && !checkCollision(cx2, cy2)) {
                 // No collision
                 updateOccupancy(pos.x, pos.y, nextX, pos.y);
                 pos.x = nextX;
             } else {
                 // Collision!
+                console.log(`[MoveSystem] Blocked X! Pos: ${pos.x}, Target: ${nextX}`);
+                // Debug what blocked it
+                checkCollision(cx1, cy1, true); // Add verbose flag if possible, or just manually check here
                 vel.x = 0;
             }
 
@@ -1610,7 +1695,7 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
             const ty = Math.floor(tPos.y - camY);
             ctx.strokeStyle = '#ff0000';
             ctx.lineWidth = 1;
-            ctx.strokeRect(tx, ty, 32, 32); // Assume 32x32 for now, or use target's sprite size
+
         }
     }
 
@@ -1624,7 +1709,7 @@ export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
             const colY = Math.floor(pos.y + collider.offsetY - camY);
             ctx.strokeStyle = '#ff0000';
             ctx.lineWidth = 1;
-            ctx.strokeRect(colX, colY, collider.width, collider.height);
+
         }
     }
 
@@ -1694,7 +1779,7 @@ function drawOverlays(world: World, ctx: CanvasRenderingContext2D, id: number, c
         // Border
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barWidth, barHeight);
+
     }
 
     // Draw NPC Name Labels (for entities with Name and QuestGiver or Interactable)
@@ -1881,7 +1966,6 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                                 pMana.current -= damage;
                                 if ((ui as any).console) (ui as any).console.sendMessage(`Mana Shield absorbed ${damage} dmg.`);
                                 spawnFloatingText(world, pPos.x, pPos.y, `-${damage}`, '#0000ff');
-                                damage = 0; // Fully absorbed
                             } else {
                                 damage -= pMana.current;
                                 pMana.current = 0;
@@ -2240,8 +2324,8 @@ export function createIceEnemy(world: World, x: number, y: number, type: string 
         world.addComponent(e, new StatusOnHit('freeze', 0.6, 4, 50));
         // Drop Thunder Staff (Rare)
         world.addComponent(e, new Lootable([
-            new Item('Ice Shard', 'currency', 101, 0, 5, 'Cold to the touch', 'none', 'common', 0, 0, 0, undefined, undefined, undefined, undefined),
-            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, '#00ffff', 40, undefined, undefined)
+            new Item('Ice Shard', 'currency', 101, 0, 5, 'Cold to the touch', 'none', 'common', 0, 0, 0, false, 0, undefined, undefined),
+            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, false, 0, '#00ffff', 40)
         ]));
     } else if (type === "yeti") {
         // Boss-like enemy
@@ -2253,8 +2337,8 @@ export function createIceEnemy(world: World, x: number, y: number, type: string 
 
         // Boss Drops
         world.addComponent(e, new Lootable([
-            new Item('Frost Helm', 'head', SPRITES.FROST_HELM, 0, 800, 'Icy protection', 'none', 'epic', 8, 0, 0, '#ccffff', 30, undefined, undefined),
-            new Item('Ice Bow', 'rhand', SPRITES.ICE_BOW, 35, 700, 'Freezes enemies', 'bow', 'rare', 0, 0, 0, '#99ffff', 35, undefined, undefined)
+            new Item('Frost Helm', 'head', SPRITES.FROST_HELM, 0, 800, 'Icy protection', 'none', 'epic', 8, 0, 0, false, 0, '#ccffff', 30),
+            new Item('Ice Bow', 'rhand', SPRITES.ICE_BOW, 35, 700, 'Freezes enemies', 'bow', 'rare', 0, 0, 0, false, 0, '#99ffff', 35)
         ]));
     }
     return e;
@@ -2287,8 +2371,8 @@ export function createWaterEnemy(world: World, x: number, y: number, type: strin
 
         // Hydra Drops
         world.addComponent(e, new Lootable([
-            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, '#00ffff', 40, undefined, undefined),
-            new Item('Water Essence', 'currency', 100, 0, 50, 'Pure water energy', 'none', 'rare', 0, 0, 0, undefined, undefined, undefined, undefined)
+            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, false, 0, '#00ffff', 40),
+            new Item('Water Essence', 'currency', 100, 0, 50, 'Pure water energy', 'none', 'rare', 0, 0, 0, false, 0, undefined, undefined)
         ]));
     }
     return e;
@@ -2398,8 +2482,8 @@ export function createFireEnemy(world: World, x: number, y: number, type: string
 
         // Boss Drops
         world.addComponent(e, new Lootable([
-            new Item('Magma Armor', 'armor', SPRITES.MAGMA_ARMOR, 0, 800, 'Forged in fire', 'none', 'epic', 10, 0, 0, '#ff4400', 50, undefined, undefined),
-            new Item('Fire Sword', 'rhand', SPRITES.FIRE_SWORD, 30, 700, 'Burns on contact', 'sword', 'rare', 0, 0, 0, '#ffaa00', 40, undefined, undefined)
+            new Item('Magma Armor', 'armor', SPRITES.MAGMA_ARMOR, 0, 800, 'Forged in fire', 'none', 'epic', 10, 0, 0, false, 0, '#ff4400', 50),
+            new Item('Fire Sword', 'rhand', SPRITES.FIRE_SWORD, 30, 700, 'Burns on contact', 'sword', 'rare', 0, 0, 0, false, 0, '#ffaa00', 40)
         ]));
     }
     return e;
@@ -2454,8 +2538,7 @@ export function createItem(world: World, x: number, y: number, name: string, slo
     // Wait, uIndex is 3rd arg? 
     // Wait, line 1080: `new Item(name, slot, uIndex, damage, price)`
     // This looks quirky. Keep it as is.
-    world.addComponent(e, new Item(name, slot, uIndex, damage, price, description, weaponType, rarity, defense, bonusHp, bonusMana, glowColor, glowRadius));
-
+    world.addComponent(e, new Item(name, slot, uIndex, damage, price, description, weaponType, rarity as ItemRarity, defense, bonusHp, bonusMana, false, 0, glowColor, glowRadius));
     if (networkItem) {
         world.addComponent(e, networkItem);
     }
@@ -2494,7 +2577,7 @@ export function itemPickupSystem(world: World, ui: UIManager, audio: AudioContro
                 iPos.x = -1000;
                 if ((ui as any).console) (ui as any).console.sendMessage(`You picked up a ${item.name}.`);
                 audio.playCoin();
-                if (spriteSheet.complete) ui.updateInventory(inventory, spriteSheet.src);
+                if (spriteSheet.complete) ui.updateInventory(inventory);
             } else {
                 // If addItem fails, it means no space in main slots or storage
                 if ((ui as any).console) (ui as any).console.sendMessage(`No space for ${item.name}.`);
@@ -2587,7 +2670,7 @@ export function safeZoneRegenSystem(world: World, dt: number, ui: UIManager) {
     }
 }
 
-export function deathSystem(world: World, ui: UIManager, spawnX: number = 100, spawnY: number = 100) {
+export function deathSystem(world: World, ui: UIManager, spawnX: number = TEMPLE_POS.x, spawnY: number = TEMPLE_POS.y) {
     const healths = world.query([Health]);
     for (const id of healths) {
         const hp = world.getComponent(id, Health)!;
@@ -2595,7 +2678,7 @@ export function deathSystem(world: World, ui: UIManager, spawnX: number = 100, s
             // Player Death
             const isPlayer = world.getComponent(id, PlayerControllable);
             if (isPlayer) {
-                if ((ui as any).console) (ui as any).console.addSystemMessage("You have died! Respawning at village...");
+                if ((ui as any).console) (ui as any).console.addSystemMessage("You have died! Respawning at temple...");
                 hp.current = hp.max;
                 const pos = world.getComponent(id, Position);
                 if (pos) {
@@ -2607,14 +2690,17 @@ export function deathSystem(world: World, ui: UIManager, spawnX: number = 100, s
                 continue;
             }
 
-            // NPC/Enemy Death (Fallback)
+            // NPC/Enemy Death (Fallback if not handled by autoAttackSystem/projectileSystem)
             const name = world.getComponent(id, Name);
-            if (name) {
-                world.removeEntity(id);
+            // ... (rest managed elsewhere usually, but safety cleanup)
+            if (name && !world.getComponent(id, PlayerControllable)) {
+                // Should be handled by who killed it, but if environmental death?
+                // Let's leave it as fallback cleanup or ignore to avoid double loot
             }
         }
     }
 }
+
 
 export function castSpell(world: World, ui: UIManager, spellName: string, network?: NetworkManager) {
     const playerEntity = world.query([PlayerControllable, Health, Mana, Position, Facing])[0];
@@ -3389,17 +3475,16 @@ export function generateLoot(enemyType: string = "orc"): Item[] {
     for (const drop of dropTable) {
         if (Math.random() < drop.chance) {
             // Clone the item so each drop is a new instance
+            // Item Params: name, slotType, uIndex, damage, price, desc, type, rarity, def, hp, mana, isContainer, size, glow, radius
             const item = new Item(
-                drop.item.slot,
                 drop.item.name,
+                drop.item.slotType, // Fix property access
                 drop.item.uIndex,
                 drop.item.damage,
                 drop.item.price,
                 drop.item.description,
                 drop.item.weaponType,
                 drop.item.rarity,
-                drop.item.defense,
-                drop.item.bonusHp,
                 drop.item.bonusMana
             );
             items.push(item);
@@ -3585,6 +3670,8 @@ export function createCorpse(world: World, x: number, y: number, loot: Item[] = 
 }
 
 
+
+
 export function decaySystem(world: World, dt: number) {
     const entities = world.query([Decay]);
     for (const id of entities) {
@@ -3613,5 +3700,219 @@ export function uiControlSystem(world: World, input: InputHandler, ui: UIManager
         // Close Inspection
         const inspectPanel = document.getElementById('inspect-panel');
         if (inspectPanel) inspectPanel.classList.add('hidden');
+    }
+}
+
+// --- Item Movement Logic ---
+export function moveItem(world: World, source: any, target: any, ui: UIManager) {
+    const player = world.query([PlayerControllable, Position, Inventory])[0];
+    if (!player) return;
+
+    const pPos = world.getComponent(player, Position)!;
+    const inv = world.getComponent(player, Inventory)!;
+
+    // 1. Validation: Distance
+    // Source/Target could be { type: 'ground', x, y } or { type: 'slot', id }
+    let targetPos = { x: pPos.x, y: pPos.y }; // Default to player pos for inventory checks
+
+    if (source.type === 'ground') {
+        targetPos = { x: source.x * 32, y: source.y * 32 };
+    } else if (target.type === 'ground') {
+        // If dropping, we check distance to drop location
+        targetPos = { x: target.x * 32, y: target.y * 32 };
+    }
+
+    const dist = Math.sqrt(Math.pow(targetPos.x - pPos.x, 2) + Math.pow(targetPos.y - pPos.y, 2));
+    if (dist > 80) { // < 2.5 tiles approx
+        if ((ui as any).console) (ui as any).console.addSystemMessage("Too far away.");
+        return;
+    }
+
+    // 2. Resolve Item from Source
+    let item: any = null;
+    let sourceContainer: any = null; // Tile or Inventory
+
+    // Access Map via Global Game for now (Simpler than threading generic map everywhere)
+    const game = (window as any).game;
+    if (!game) return;
+    const map = game.map;
+
+    if (source.type === 'ground') {
+        const tile = map.getTile(source.x, source.y);
+        if (tile && tile.items.length > 0) {
+            // Pick top item
+            item = tile.items[tile.items.length - 1];
+            if (item.id === 0) return; // Cannot move player
+            sourceContainer = tile.items; // Array ref
+        }
+    } else if (source.type === 'slot') {
+        // Extract slot name from "slot-head" -> "head"
+        const slotName = source.id.replace('slot-', '');
+        const equipped = inv.getEquipped(slotName);
+        if (equipped) {
+            item = equipped.item;
+            // sourceContainer handled by inventory methods
+        }
+    }
+
+    if (!item) return;
+
+    // 3. Execute Move
+    // Remove from Source
+    if (source.type === 'ground') {
+        // Remove from tile
+        sourceContainer.pop();
+    } else if (source.type === 'slot') {
+        inv.unequip(source.id.replace('slot-', ''));
+    }
+
+    // Add to Target
+    if (target.type === 'ground') {
+        const tile = map.getTile(target.x, target.y);
+        if (tile) {
+            if (typeof item.id === 'number') {
+                // If it's a raw TileItem-like object (from map)
+                tile.items.push({ id: item.id, count: 1 });
+            } else {
+                // It's an Item Class Object?
+                // The 'item' from inventory is 'Item', from Tile it's 'TileItem {id, count}'
+                // We need to normalize.
+                // If item has .id, use it. If item is Item class, retrieve ID from somewhere?
+                // AssetManager usually maps IDs. Item class has uIndex.
+                const id = item.uIndex !== undefined ? item.uIndex : item.id;
+                tile.items.push({ id: id, count: 1 });
+            }
+        }
+    } else if (target.type === 'slot') {
+        const slotName = target.id.replace('slot-', '');
+
+        // Hydrate Item if needed
+        let properItem = item;
+        // If it looks like a tile-item (raw ID or simplified)
+        if (!item.name) {
+            // We need to find the Item Definition by ID.
+            // HACK: Create generic item.
+            properItem = {
+                id: item.id,
+                uIndex: item.id,
+                name: "Item " + item.id,
+                type: "misc",
+                damage: 0,
+                defense: 0,
+                value: 0,
+                spriteId: item.id,
+                slotType: 'any'
+            };
+        }
+
+        // Wrap in ItemInstance if not already
+        if (properItem.item) {
+            inv.equip(slotName, properItem);
+        } else {
+            inv.equip(slotName, { item: properItem, count: 1, contents: [] });
+        }
+    }
+
+    // 4. Update UI
+    calculatePlayerStats(world, player);
+    ui.update(player);
+}
+
+export function calculatePlayerStats(world: World, playerEntity: Entity) {
+    const inv = world.getComponent(playerEntity, Inventory);
+    if (!inv) return;
+
+    let attack = 0;
+    let defense = 0;
+
+    // Slots to check
+    const slots = ['head', 'body', 'legs', 'boots', 'lhand', 'rhand', 'amulet', 'ring'];
+
+    for (const slot of slots) {
+        const equipped = inv.getEquipped(slot);
+        if (equipped && equipped.item) {
+            // Check Registry by ID
+            // Inventory items might be complex objects or just ids.
+            // Our system uses ItemInstance { item: { id: number ... } }
+            // Let's assume equipped.item.id matches ItemRegistry keys.
+            const def = ItemRegistry[equipped.item.uIndex];
+            if (def) {
+                if (def.attack) attack += def.attack;
+                if (def.defense) defense += def.defense;
+            }
+        }
+    }
+
+    // Update Visual Player
+    const game = (window as any).game;
+    if (game && game.player) {
+        game.player.attack = attack;
+        game.player.defense = defense;
+        // console.log("Stats Updated:", attack, defense);
+    }
+}
+
+function createItemFromRegistry(id: number): Item {
+    const def = ItemRegistry[id];
+    if (!def) return new Item("Unknown", "misc", id);
+
+    // Map 'type' to 'weaponType' or 'slot'
+    const item = new Item(
+        def.name,
+        def.slot || 'backpack',
+        id, // uIndex
+        def.attack || 0,
+        10, // price
+        "", // desc
+        def.type === 'weapon' ? 'sword' : 'none',
+        'common',
+        def.defense || 0
+    );
+
+    if (def.heal) item.bonusHp = def.heal;
+
+    // ... existing code ...
+
+    return item;
+}
+
+export function spawnItemAt(world: World, x: number, y: number, id: number) {
+    const itemComp = createItemFromRegistry(id);
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    // Use ID as sprite index for now (assuming icons share IDs or using a default)
+    // Or use a generic LOOT BAG sprite if ID > 100?
+    // For now, let's assume sprite ID matches Item ID or use a placeholder.
+    world.addComponent(e, new Sprite(id, 24));
+    world.addComponent(e, itemComp);
+    world.addComponent(e, new Interactable(`Pick up ${itemComp.name}`));
+    return e;
+}
+
+export function spawnDebugSet(world: World, ui?: UIManager) {
+    const playerEntity = world.query([PlayerControllable, Position])[0];
+    if (playerEntity === undefined) return;
+    const pos = world.getComponent(playerEntity, Position)!;
+
+    // 1. Convert Pixel Coordinates -> Grid Coordinates
+    const tileX = Math.floor(pos.x / 32);
+    const tileY = Math.floor(pos.y / 32);
+
+    // console.log(`[Debug] Spawning items at Tile: ${tileX}, ${tileY}`);
+
+    // 2. Spawn Items at the calculated GRID coordinates (Converted back to Pixels)
+    const TILE_SIZE = 32;
+
+    // Short Sword (ID 1) at Player's Tile
+    spawnItemAt(world, tileX * TILE_SIZE, tileY * TILE_SIZE, 1);
+
+    // Plate Armor (ID 2) at Right Tile
+    spawnItemAt(world, (tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, 2);
+
+    // Wooden Shield (ID 5) at Bottom Tile
+    spawnItemAt(world, tileX * TILE_SIZE, (tileY + 1) * TILE_SIZE, 5);
+
+    if (ui && (ui as any).console) {
+        (ui as any).console.addSystemMessage("Debug items spawned at your feet.");
     }
 }

@@ -6,11 +6,16 @@ export class UIManager {
     private text: HTMLElement;
     public console?: ConsoleManager; // Reference to console for cross-talk
 
+    // Cached DOM Elements
     private hpVal: HTMLElement;
+    private hpBar: HTMLElement;
     private manaVal: HTMLElement;
+    private manaBar: HTMLElement;
     private capVal: HTMLElement;
     private levelVal: HTMLElement;
     private xpVal: HTMLElement;
+    private goldVal: HTMLElement;
+
     public bagPanel: HTMLElement;
     private bagGrid: HTMLElement;
 
@@ -50,10 +55,13 @@ export class UIManager {
 
         // 1. Static Bindings (now exist in HTML)
         this.hpVal = document.getElementById('hp-val')!;
+        this.hpBar = document.querySelector('.health-bar') as HTMLElement;
         this.manaVal = document.getElementById('mana-val')!;
+        this.manaBar = document.querySelector('.mana-bar') as HTMLElement;
         this.capVal = document.getElementById('cap-val')!;
         this.levelVal = document.getElementById('lvl-val')!;
         this.xpVal = document.getElementById('xp-val')!;
+        this.goldVal = document.getElementById('gold-val')!;
 
         // 2. Panel Bindings
         this.bagPanel = document.getElementById('backpack-panel')!;
@@ -105,6 +113,117 @@ export class UIManager {
             }
         });
     }
+
+
+    // --- MAIN UI UPDATE ---
+    update(player: any) {
+        if (!player) return;
+
+        // 1. Health Bar
+        const hpPct = Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100));
+        if (this.hpBar) this.hpBar.style.width = `${hpPct}%`;
+        if (this.hpVal) this.hpVal.innerText = `${Math.floor(player.hp)}/${player.maxHp}`;
+
+        // 2. Mana Bar
+        const manaPct = Math.max(0, Math.min(100, (player.mana / player.maxMana) * 100));
+        if (this.manaBar) this.manaBar.style.width = `${manaPct}%`;
+        if (this.manaVal) this.manaVal.innerText = `${Math.floor(player.mana)}/${player.maxMana}`;
+
+        // 3. Stats
+        if (this.capVal && player.capacity !== undefined) this.capVal.innerText = player.capacity.toString();
+        if (this.levelVal && player.level !== undefined) this.levelVal.innerText = player.level.toString();
+        if (this.xpVal && player.xp !== undefined && player.nextXp !== undefined) this.xpVal.innerText = `${player.xp}/${player.nextXp}`;
+        if (this.goldVal && player.gold !== undefined) this.goldVal.innerText = `${player.gold} GP`;
+
+        // 4. Combat Stats (New)
+        // Need elements in HTML? If not, log or create dynamic?
+        // Let's assume user wants them visible. I'll modify createText or just log for now?
+        // User said: "Update this.ui.updateStats... to display... in the sidebar"
+        // I'll prepend/append to stats panel if exists.
+
+        const atkEl = document.getElementById('stat-atk');
+        if (atkEl) atkEl.innerText = `Atk: ${player.attack || 0}`;
+
+        const defEl = document.getElementById('stat-def');
+        if (defEl) defEl.innerText = `Def: ${player.defense || 0}`;
+    }
+
+    renderMinimap(map: any, player: any) {
+        const canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Clear
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Settings
+        const scale = 4; // Pixels per tile
+        const rangeX = Math.floor(canvas.width / scale / 2);
+        const rangeY = Math.floor(canvas.height / scale / 2);
+
+        // Draw Walls
+        ctx.fillStyle = '#555'; // Wall color
+
+        for (let dy = -rangeY; dy <= rangeY; dy++) {
+            for (let dx = -rangeX; dx <= rangeX; dx++) {
+                const tx = Math.floor(player.x + dx);
+                const ty = Math.floor(player.y + dy);
+
+                // Bounds Check
+                if (tx >= 0 && tx < map.width && ty >= 0 && ty < map.height) {
+                    // Check logic: Map structure
+                    // map.tiles[y][x] or similar.
+                    // Assuming 'map' object passed has getTile or tiles array.
+                    // The 'map' object in main.ts is WorldMap instance from core/map.ts
+                    // It has .getTile(x, y).items
+
+                    const tile = map.getTile(tx, ty);
+                    if (tile) {
+                        // Simple Check: Is Wall? (ID 17 or similar)
+                        // Or iterate items.
+                        let isWall = false;
+                        for (const item of tile.items) {
+                            // Assuming 17 is wall based on logic in player.ts
+                            if (item.id === 17 || item.id === 20 || item.id === 21) {
+                                isWall = true; break;
+                            }
+                        }
+
+                        if (isWall) {
+                            const screenX = (dx + rangeX) * scale;
+                            const screenY = (dy + rangeY) * scale;
+                            ctx.fillRect(screenX, screenY, scale, scale);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Draw Player
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(rangeX * scale, rangeY * scale, scale, scale);
+    }
+
+    log(message: string) {
+        const log = document.getElementById('console-log');
+        if (!log) return;
+
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+
+        // Timestamp
+        const now = new Date();
+        const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+        entry.innerHTML = `<span style="color:#aaa;">${time}</span> ${message}`;
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+    }
+
+
+    // ... (rest of class)
 
     private cleanupLegacyUI() {
         // Remove old dynamic elements if they persist
@@ -436,6 +555,8 @@ export class UIManager {
                 <div class="status-row"><span>Dist:</span> <span class="val">${skills.distance.level} (${skills.distance.xp}%)</span></div>
                 <div class="status-row"><span>Shield:</span> <span class="val">${skills.shielding.level} (${skills.shielding.xp}%)</span></div>
                 <div class="status-row"><span>Magic:</span> <span class="val">${skills.magic.level}</span></div>
+                <div class="status-row" style="margin-top:8px; border-top:1px solid #444; padding-top:4px; color:#f88;"><span id="stat-atk">Atk: 0</span></div>
+                <div class="status-row" style="color:#88f;"><span id="stat-def">Def: 0</span></div>
             `;
         }
     }
@@ -542,14 +663,18 @@ export class UIManager {
             const el = document.querySelector(`.slot.${slot}`) as HTMLElement;
             if (el) {
                 el.innerHTML = ''; // Clear
+                // Setup drop zone for equipment slots
+                this.setupDragDrop(el, slot, 'equipment', inv);
+
                 if (item) {
                     // Render Item in Slot
-                    const img = this.createItemIcon(item);
+                    const img = this.createItemIcon(item, { type: 'equipment', index: slot });
                     el.appendChild(img);
                 } else if (slot === 'backpack') {
-                    // Default empty backpack placeholder if needed
+                    // Default empty backpack placeholder
                     const ph = document.createElement('div');
                     ph.style.fontSize = '9px'; ph.style.color = '#444'; ph.innerText = 'BAG';
+                    ph.style.pointerEvents = 'none'; // Ensure click-thru
                     el.appendChild(ph);
                 }
             }
@@ -569,7 +694,6 @@ export class UIManager {
 
         if (bagItem && bagItem.contents) {
             items = bagItem.contents;
-            // Use item.item.containerSize if available, else 20
             if (bagItem.item.containerSize) size = bagItem.item.containerSize;
         }
 
@@ -582,11 +706,11 @@ export class UIManager {
             slotEl.dataset.index = i.toString();
 
             // Drag Drop Events
-            this.setupDragDrop(slotEl, i, 'backpack');
+            this.setupDragDrop(slotEl, i, 'backpack', inv);
 
             if (items[i]) {
                 const itemInst = items[i];
-                const icon = this.createItemIcon(itemInst);
+                const icon = this.createItemIcon(itemInst, { type: 'backpack', index: i });
                 slotEl.appendChild(icon);
             }
 
@@ -594,12 +718,12 @@ export class UIManager {
         }
     }
 
-    createItemIcon(itemInst: any): HTMLElement {
+    createItemIcon(itemInst: any, source: { type: string, index: number | string }): HTMLElement {
         // Use background image sprite
         const el = document.createElement('div');
         el.style.width = '32px';
         el.style.height = '32px';
-        el.style.backgroundImage = `url('/sprites/world_tiles.png')`; // Sheet
+        el.style.backgroundImage = `url('/assets/items.png')`; // Sheet
 
         // Calculate Sprite Offset
         const uIndex = itemInst.item.uIndex;
@@ -614,6 +738,15 @@ export class UIManager {
         el.style.imageRendering = 'pixelated';
         el.draggable = true;
         el.title = itemInst.item.name;
+
+        // Drag Start
+        el.addEventListener('dragstart', (e) => {
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', JSON.stringify(source));
+                // Add a ghost image or styling here if desired
+            }
+        });
 
         // Count
         if (itemInst.count > 1) {
@@ -631,20 +764,129 @@ export class UIManager {
         return el;
     }
 
-    setupDragDrop(slotEl: HTMLElement, index: number, containerType: string) {
+    setupDragDrop(slotEl: HTMLElement, index: number | string, containerType: string, inv: Inventory) {
         slotEl.addEventListener('dragover', (e) => {
             e.preventDefault(); // Allow drop
-            slotEl.style.borderColor = '#aaa';
+            slotEl.style.borderColor = '#ffd700'; // Gold highlight
         });
         slotEl.addEventListener('dragleave', () => {
             slotEl.style.borderColor = ''; // Reset
         });
         slotEl.addEventListener('drop', (e) => {
             e.preventDefault();
-            // Interaction System should handle this
-            console.log(`Dropped item on ${containerType} slot ${index}`);
-            // Emit event or call global handler
+            slotEl.style.borderColor = '';
+
+            const data = e.dataTransfer?.getData('text/plain');
+            if (!data) return;
+
+            try {
+                const source = JSON.parse(data);
+                console.log(`Dropped item from ${source.type}:${source.index} to ${containerType}:${index}`);
+
+                // Logic: Move Item
+                this.handleMoveItem(inv, source, { type: containerType, index: index });
+
+            } catch (err) {
+                console.error("Drop Error:", err);
+            }
         });
+    }
+
+    handleMoveItem(inv: Inventory, src: { type: string, index: string | number }, dest: { type: string, index: string | number }) {
+        // 1. Identify Source Item
+        let srcItem: any = null;
+        let srcContainer: any[] | null = null;
+        let srcBag = inv.getEquipped('backpack');
+
+        if (src.type === 'equipment') {
+            srcItem = inv.getEquipped(src.index as string);
+        } else if (src.type === 'backpack') {
+            if (srcBag && srcBag.contents) {
+                srcContainer = srcBag.contents;
+                srcItem = srcContainer[src.index as number];
+            }
+        }
+
+        if (!srcItem) return; // Nothing to move
+
+        // 2. Identify Destination
+        // If same location, abort
+        if (src.type === dest.type && src.index === dest.index) return;
+
+        // 3. Execution (Swap or Move)
+        if (dest.type === 'equipment') {
+            const slot = dest.index as string;
+            // Check compatibility (simple check: match slotType)
+            if (srcItem.item.slotType !== slot && srcItem.item.slotType !== 'any') {
+                // Exceptions? Hand? 
+                // For now strict check
+                if (this.console) this.console.addSystemMessage(`Cannot equip ${srcItem.item.name} in ${slot}.`);
+                return;
+            }
+
+            // Swap
+            const destItem = inv.getEquipped(slot);
+
+            // Remove from source
+            if (src.type === 'backpack' && srcContainer) {
+                srcContainer[src.index as number] = destItem; // Put equipped item in bag (or null)
+                // If destItem was null, we just cleared the bag slot, which is correct
+            } else if (src.type === 'equipment') {
+                // Swapping equipment slots? Rare but possible (Ring 1 to Ring 2)
+                inv.equipment.set(src.index as string, destItem!); // Might need logic to clear if null
+                if (!destItem) inv.equipment.delete(src.index as string);
+            }
+
+            // Equip new item
+            inv.equip(slot, srcItem);
+
+            // Re-render
+            this.updateInventory(inv);
+
+        } else if (dest.type === 'backpack') {
+            const destIndex = dest.index as number;
+
+            if (srcBag && srcBag.contents) { // Ensure bag exists
+                const destContainer = srcBag.contents;
+                const destItem = destContainer[destIndex];
+
+                // Remove from source
+                if (src.type === 'equipment') {
+                    inv.equipment.delete(src.index as string);
+                } else if (srcContainer) {
+                    srcContainer[src.index as number] = null; // Temporarily clear
+                }
+
+                // Place in Dest (Swap)
+                if (srcContainer && src.type === 'backpack') {
+                    // Classic Grid Swap
+                    const temp = destContainer[destIndex];
+                    destContainer[destIndex] = srcItem;
+                    srcContainer[src.index as number] = temp;
+                } else {
+                    // Equipment to Bag
+                    if (destItem) {
+                        // Swap? If equipment slot accepts destItem
+                        // For simplicity: If bag slot occupied and coming from equipment, fail or swap if compatible?
+                        // Let's TRY swap if compatible, else fail
+                        if (destItem.item.slotType === src.index) {
+                            inv.equip(src.index as string, destItem);
+                            destContainer[destIndex] = srcItem;
+                        } else {
+                            // Bag slot full, cannot unequip
+                            if (this.console) this.console.addSystemMessage("Bag slot occupied.");
+                            // Revert remove?
+                            if (src.type === 'equipment') inv.equip(src.index as string, srcItem);
+                            return;
+                        }
+                    } else {
+                        destContainer[destIndex] = srcItem;
+                    }
+                }
+
+                this.updateInventory(inv);
+            }
+        }
     }
 
     // Legacy Support cleanup

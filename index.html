@@ -4,89 +4,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tibia-Style Engine</title>
-    <link rel="stylesheet" href="/src/style.css">
+    <title>RPG Engine</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-
     <div id="main-layout">
-        <!-- GAME WINDOW -->
-        <div id="game-container">
-            <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="game-column">
+            <div id="viewport">
+                <canvas id="gameCanvas"></canvas>
+            </div>
 
-            <!-- Absolute Overlays (like Magic HUD) go here -->
-            <div id="overlays"></div>
+            <div id="chat-console">
+                <div id="chat-log">
+                    <div class="msg-system">12:00: Welcome to the server.</div>
+                    <div class="msg-info">Use WASD or Arrows to move.</div>
+                </div>
+                <input id="chat-input" type="text" placeholder="Type to chat..." autocomplete="off">
+            </div>
         </div>
 
-        <!-- SIDEBAR -->
         <div id="sidebar">
-            <!-- Minimap -->
-            <div class="panel" id="minimap-panel" style="height: 120px; background: #000; position: relative;">
-                <div style="color: #666; font-size: 10px; text-align: center; margin-top: 50px;">Minimap Placeholder
-                </div>
-                <!-- Compass / Controls -->
-                <div style="position: absolute; right: 2px; bottom: 2px; font-size: 10px; color: #fff;">
-                    z: 7
-                </div>
+            <div id="minimap-container">
+                <span>Minimap</span>
             </div>
 
-            <div class="panel" id="status-panel">
-                <div class="panel-header">Status</div>
-                <div class="status-row"><span>Health:</span> <span class="val" id="hp-val">150/150</span></div>
-                <div class="status-row"><span>Mana:</span> <span class="val" id="mana-val">20/20</span></div>
-                <div class="status-row"><span>Cap:</span> <span class="val" id="cap-val">450</span></div>
-                <div class="status-row"><span>Level:</span> <span class="val" id="lvl-val">1</span></div>
-                <div class="status-row"><span>XP:</span> <span class="val" id="xp-val">0/100</span></div>
-                <div class="status-row"><span>Gold:</span> <span class="val" id="gold-val" style="color:#ffd700">0
-                        GP</span></div>
+            <div id="inventory-container">
+                <div class="slot head" title="Head"></div>
+                <div class="slot chest" title="Body"></div>
+                <div class="slot legs" title="Legs"></div>
+                <div class="slot feet" title="Feet"></div>
+                <div class="slot rhand" title="Right Hand"></div>
+                <div class="slot lhand" title="Left Hand"></div>
             </div>
 
-            <div class="panel" id="inventory-panel">
-                <div class="panel-header">Inventory</div>
-                <div id="inventory-slots">
-                    <!-- Tibia Layout: Amulet | Head | Backpack -->
-                    <div class="slot amulet" title="Amulet" style="grid-area: amulet;"></div>
-                    <div class="slot head" title="Head" style="grid-area: head;"></div>
-                    <div class="slot backpack" title="Backpack" style="grid-area: backpack; background-color: #432;">
-                        <!-- Backpack Graphic/Content -->
-                    </div>
-
-                    <div class="slot lhand" title="Left Hand" style="grid-area: lhand;"></div>
-                    <div class="slot body" title="Body" style="grid-area: body;"></div>
-                    <div class="slot rhand" title="Right Hand" style="grid-area: rhand;"></div>
-
-                    <div class="slot ring" title="Ring" style="grid-area: ring;"></div>
-                    <div class="slot legs" title="Legs" style="grid-area: legs;"></div>
-                    <div class="slot ammo" title="Ammo" style="grid-area: ammo;"></div>
-
-                    <div class="slot boots" title="Boots" style="grid-area: boots;"></div>
-                </div>
+            <div id="controls">
+                <button id="btn-stop">Stop</button>
+                <button id="btn-logout">Logout</button>
             </div>
 
-            <!-- Backpack / Container Panel (Initially Visible) -->
-            <div class="panel" id="backpack-panel">
-                <div class="panel-header">Backpack</div>
-                <div id="backpack-grid" class="inventory-grid">
-                    <!-- Dynamics slots -->
-                </div>
-            </div>
-        </div>
-
-        <!-- CONSOLE -->
-        <div id="console-container">
-            <div id="console-log">
-                <div class="text-system">16:00 Welcome to the server.</div>
-            </div>
-            <div id="console-input-wrapper">
-                <div id="chat-label">Say:</div>
-                <input type="text" id="console-input" maxlength="255" autocomplete="off">
+            <div id="battle-list">
+                <div class="battle-entry">Rat</div>
+                <div class="battle-entry">Wolf</div>
             </div>
         </div>
     </div>
 
-    <!-- Hidden dynamic panels (Shop, Loot, Skills) will be appended here or toggled -->
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="./src/main.ts"></script>
 </body>
 
 </html>

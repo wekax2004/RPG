@@ -9,6 +9,7 @@ export class InputHandler {
         window.addEventListener('keydown', (e) => {
             if (!this.keys.has(e.code)) {
                 this.justPressedMap.add(e.code);
+                console.log(`[Input] KeyDown: ${e.code}`); // Debug
             }
             this.keys.add(e.code);
         });
@@ -16,6 +17,7 @@ export class InputHandler {
         // 2. Key Up
         window.addEventListener('keyup', (e) => {
             this.keys.delete(e.code);
+            console.log(`[Input] KeyUp: ${e.code}. Remaining: ${Array.from(this.keys)}`); // Debug
         });
 
         // 3. Blur (Clear all)
@@ -26,19 +28,23 @@ export class InputHandler {
 
         // Mouse Support
         window.addEventListener('mousemove', (e) => {
-            const canvas = document.querySelector('canvas');
-            if (canvas) {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                this.mouse.x = (e.clientX - rect.left) * scaleX;
-                this.mouse.y = (e.clientY - rect.top) * scaleY;
-            }
+            const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+            if (!canvas) return;
+
+            const rect = canvas.getBoundingClientRect();
+
+            // This math handles CSS scaling and Sidebar offsets automatically
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            // 3. APPLY OFFSET (Subtract Canvas Position + Border)
+            // We use 'clientLeft' to account for any CSS borders on the canvas
+            this.mouse.x = (e.clientX - rect.left - canvas.clientLeft) * scaleX;
+            this.mouse.y = (e.clientY - rect.top - canvas.clientTop) * scaleY;
         });
 
         window.addEventListener('mousedown', (e) => {
             this.mouseKeys.add(e.button);
-            // Map MouseLeft to key-like behavior if needed for existing code
             if (e.button === 0) {
                 if (!this.keys.has('MouseLeft')) this.justPressedMap.add('MouseLeft');
                 this.keys.add('MouseLeft');
@@ -78,6 +84,18 @@ export class InputHandler {
     private shouldIgnoreInput(): boolean {
         const tag = document.activeElement?.tagName;
         return tag === 'INPUT' || tag === 'TEXTAREA';
+    }
+
+    getMouseWorldCoordinates(camera: { x: number, y: number }): { x: number, y: number } {
+        // Add Camera Offset
+        const worldX = this.mouse.x + camera.x;
+        const worldY = this.mouse.y + camera.y;
+
+        // Convert to Grid (Divide by 32 and Floor)
+        return {
+            x: Math.floor(worldX / 32),
+            y: Math.floor(worldY / 32)
+        };
     }
 }
 

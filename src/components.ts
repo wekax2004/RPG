@@ -9,13 +9,18 @@ export class Velocity {
 }
 
 export class Sprite {
-    // uIndex: Sprite ID
+    // uIndex: Sprite ID (can include directional/anim offset)
     // frame: Animation frame (0-2)
     constructor(
         public uIndex: number,
         public size: number = 16,
         public flipX: boolean = false,
-        public frame: number = 0
+        public frame: number = 0,
+        // Phase 3: Animation State
+        public direction: 0 | 1 | 2 | 3 = 0,
+        public animState: 'idle' | 'walk' | 'attack' = 'idle',
+        public animTimer: number = 0,
+        public frameDuration: number = 0.15 // 150ms per frame
     ) { }
 }
 
@@ -127,7 +132,9 @@ export class Item {
         public name: string,
         // slotType: Where it fits (head, body, etc)
         public slotType: string,
-        public uIndex: number,
+        public uIndex: number = 0,
+        public frame: number = 0,
+        public direction: 0 | 1 | 2 | 3 = 0, // 0=Down, 1=Up, 2=Left, 3=Right
         public damage: number = 0,
         public price: number = 10,
         public description: string = "",
@@ -208,6 +215,10 @@ export class Inventory {
 
     equip(slot: string, item: ItemInstance) {
         this.equipment.set(slot, item);
+    }
+
+    unequip(slot: string) {
+        this.equipment.delete(slot);
     }
 
     // --- Legacy / Convenience Helpers ---
@@ -425,7 +436,7 @@ export const VOCATIONS: Record<string, { name: string, hpGain: number, manaGain:
 };
 
 export class Target {
-    constructor(public targetId: number) { }
+    constructor(public targetId: number | null) { }
 }
 
 export class Teleporter {
@@ -551,4 +562,19 @@ export class Collider {
         public offsetX: number = 0,  // Offset from Position.x
         public offsetY: number = 0   // Offset from Position.y
     ) { }
+}
+
+// Combat Stats
+export class Stats {
+    constructor(
+        public attack: number = 10,
+        public defense: number = 0,
+        public attackSpeed: number = 1.0 // Attacks per second
+    ) { }
+}
+
+// Runtime Combat State
+export class CombatState {
+    public lastAttackTime: number = 0;
+    constructor() { }
 }

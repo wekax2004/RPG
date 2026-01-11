@@ -158,12 +158,14 @@ export class AssetManager {
         await this.loadImage('knight_sheet', '/sprites/final_knight.png?v=7', false); // Transparency baked in
         await this.loadImage('world_tiles', '/sprites/final_tiles.png?v=7', false);   // Transparency baked in, preserves Marble Floor
         await this.loadImage('monsters', '/sprites/monsters.png?v=2', true);
+        await this.loadImage('orc_new', '/sprites/orc_new.png?v=1', true); // New generated sprite
         await this.loadImage('grass_tile', '/sprites/grass_tile.png?v=2', true);
 
         // 2. Configure Sheets (32x32 Grid, 32px Stride)
         const sheet32 = { tileSize: 32, stride: 32, offsetX: 0, offsetY: 0 };
         this.sheetConfigs.set('knight_sheet', sheet32);
         this.sheetConfigs.set('monsters', sheet32);
+        this.sheetConfigs.set('orc_new', sheet32);
         this.sheetConfigs.set('grass_tile', sheet32);
 
         // 2. Tiles (32x32 per tile on sheet, map 16=MainGrass)
@@ -241,7 +243,7 @@ export class AssetManager {
                     // Add a border so we know it's a fallback
                     ctx.strokeStyle = '#fff';
                     ctx.lineWidth = 2;
-                    ctx.strokeRect(0, 0, 32, 32);
+                    // ctx.strokeRect(0, 0, 32, 32); // Removed
                 }
                 const pImg = new Image();
                 pImg.src = placeholder.toDataURL();
@@ -267,16 +269,19 @@ export class AssetManager {
         this.spriteCache.clear();
 
         // 1. KNIGHT (Standard 32x32 Grid)
-        // Row 0: Down, Row 1: Up, Row 2: Right, Row 3: Left
-        // Add Padding 2 to remove "black box" artifacts
+        // Correcting based on "Spinning" issue: Sheet is likely 1 Row with 4 Directions (Down, Up, Right, Left)
+        // Row 0, Col 0: Down
+        // Row 0, Col 1: Up
+        // Row 0, Col 2: Right
+        // Row 0, Col 3: Left
         this.mapSprite(SPRITES.PLAYER_DOWN, 'knight_sheet', 0, 0, 1, 1, 2);
-        this.mapSprite(SPRITES.PLAYER_UP, 'knight_sheet', 0, 1, 1, 1, 2);
-        this.mapSprite(SPRITES.PLAYER_RIGHT, 'knight_sheet', 0, 2, 1, 1, 2);
-        this.mapSprite(SPRITES.PLAYER_LEFT, 'knight_sheet', 0, 3, 1, 1, 2);
+        this.mapSprite(SPRITES.PLAYER_UP, 'knight_sheet', 1, 0, 1, 1, 2);
+        this.mapSprite(SPRITES.PLAYER_RIGHT, 'knight_sheet', 2, 0, 1, 1, 2);
+        this.mapSprite(SPRITES.PLAYER_LEFT, 'knight_sheet', 3, 0, 1, 1, 2);
 
-        // Direct IDs mapping
+        // Direct IDs mapping (Legacy/Safety)
         this.mapSprite(0, 'knight_sheet', 0, 0, 1, 1, 2);
-        this.mapSprite(1, 'knight_sheet', 0, 1, 1, 1, 2);
+        this.mapSprite(1, 'knight_sheet', 1, 0, 1, 1, 2);
 
         // ... (Other mappings)
 
@@ -345,6 +350,26 @@ export class AssetManager {
         this.mapSprite(202, 'world_tiles', 2, 1);
 
         // ... (Other mappings)
+
+        // 4. MONSTERS (monsters.png)
+        // Assuming 32x32 grid.
+        // Row 0: Skeleton (0), Orc (1), Ghost (2), Slime (3)
+        // Row 1: Wolf (0), Spider (1), ...
+
+        // Skeleton (8)
+        this.mapSprite(SPRITES.SKELETON, 'monsters', 0, 0);
+
+        // Orc (9) - NEW 2.5D SPRITE
+        this.mapSprite(SPRITES.ORC, 'orc_new', 0, 0);
+
+        // Ghost (10)
+        this.mapSprite(SPRITES.GHOST, 'monsters', 2, 0);
+
+        // Slime (11)
+        this.mapSprite(SPRITES.SLIME, 'monsters', 3, 0);
+
+        // Wolf (12) -> Row 1, Col 0 ? (Guessing layout)
+        this.mapSprite(SPRITES.WOLF, 'monsters', 0, 1);
 
         // --- FALLBACKS ---
         this.mapSprite(SPRITES.WATER, 'grass', 0, 0); // Fallback water to grass

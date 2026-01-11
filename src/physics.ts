@@ -11,7 +11,8 @@ export const PHYSICS = {
         100, // Generic Block
         200, // Water
         202, // Deep Water
-        20,  // Altar
+        20,  // Altar (Old?)
+        21,  // Altar (MapGen)
         50,  // Chest
         // New Forest Props
         5, // Oak Tree

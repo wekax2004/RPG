@@ -9,10 +9,34 @@ export class Player {
     queuedDx: number = 0;
     queuedDy: number = 0;
 
+    // ECS Link
+    id: number = 0;
+
     // Visual State
     spriteId: number = 0; // Default: 0 (SPRITES.PLAYER)
     flipX: boolean = false;
     frame: number = 0; // Animation Frame (0-2)
+    direction: 0 | 1 | 2 | 3 = 0;
+
+    // Targeting
+    targetId: number | null = null;
+
+    // Stats (Synced from ECS for Logic/UI)
+    hp: number = 100;
+    maxHp: number = 100;
+    mana: number = 50;
+    maxMana: number = 50;
+    capacity: number = 400;
+    level: number = 1;
+    xp: number = 0;
+    nextXp: number = 100;
+    gold: number = 0;
+    attack: number = 0;
+    defense: number = 0;
+
+    get isMoving(): boolean {
+        return this.queuedDx !== 0 || this.queuedDy !== 0;
+    }
 
     constructor(startX: number, startY: number) {
         this.x = startX;
