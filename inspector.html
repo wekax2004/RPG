@@ -4,186 +4,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sprite Sheet Inspector</title>
+    <title>Sprite Inspector</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #1e1e1e;
-            color: #d4d4d4;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-            margin: 0;
+            background: #1a1a1a;
+            color: #eee;
+            font-family: monospace;
         }
 
-        h1 {
-            margin-bottom: 20px;
+        .sheet {
+            margin-bottom: 50px;
+            border: 1px solid #444;
+            padding: 10px;
         }
 
-        .controls {
-            background-color: #252526;
-            padding: 20px;
-            border-radius: 8px;
-            display: flex;
-            gap: 20px;
-            align-items: flex-end;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        label {
-            font-size: 14px;
-            color: #9cdcfe;
-        }
-
-        input[type="number"],
-        input[type="file"] {
-            background-color: #3c3c3c;
-            border: 1px solid #3c3c3c;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-        }
-
-        input[type="number"] {
-            width: 80px;
-        }
-
-        .canvas-container {
-            border: 2px solid #3c3c3c;
-            background-image: linear-gradient(45deg, #2d2d2d 25%, transparent 25%),
-                linear-gradient(-45deg, #2d2d2d 25%, transparent 25%),
-                linear-gradient(45deg, transparent 75%, #2d2d2d 75%),
-                linear-gradient(-45deg, transparent 75%, #2d2d2d 75%);
-            background-size: 20px 20px;
-            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        .sheet img {
+            border: 1px solid #ff00ff;
             max-width: 100%;
-            overflow: auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(to right, rgba(0, 255, 255, 0.3) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 255, 255, 0.3) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+
+        .container {
             position: relative;
-        }
-
-        canvas {
-            display: block;
-        }
-
-        .info {
-            margin-top: 10px;
-            color: #ce9178;
-            font-size: 14px;
+            display: inline-block;
         }
     </style>
 </head>
 
 <body>
-
-    <h1>Sprite Sheet Inspector</h1>
-
-    <div class="controls">
-        <div class="control-group">
-            <label>Upload Image</label>
-            <input type="file" id="upload" accept="image/*">
-        </div>
-        <div class="control-group">
-            <label>Tile Size (px)</label>
-            <input type="number" id="tileSize" value="64">
-        </div>
-        <div class="control-group">
-            <label>Stride (px)</label>
-            <input type="number" id="stride" value="64">
-        </div>
-        <div class="control-group">
-            <label>Offset X (px)</label>
-            <input type="number" id="offsetX" value="0">
-        </div>
-        <div class="control-group">
-            <label>Offset Y (px)</label>
-            <input type="number" id="offsetY" value="0">
-        </div>
-    </div>
-
-    <div class="info">Cell 0 (Blue Box) represents the first tile the game will read.</div>
-
-    <div class="canvas-container">
-        <canvas id="canvas"></canvas>
-    </div>
+    <h1>Sprite Inspector (32x32 Grid)</h1>
+    <div id="app"></div>
 
     <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const upload = document.getElementById('upload');
-        const inputs = ['tileSize', 'stride', 'offsetX', 'offsetY'].map(id => document.getElementById(id));
+        const files = [
+            "2Rec.png", "3visan.png", "Andreew.png", "Anevis.png", "Arkan.png",
+            "BeachboyX.png", "BrenoNeto.png", "Cat.png", "Celix.png", "Corvo.png",
+            "Daniel.png", "DawTorr.png", "Despute.png", "ElderDark.png", "Erick Etchebeur.png",
+            "Frenvius.png", "Galiant.png", "GhostX.png", "HalfAway.png", "Hunter Killer.png",
+            "Jacobs.png", "Landera.png", "Leshrot.png", "Madarada.png", "Madarada_2.png",
+            "Nechros.png", "Nogard.png", "Nordberg.png", "Noxz.png", "Nu77.png",
+            "Peonso.png", "Ranzor.png", "Sam Drost.png", "Saphron.png", "Sherice.png",
+            "Shiva Shadowsong.png", "Shiva Shadowsong_2.png", "Slaake.png", "Somni.png",
+            "Thorn.png", "Tokume.png", "Venesis.png", "Way20.png", "Weto.png", "Worr.png",
+            "dami1310.png", "lionkobin.png", "markindoot.png", "maxmillerxd.png", "wesleyt10.png"
+        ];
 
-        let img = new Image();
-        let loaded = false;
+        const app = document.getElementById('app');
+        const BASE_PATH = '/assets/opentibia_sprites/sprites_by_author/';
 
-        // Auto-redraw on any input change
-        inputs.forEach(input => input.addEventListener('input', draw));
-
-        upload.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                img = new Image();
-                img.onload = () => {
-                    loaded = true;
-                    // Reset canvas size
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    draw();
-                };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
+        files.forEach(file => {
+            const div = document.createElement('div');
+            div.className = 'sheet';
+            div.innerHTML = `<h3>${file}</h3><div class="container"><img src="${BASE_PATH}${file}" onload="addGrid(this)"></div>`;
+            app.appendChild(div);
         });
 
-        function draw() {
-            if (!loaded) return;
+        function addGrid(img) {
+            const overlay = document.createElement('div');
+            overlay.className = 'grid-overlay';
+            overlay.style.width = img.width + 'px';
+            overlay.style.height = img.height + 'px';
 
-            // Clear
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Tooltip
+            const tooltip = document.createElement('div');
+            tooltip.style.position = 'absolute';
+            tooltip.style.background = 'rgba(0,0,0,0.8)';
+            tooltip.style.color = 'white';
+            tooltip.style.padding = '5px';
+            tooltip.style.pointerEvents = 'none';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
 
-            // Draw Image
-            ctx.drawImage(img, 0, 0);
+            overlay.addEventListener('mousemove', (e) => {
+                const rect = overlay.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const gridX = Math.floor(x / 32) * 32;
+                const gridY = Math.floor(y / 32) * 32;
 
-            // Get Config
-            const tileSize = parseInt(document.getElementById('tileSize').value) || 32;
-            const stride = parseInt(document.getElementById('stride').value) || 32;
-            const offX = parseInt(document.getElementById('offsetX').value) || 0;
-            const offY = parseInt(document.getElementById('offsetY').value) || 0;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.pageX + 10) + 'px';
+                tooltip.style.top = (e.pageY + 10) + 'px';
+                tooltip.innerText = `X: ${gridX}, Y: ${gridY}`;
+            });
 
-            // Draw Grid
-            ctx.lineWidth = 1;
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // Red Grid
+            overlay.addEventListener('mouseout', () => {
+                tooltip.style.display = 'none';
+            });
 
-            const cols = Math.floor((img.width - offX) / stride);
-            const rows = Math.floor((img.height - offY) / stride);
+            overlay.addEventListener('click', (e) => {
+                const rect = overlay.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const gridX = Math.floor(x / 32) * 32;
+                const gridY = Math.floor(y / 32) * 32;
+                console.log(`Selected: ${img.src.split('/').pop()} @ ${gridX}, ${gridY}`);
+                alert(`Selected: ${img.src.split('/').pop()} @ ${gridX}, ${gridY}`);
+            });
 
-            for (let y = 0; y < rows; y++) {
-                for (let x = 0; x < cols; x++) {
-                    const gx = offX + (x * stride);
-                    const gy = offY + (y * stride);
-                    ctx.strokeRect(gx, gy, tileSize, tileSize);
-                }
-            }
-
-            // Draw Cell 0 Highlight
-            // Blue Box for the first tile
-            ctx.fillStyle = 'rgba(0, 100, 255, 0.5)';
-            ctx.fillRect(offX, offY, tileSize, tileSize);
-
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#00ffff'; // Cyan Border for Cell 0
-            ctx.strokeRect(offX, offY, tileSize, tileSize);
+            img.parentElement.appendChild(overlay);
         }
     </script>
 </body>

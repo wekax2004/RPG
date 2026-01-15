@@ -1,0 +1,67 @@
+
+import { SPRITES } from "../constants";
+import { BULK_SPRITES } from "./bulk_constants";
+
+export interface SpriteDefinition {
+    file: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+// Mapping of Sprite ID -> Sheet Definition
+export const SPRITE_MAP: Record<number, SpriteDefinition> = {
+    // --- PLAYER (Placeholder: Dwarf Miner) ---
+    // [SPRITES.PLAYER]: { file: '/sprites/dwarf_sprites.png', x: 0, y: 0, width: 32, height: 32 },
+
+    // --- ORCS ---
+    [SPRITES.ORC]: { file: '/sprites/orc_sprites.png', x: 32, y: 0, width: 32, height: 32 },       // Warrior
+    [SPRITES.ORC_PEON]: { file: '/sprites/orc_sprites.png', x: 0, y: 0, width: 32, height: 32 },  // Peon
+    [SPRITES.ORC_WARLORD]: { file: '/sprites/orc_sprites.png', x: 64, y: 0, width: 32, height: 32 }, // Warlord
+
+    // --- DWARVES ---
+    [SPRITES.DWARF_MINER]: { file: '/sprites/dwarf_sprites.png', x: 0, y: 0, width: 32, height: 32 },
+    [SPRITES.DWARF_GUARD]: { file: '/sprites/dwarf_sprites.png', x: 32, y: 0, width: 32, height: 32 },
+    [SPRITES.DWARF_GEOMANCER]: { file: '/sprites/dwarf_sprites.png', x: 64, y: 0, width: 32, height: 32 },
+
+    // --- DRAGONS ---
+    [SPRITES.CUSTOM_DRAGON_HATCHLING]: { file: '/sprites/dragon_sprites.png', x: 32, y: 32, width: 32, height: 32 }, // Middle (Small)
+    // Need to check Dragon constants to map Big Dragons if they exist
+
+    // --- WEAPONS (Basic) ---
+    [SPRITES.SWORD]: { file: '/sprites/items_basic.png', x: 0, y: 0, width: 32, height: 32 },
+    [SPRITES.AXE]: { file: '/sprites/items_basic.png', x: 32, y: 0, width: 32, height: 32 },
+    [SPRITES.CLUB]: { file: '/sprites/items_basic.png', x: 64, y: 0, width: 32, height: 32 },
+    [SPRITES.SHIELD]: { file: '/sprites/items_basic.png', x: 96, y: 0, width: 32, height: 32 }, // Wooden Shield
+
+    // --- WALLS (Stone) ---
+    [SPRITES.WALL_STONE_NW]: { file: '/sprites/terrain_batch_1.png', x: 0, y: 0, width: 32, height: 32 },       // Vertical? (Using batch 1 layout guess)
+    [SPRITES.WALL_STONE_H]: { file: '/sprites/terrain_batch_1.png', x: 32, y: 0, width: 32, height: 32 },      // Horizontal?
+    [SPRITES.WALL_STONE_NE]: { file: '/sprites/terrain_batch_1.png', x: 0, y: 0, width: 32, height: 32 },      // Placeholder
+    [SPRITES.WALL_STONE_V]: { file: '/sprites/terrain_batch_1.png', x: 0, y: 0, width: 32, height: 32 },       // Vertical
+    [SPRITES.WALL_STONE_SW]: { file: '/sprites/terrain_batch_1.png', x: 0, y: 0, width: 32, height: 32 },      // Placeholder
+    [SPRITES.WALL_STONE_SE]: { file: '/sprites/terrain_batch_1.png', x: 0, y: 0, width: 32, height: 32 },      // Placeholder
+
+    // --- ARMOR (Plate & Golden) ---
+    [SPRITES.ARMOR]: { file: '/sprites/armor_icons.png', x: 0, y: 0, width: 32, height: 32 },        // Plate Armor
+    [SPRITES.LEGS]: { file: '/sprites/armor_icons.png', x: 32, y: 0, width: 32, height: 32 },         // Plate Legs
+    [SPRITES.DWARF_HELMET]: { file: '/sprites/armor_icons.png', x: 64, y: 0, width: 32, height: 32 }, // Steel Helmet
+
+    [SPRITES.GOLDEN_ARMOR]: { file: '/sprites/armor_icons.png', x: 96, y: 0, width: 32, height: 32 },
+    [SPRITES.GOLDEN_LEGS]: { file: '/sprites/armor_icons.png', x: 128, y: 0, width: 32, height: 32 },
+    [SPRITES.GOLDEN_HELMET]: { file: '/sprites/armor_icons.png', x: 160, y: 0, width: 32, height: 32 },
+
+    // --- RARE WEAPONS ---
+    // [SPRITES.GIANT_SWORD] ... need constants for these
+
+    // Fallbacks for others
+    [SPRITES.RAT]: { file: '/sprites/dwarf_sprites.png', x: 0, y: 0, width: 32, height: 32 }, // Placeholder
+    [SPRITES.WOLF]: { file: '/sprites/orc_sprites.png', x: 0, y: 0, width: 32, height: 32 }, // Placeholder
+    // [SPRITES.COBBLE]: { file: '/sprites/terrain_batch_1.png', x: 128, y: 0, width: 32, height: 32 }, // Cobble (from Batch 1)
+    // [SPRITES.FLOOR_STONE]: { file: '/sprites/terrain_batch_1.png', x: 128, y: 0, width: 32, height: 32 }, // Reuse cobble
+    // [SPRITES.DIRT]: { file: '/sprites/terrain_batch_1.png', x: 160, y: 0, width: 32, height: 32 }, // Dirt (from Batch 1)
+};
+
+export const SPRITE_SHEET_BASE_PATH = '';
+

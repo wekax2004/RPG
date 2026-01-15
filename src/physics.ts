@@ -15,9 +15,18 @@ export const PHYSICS = {
         21,  // Altar (MapGen)
         50,  // Chest
         // New Forest Props
-        5, // Oak Tree
+        50, // Tree Pine
+        51, // Tree Oak
         6, // Large Rock
-        7  // Bush
+        7, // Bush
+        30, // Barrel
+        31, // Crate
+        // OTSP Walls
+        210, 211, 212, 213, 214, 215, 216, 217, 218,
+        // Custom Water
+        304,
+        // Standard Water
+        13, 26
     ]),
 
     isSolid(id: number): boolean {

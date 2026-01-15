@@ -1,108 +1,156 @@
 
 import {
-    Position, Player, Health, Stats, CombatState, Target, Sprite, Name, Experience
+    Position, Player, Health, Stats, CombatState, Target, Sprite, Name, Experience, Skills, Lootable, Tint, Corpse
 } from '../components';
+import { Item } from './types';
+import { SPRITES } from '../constants'; // Moved to top
 import { damageTextManager } from '../client/damage_text';
 
 export const combatSystem = (world: any) => {
     const now = performance.now();
 
-    // Query Attackers (Entities with CombatState, Position, Stats, Target)
-    const attackers = world.query([CombatState, Position, Stats, Target]);
+    // Phase 2 Combat Logic
+    const combatants = world.query([CombatState, Position, Stats, Target, Skills]);
 
-    for (const attackerId of attackers) {
-        const combat = world.getComponent(attackerId, CombatState);
-        const pos = world.getComponent(attackerId, Position);
-        const stats = world.getComponent(attackerId, Stats);
-        const targetComp = world.getComponent(attackerId, Target);
+    for (const attackerId of combatants) {
+        const combat = world.getComponent(attackerId, CombatState)!;
+        const pos = world.getComponent(attackerId, Position)!;
+        const stats = world.getComponent(attackerId, Stats); // Base Stats
+        const skills = world.getComponent(attackerId, Skills);
+        const targetComp = world.getComponent(attackerId, Target)!;
 
-        if (!combat || !pos || !stats || !targetComp) continue;
+        // Skip if missing required components
+        if (!stats || !skills) continue;
+
+        // Skip Cooldown early (Optimization)
+        const cooldownMs = (1000 / stats.attackSpeed);
+        if (now - combat.lastAttackTime < cooldownMs) continue;
 
         const targetId = targetComp.targetId;
-
-        // Skip if no target
         if (targetId === null) continue;
 
-        // Find Target Entity Components
-        // We verify the target still has Health and Position (exists and is alive-ish)
-        const targetHealth = world.getComponent(targetId, Health);
-        const targetPos = world.getComponent(targetId, Position);
-        const targetStats = world.getComponent(targetId, Stats); // Optional
-        const targetExp = world.getComponent(targetId, Experience); // Optional
+        // Verify Target
+        const tPos = world.getComponent(targetId, Position);
+        const tHealth = world.getComponent(targetId, Health);
 
-        if (!targetHealth || !targetPos) {
-            // Target lost/dead/invalid
+        if (!tPos || !tHealth || tHealth.current <= 0) {
             targetComp.targetId = null;
             continue;
         }
 
-        if (targetHealth.current <= 0) {
-            targetComp.targetId = null;
-            continue;
-        }
+        // Determine Attack Type & Range
+        // (For now assumes Melee Sword; Phase 3 will check Weapon Type)
+        // Default Melee
+        let range = stats.range || 48; // Use stats.range or default to 48px
+        let skillLevel = skills.sword.level;
+        let weaponAtk = stats.attack; // Use entity stats as "weapon + base" for now
 
+        // Check Distance
+        const dist = Math.sqrt((tPos.x - pos.x) ** 2 + (tPos.y - pos.y) ** 2);
 
-        // Check Range (Standard Melee = 1.5 tiles approx 48px)
-        const dx = targetPos.x - pos.x;
-        const dy = targetPos.y - pos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= range) {
+            // == EXECUTE ATTACK ==
+            combat.lastAttackTime = now;
 
-        const attackRange = 48; // Simple melee range
+            // 1. Hit Chance (Simple: 90% Base + Skill Factor?)
+            // Let's assume 90% hit rate for now
+            if (Math.random() > 0.9) {
+                damageTextManager.addText(tPos.x, tPos.y - 16, "MISS", '#aaaaaa');
+                continue;
+            }
 
-        if (dist <= attackRange) {
-            // Check Cooldown
-            const cooldownMs = (1000 / stats.attackSpeed);
+            // 1.5 SKILL GAIN (New)
+            // Only for Sword for now
+            skills.sword.xp += 1;
+            const reqXp = Math.floor(10 * Math.pow(1.1, skills.sword.level));
+            if (skills.sword.xp >= reqXp) {
+                skills.sword.level++;
+                skills.sword.xp = 0;
+                damageTextManager.addText(pos.x, pos.y - 32, "Skill Up!", "#ffff00");
+            }
 
-            if (now - combat.lastAttackTime >= cooldownMs) {
-                // ATTACK!
-                combat.lastAttackTime = now;
+            // 2. Damage Calculation
+            let rawDmg = (skillLevel * weaponAtk * 0.05);
+            // Variance
+            const variance = (Math.random() * 0.3) - 0.2;
+            rawDmg = rawDmg * (1 + variance);
 
-                // Calculate Damage
-                // Damage = Attack - Defense (Min 1)
-                // Variation: +/- 20%
-                let damage = stats.attack;
+            // 3. Crit Check (5% Chance)
+            let isCrit = false;
+            if (Math.random() < 0.05) {
+                isCrit = true;
+                rawDmg *= 1.5;
+            }
 
-                if (targetStats) {
-                    damage -= targetStats.defense;
+            // 4. Block/Defense
+            let defense = 0;
+            const tStats = world.getComponent(targetId, Stats);
+            if (tStats) defense = tStats.defense;
+
+            // Armor Reduction
+            let damage = Math.max(0, rawDmg - defense);
+            damage = Math.floor(damage);
+
+            // Apply Damage
+            tHealth.current = Math.max(0, tHealth.current - damage);
+
+            // 5. Visual Feedback
+            if (damage <= 0) {
+                damageTextManager.addText(tPos.x, tPos.y - 16, "BLOCK", '#00aaff');
+            } else {
+                if (isCrit) {
+                    damageTextManager.addText(tPos.x, tPos.y - 24, `CRIT ${damage}!`, '#ffff00');
+                } else {
+                    damageTextManager.addText(tPos.x + 8, tPos.y, damage.toString(), '#ff3333');
                 }
+            }
 
-                damage = Math.max(1, damage); // Min 1 damage
-
-                // Random variation
-                const variation = (Math.random() * 0.4) - 0.2; // -0.2 to +0.2
-                damage = Math.floor(damage * (1 + variation));
-                damage = Math.max(0, damage);
-
-                // Apply Damage
-                targetHealth.current -= damage;
-
-                // Visual Feedback
-                damageTextManager.addText(
-                    targetPos.x + 8, // Center-ish
-                    targetPos.y,
-                    damage.toString(),
-                    '#ff3333'
-                );
-
-                // Handle Death
-                if (targetHealth.current <= 0) {
-                    // Simple XP Reward
-                    const attackerExp = world.getComponent(attackerId, Experience);
-                    if (attackerExp && targetExp) {
-                        // Placeholder XP gain
-                        // attackerExp.current += 10;
-                    }
-
-                    // Add death text
-                    damageTextManager.addText(targetPos.x, targetPos.y - 16, "DEAD", "#888888");
-
-                    // Clear Target
-                    targetComp.targetId = null;
-
-                    // Destroy Target
-                    world.removeEntity(targetId);
-                }
+            // Death Check
+            if (tHealth.current <= 0) {
+                handleDeath(world, targetId);
+                targetComp.targetId = null;
             }
         }
     }
 };
+
+// Helper: Handle Death (Corpses & Loot)
+function handleDeath(world: any, victimId: number) {
+    const pos = world.getComponent(victimId, Position);
+    const sprite = world.getComponent(victimId, Sprite);
+    const loot = world.getComponent(victimId, Lootable); // Assumes we have Lootable component
+
+    if (pos && sprite) {
+        // Create Corpse Entity
+        const corpseId = world.createEntity();
+        world.addComponent(corpseId, new Position(pos.x, pos.y));
+
+        // Corpse Sprite
+        // Use SPRITES.CORPSE for now (Generic Skeleton/Bones)
+        // In Phase 3 Polish, we map MobType -> CorpseType (e.g. Orc -> Orc Corpse)
+        // For now, SPRITES.CORPSE (299)
+
+        const cSprite = new Sprite(SPRITES.CORPSE || 299, 32); // Use Constant
+        cSprite.tint = new Tint('#aaaaaa'); // Grey tint
+        world.addComponent(corpseId, cSprite);
+
+        // Add Lootable Component
+        const lootItems: Item[] = [];
+        if (loot && loot.items) {
+            for (const item of loot.items) {
+                if (Math.random() < 0.5) { // 50% drop base chance
+                    lootItems.push(item);
+                    console.log(`[Loot] ${name?.value || 'Entity'} dropped ${item.name} into corpse.`);
+                }
+            }
+        }
+        world.addComponent(corpseId, new Lootable(lootItems));
+
+        // Decay (5 mins)
+        world.addComponent(corpseId, new Corpse(300));
+
+    }
+
+    // Destroy Victim
+    world.removeEntity(victimId);
+}

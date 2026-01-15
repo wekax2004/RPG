@@ -29,13 +29,102 @@
                 <span>Minimap</span>
             </div>
 
+            <div id="status-bars">
+                <div class="status-group">
+                    <div class="status-header">Health <span id="hp-text">150</span></div>
+                    <div class="bar-bg">
+                        <div id="hp-bar" class="bar-fg hp"></div>
+                    </div>
+                </div>
+                <div class="status-group">
+                    <div class="status-header">Mana <span id="mana-text">50</span></div>
+                    <div class="bar-bg">
+                        <div id="mana-bar" class="bar-fg mana"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="skills-container">
+                <div class="skill-header">
+                    <span>Level</span> <span id="lvl-val">1</span>
+                    <span id="xp-pct" class="pct">0%</span>
+                </div>
+                <div class="bar-bg small">
+                    <div id="xp-bar" class="bar-fg xp"></div>
+                </div>
+
+                <div class="skill-row">Vocation: <span id="skill-vocation">None</span></div>
+                <div class="skill-separator"></div>
+
+                <div class="skill-item">
+                    <div class="skill-info"><span>Magic</span> <span id="skill-magic">0</span> <span id="pct-magic"
+                            class="pct">0%</span></div>
+                    <div class="bar-bg tiny">
+                        <div id="bar-magic" class="bar-fg magic"></div>
+                    </div>
+                </div>
+
+                <div class="skill-item">
+                    <div class="skill-info"><span>Fist</span> <span id="skill-fist">10</span> <span id="pct-fist"
+                            class="pct">0%</span></div>
+                    <div class="bar-bg tiny">
+                        <div id="bar-fist" class="bar-fg skill"></div>
+                    </div>
+                </div>
+
+                <div class="skill-item">
+                    <div class="skill-info"><span>Club</span> <span id="skill-club">10</span> <span id="pct-club"
+                            class="pct">0%</span></div>
+                    <div class="bar-bg tiny">
+                        <div id="bar-club" class="bar-fg skill"></div>
+                    </div>
+                </div>
+
+                <div class="skill-item">
+                    <div class="skill-info"><span>Sword</span> <span id="skill-sword">10</span> <span id="pct-sword"
+                            class="pct">0%</span></div>
+                    <div class="bar-bg tiny">
+                        <div id="bar-sword" class="bar-fg skill"></div>
+                    </div>
+                </div>
+
+                <div class="skill-item">
+                    <div class="skill-info"><span>Axe</span> <span id="skill-axe">10</span> <span id="pct-axe"
+                            class="pct">0%</span></div>
+                    <div class="bar-bg tiny">
+                        <div id="bar-axe" class="bar-fg skill"></div>
+                    </div>
+                </div>
+
+                <div class="skill-item">
+                    <div class="skill-info"><span>Dist</span> <span id="skill-distance">10</span> <span
+                            id="pct-distance" class="pct">0%</span></div>
+                    <div class="bar-bg tiny">
+                        <div id="bar-distance" class="bar-fg skill"></div>
+                    </div>
+                </div>
+
+                <div class="skill-item">
+                    <div class="skill-info"><span>Shield</span> <span id="skill-shielding">10</span> <span
+                            id="pct-shielding" class="pct">0%</span></div>
+                    <div class="bar-bg tiny">
+                        <div id="bar-shielding" class="bar-fg skill"></div>
+                    </div>
+                </div>
+            </div>
+
             <div id="inventory-container">
-                <div class="slot head" title="Head"></div>
-                <div class="slot chest" title="Body"></div>
-                <div class="slot legs" title="Legs"></div>
-                <div class="slot feet" title="Feet"></div>
-                <div class="slot rhand" title="Right Hand"></div>
-                <div class="slot lhand" title="Left Hand"></div>
+                <div class="slot head" id="slot-head" title="Head"></div>
+                <div class="slot chest" id="slot-body" title="Body"></div>
+                <div class="slot legs" id="slot-legs" title="Legs"></div>
+                <div class="slot feet" id="slot-boots" title="Feet"></div>
+                <div class="slot rhand" id="slot-rhand" title="Right Hand"></div>
+                <div class="slot lhand" id="slot-lhand" title="Left Hand"></div>
+                <!-- Extra slots for Tibia layout -->
+                <div class="slot amulet" id="slot-amulet" title="Amulet"></div>
+                <div class="slot ring" id="slot-ring" title="Ring"></div>
+                <div class="slot ammo" id="slot-ammo" title="Ammo"></div>
+                <div class="slot backpack" id="slot-backpack" title="Backpack"></div>
             </div>
 
             <div id="controls">
@@ -43,9 +132,9 @@
                 <button id="btn-logout">Logout</button>
             </div>
 
+            <div id="battle-list-header">Battle List</div>
             <div id="battle-list">
-                <div class="battle-entry">Rat</div>
-                <div class="battle-entry">Wolf</div>
+                <!-- Entities go here -->
             </div>
         </div>
     </div>

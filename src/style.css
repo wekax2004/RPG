@@ -98,44 +98,460 @@ canvas {
 
 #minimap-container {
     width: 100%;
-    height: 150px;
+    display: flex;
+    justify-content: center;
     background: #000;
     border: 2px solid #555;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #444;
+    padding: 2px;
 }
+
+#minimap-canvas {
+    display: block;
+}
+
+/* --- TIBIA THEME UI --- */
+.tibia-panel {
+    background-color: #3f3f3f;
+    border-top: 2px solid #757575;
+    border-left: 2px solid #757575;
+    border-right: 2px solid #1a1a1a;
+    border-bottom: 2px solid #1a1a1a;
+    box-shadow: 2px 2px 0 #000;
+    padding: 3px;
+    font-family: 'Verdana', sans-serif;
+    font-size: 11px;
+    color: #c0c0c0;
+    user-select: none;
+    image-rendering: pixelated;
+}
+
+.tibia-header {
+    background: linear-gradient(to bottom, #565656, #2d2d2d);
+    border: 1px solid #111;
+    color: #dedede;
+    padding: 2px 4px;
+    font-weight: bold;
+    text-shadow: 1px 1px 0 #000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.tibia-btn-close {
+    width: 14px;
+    height: 14px;
+    background: #a00;
+    border: 1px solid #fff;
+    cursor: pointer;
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+}
+
+/* Container Slots Container */
+.tibia-grid {
+    background: #2b2b2b;
+    border-top: 1px solid #1a1a1a;
+    border-left: 1px solid #1a1a1a;
+    border-right: 1px solid #505050;
+    border-bottom: 1px solid #505050;
+    padding: 3px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    justify-content: center;
+}
+
+.tibia-slot {
+    width: 34px;
+    height: 34px;
+    background-color: #444;
+    border-top: 1px solid #1a1a1a;
+    border-left: 1px solid #1a1a1a;
+    border-right: 1px solid #666;
+    border-bottom: 1px solid #666;
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.tibia-slot:hover {
+    border: 1px solid #fff;
+    /* Highlighting */
+}
+
 
 #inventory-container {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    /* Stack doll and bag */
     gap: 5px;
     padding: 10px;
     background: #222;
     border: 1px solid #444;
+    align-items: center;
 }
 
-.slot {
+/* =============================================
+   TIBIA-STYLE INVENTORY (Classic 7.x Layout)
+   ============================================= */
+
+/* Main Inventory Container */
+.equip-doll {
+    display: grid;
+    grid-template-areas:
+        "amulet helmet backpack"
+        "lhand  body   rhand"
+        "ring   legs   ammo"
+        "soul   boots  cap";
+    grid-template-columns: 36px 36px 36px;
+    grid-template-rows: repeat(4, 36px);
+    gap: 2px;
+    /* Tibia 7.4 Style Marble Texture Simulation */
+    background-color: #bfbfbf;
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc0JyBoZWlnaHQ9JzQnPgo8cmVjdCB3aWR0aD0nNCcgaGVpZ2h0PSc0JyBmaWxsPScjYmZiZmJmJy8+CjxyZWN0IHdpZHRoPScxJyBoZWlnaHQ9JzEnIGZpbGw9JyNhZmFmYWYnLz4KPC9zdmc+');
+    border: 2px solid #555;
+    border-right-color: #222;
+    border-bottom-color: #222;
+    border-top-color: #eee;
+    border-left-color: #eee;
+    box-shadow: 1px 1px 0 #000;
+    padding: 4px;
+    width: auto;
+    margin: 0 auto;
+    /* Typography */
+    font-family: 'Verdana', sans-serif;
+    font-size: 10px;
+}
+
+/* Slot Border Styles for specific slots if needed */
+.equip-slot[data-slot="soul"],
+.equip-slot[data-slot="cap"] {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: #ccc;
+    font-size: 10px;
+    flex-direction: column;
+    line-height: 1.1;
+    text-shadow: 1px 1px 0 #000;
+}
+
+/* Equipment Rows - Using Grid Areas */
+.equip-row {
+    display: contents;
+    /* Let grid manage layout */
+}
+
+/* Individual Equipment Slots */
+.equip-slot {
+    width: 34px;
+    height: 34px;
+    background: linear-gradient(145deg, #3a3a3a 0%, #252525 100%);
+    border: 2px solid #1a1a1a;
+    border-top-color: #555;
+    border-left-color: #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 9px;
+    font-weight: bold;
+    position: relative;
+    image-rendering: pixelated;
+    box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    transition: border-color 0.1s;
+}
+
+.equip-slot:hover {
+    border-color: #888;
+}
+
+/* Slot Grid Area Assignments */
+.equip-slot[data-slot="amulet"] {
+    grid-area: amulet;
+}
+
+.equip-slot[data-slot="helmet"] {
+    grid-area: helmet;
+}
+
+.equip-slot[data-slot="backpack"] {
+    grid-area: backpack;
+}
+
+.equip-slot[data-slot="lhand"] {
+    grid-area: lhand;
+}
+
+.equip-slot[data-slot="body"] {
+    grid-area: body;
+}
+
+.equip-slot[data-slot="rhand"] {
+    grid-area: rhand;
+}
+
+.equip-slot[data-slot="ring"] {
+    grid-area: ring;
+}
+
+.equip-slot[data-slot="legs"] {
+    grid-area: legs;
+}
+
+.equip-slot[data-slot="ammo"] {
+    grid-area: ammo;
+}
+
+.equip-slot[data-slot="soul"] {
+    grid-area: soul;
+}
+
+.equip-slot[data-slot="boots"] {
+    grid-area: boots;
+}
+
+.equip-slot[data-slot="cap"] {
+    grid-area: cap;
+}
+
+
+.equip-slot[data-slot="backpack"] {
+    grid-area: backpack;
+}
+
+/* Empty slot placeholder text */
+.equip-slot:empty::after {
+    content: attr(data-slot);
+    color: #444;
+    font-size: 7px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Canvas inside slots */
+.equip-slot canvas {
+    display: block;
+    image-rendering: pixelated;
+}
+
+/* Active Panel Styling */
+.panel {
+    background: #3c3c3c;
+    border-top: 2px solid #5d5d5d;
+    border-left: 2px solid #5d5d5d;
+    border-right: 2px solid #1d1d1d;
+    border-bottom: 2px solid #1d1d1d;
+    color: #c0c0c0;
+    min-width: 176px;
+    /* 5 slots * 32 + margins */
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+    pointer-events: auto !important;
+    z-index: 1000;
+}
+
+.panel-header {
+    background: #1d1d1d;
+    color: #ffd700;
+    padding: 4px;
+    font-weight: bold;
+    border-bottom: 1px solid #5d5d5d;
+    text-align: center;
+    display: flex;
+    justify-content: space-between;
+}
+
+.inventory-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    width: 150px;
+    padding: 5px;
+    /* Force width for reasonable grid */
+}
+
+/* Ensure slots in grids look good */
+.inventory-grid .item-slot,
+.loot-grid .loot-slot {
     width: 32px;
     height: 32px;
-    background: #333;
-    border: 1px solid #555;
+    background: #222;
+    border: 1px solid #444;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
 }
 
-/* Utility Classes */
-.text-system {
+.inventory-grid .item-slot:hover,
+.loot-grid .loot-slot:hover {
+    border-color: #ffd700;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* --- LOOT & SHOP PANELS --- */
+#loot-panel,
+#shop-panel,
+#dialog-panel {
+    position: absolute;
+    /* Centered in Viewport */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #2b2b2b;
+    border: 2px solid #555;
+    padding: 0;
+    display: none;
+    /* Hidden by default */
+    flex-direction: column;
+    min-width: 200px;
+    z-index: 2000;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+}
+
+.loot-header,
+.shop-header,
+.panel-header {
+    background: #444;
+    color: #eebb00;
+    padding: 5px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    cursor: move;
+    /* Draggable ideally */
+}
+
+.shop-grid {
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+    gap: 5px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.shop-item-card {
+    display: flex;
+    align-items: center;
+    background: #333;
+    border: 1px solid #555;
+    padding: 5px;
+    gap: 10px;
+}
+
+.shop-icon {
+    width: 32px;
+    height: 32px;
+    background: #222;
+    border: 1px solid #444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.shop-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.shop-item-name {
+    font-weight: bold;
     color: #fff;
 }
 
-.text-damage {
+.shop-item-price {
+    color: #fa0;
+    font-size: 10px;
+}
+
+.buy-btn {
+    background: #28a745;
+    border: none;
+    color: white;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 10px;
+}
+
+.buy-btn:hover {
+    background: #218838;
+}
+
+.close-btn {
+    cursor: pointer;
     color: #f55;
 }
 
-.text-info {
-    color: #8af;
+.close-btn:hover {
+    color: #fff;
 }
 
-.text-say {
-    color: #fa0;
+#dialog-panel .dialog-content {
+    padding: 10px;
+    color: #fff;
+    text-align: center;
+}
+
+.dialog-buttons {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.dialog-buttons button {
+    background: #444;
+    color: #fff;
+    border: 1px solid #777;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+.dialog-buttons button:hover {
+    background: #666;
+}
+
+/* Shop Tabs */
+.shop-tabs {
+    display: flex;
+    background: #222;
+    border-bottom: 2px solid #444;
+}
+
+.shop-tab {
+    flex: 1;
+    background: #333;
+    color: #aaa;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    border-right: 1px solid #444;
+    font-weight: bold;
+    text-align: center;
+}
+
+.shop-tab:last-child {
+    border-right: none;
+}
+
+.shop-tab.active {
+    background: #444;
+    color: #ffd700;
+    border-bottom: 2px solid #ffd700;
+}
+
+.shop-tab:hover:not(.active) {
+    background: #3a3a3a;
+    color: #ccc;
 }

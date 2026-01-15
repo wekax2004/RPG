@@ -144,6 +144,8 @@ export function loadGame(world: World, ui: UIManager): boolean {
 
     try {
         const data: SaveData = JSON.parse(json);
+        console.log("[Save] Loaded Seed: ", data.seed);
+
         const playerEntity = world.query([PlayerControllable, Position, Health, Inventory, QuestLog, Experience])[0];
         if (playerEntity === undefined) return false;
 
@@ -225,7 +227,24 @@ export function loadGame(world: World, ui: UIManager): boolean {
         } else if (data.inventory.equipment) {
             // NEW FORMAT
             data.inventory.equipment.forEach((i: any) => {
-                const newItem = new Item(i.name, i.slotType || 'none', i.uIndex, i.damage, i.price, i.description, i.weaponType, 'common', i.defense || 0, 0, 0, i.name === 'Backpack', i.name === 'Backpack' ? 20 : 0);
+                // FALLBACK: If item not found in registry, create generic
+                // This is critical for Bulk items if they aren't fully registered in items.ts yet
+                // But we added basic stats for them.
+                const newItem = new Item(
+                    i.name,
+                    i.slotType || 'none',
+                    i.uIndex,
+                    i.damage,
+                    i.price,
+                    i.description,
+                    i.weaponType,
+                    'common',
+                    i.defense || 0,
+                    0,
+                    0,
+                    i.name === 'Backpack',
+                    i.name === 'Backpack' ? 20 : 0
+                );
 
                 const inst = new ItemInstance(newItem, i.count || 1);
 

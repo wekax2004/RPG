@@ -1,4 +1,6 @@
-// Game Components (Extracted to break Circular Dependency)
+import { Entity } from './core/entity';
+export { NPC } from './components/npc';
+
 
 export class Position {
     constructor(public x: number, public y: number) { }
@@ -66,6 +68,13 @@ export class TileMap {
     ) {
         this.tiles = Array(width * height).fill(null).map(() => new Tile());
     }
+
+    getTile(x: number, y: number): Tile | null {
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+            return null;
+        }
+        return this.tiles[y * this.width + x];
+    }
 }
 
 export class PlayerControllable {
@@ -103,9 +112,7 @@ export class AI {
 }
 
 
-export class Interactable {
-    constructor(public message: string) { }
-}
+
 
 // Item Rarity System
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
@@ -130,6 +137,7 @@ export const RARITY_MULTIPLIERS: Record<ItemRarity, number> = {
 export class Item {
     constructor(
         public name: string,
+        public id: number = 0, // ADDED: Registry ID tracking
         // slotType: Where it fits (head, body, etc)
         public slotType: string,
         public uIndex: number = 0,
@@ -368,7 +376,22 @@ export class Facing {
 }
 
 export class Projectile {
-    constructor(public damage: number, public life: number, public ownerType: string) { }
+    constructor(
+        public damage: number,
+        public life: number,
+        public ownerType: string,
+        public vx: number = 0,
+        public vy: number = 0,
+        public speed: number = 200,
+        public targetX: number = 0,
+        public targetY: number = 0
+    ) { }
+}
+
+export class Corpse {
+    constructor(
+        public decayTimer: number = 300 // 5 minutes default
+    ) { }
 }
 
 export class Mana {
@@ -379,9 +402,7 @@ export class Experience {
     constructor(public current: number, public next: number, public level: number) { }
 }
 
-export class Merchant {
-    items: Item[] = [];
-}
+
 
 export class Skill {
     constructor(public level: number = 10, public xp: number = 0) { }
@@ -441,6 +462,12 @@ export class Target {
 
 export class Teleporter {
     constructor(public targetX: number, public targetY: number) { }
+}
+
+export class Tint {
+    constructor(
+        public color: string // Hex or RGBA string e.g. "#FF0000"
+    ) { }
 }
 
 export class LightSource {
@@ -569,7 +596,8 @@ export class Stats {
     constructor(
         public attack: number = 10,
         public defense: number = 0,
-        public attackSpeed: number = 1.0 // Attacks per second
+        public attackSpeed: number = 1.0, // Attacks per second
+        public range: number = 48         // Attack Range (px)
     ) { }
 }
 
@@ -578,3 +606,23 @@ export class CombatState {
     public lastAttackTime: number = 0;
     constructor() { }
 }
+
+export class Interactable {
+    constructor(
+        public actionName: string = "Interact"
+    ) { }
+}
+
+export class Merchant {
+    constructor(
+        public items: number[] = [] // List of Item IDs this merchant sells
+    ) { }
+}
+
+export class RegenState {
+    public hpTimer: number = 0;
+    public manaTimer: number = 0;
+    constructor() { }
+}
+
+

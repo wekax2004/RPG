@@ -37,7 +37,7 @@ export class DamageTextManager {
         }
     }
 
-    draw(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
+    render(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) {
         ctx.save();
         ctx.font = 'bold 14px "Press Start 2P", monospace';
         ctx.textAlign = 'center';

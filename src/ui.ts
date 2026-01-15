@@ -719,22 +719,17 @@ export class UIManager {
     }
 
     createItemIcon(itemInst: any, source: { type: string, index: number | string }): HTMLElement {
-        // Use background image sprite
         const el = document.createElement('div');
         el.style.width = '32px';
         el.style.height = '32px';
-        el.style.backgroundImage = `url('/assets/items.png')`; // Sheet
 
-        // Calculate Sprite Offset
-        const uIndex = itemInst.item.uIndex;
+        // Use AssetManager to resolve the correct Sheet and Coordinates
+        // This supports the remapping (Sword->Rock) we did in assets.ts
+        const style = assetManager.getSpriteStyle(itemInst.item.uIndex);
 
-        // HACK: Hardcoded for Phase 3 proto
-        const cols = 32; // tiles per row
-        const tx = (uIndex % cols) * 32;
-        const ty = Math.floor(uIndex / cols) * 32;
-
-        el.style.backgroundPosition = `-${tx}px -${ty}px`;
-        el.style.backgroundSize = '1024px'; // 32 * 32
+        el.style.backgroundImage = style.backgroundImage;
+        el.style.backgroundPosition = style.backgroundPosition;
+        el.style.backgroundSize = style.backgroundSize;
         el.style.imageRendering = 'pixelated';
         el.draggable = true;
         el.title = itemInst.item.name;
@@ -889,7 +884,10 @@ export class UIManager {
         }
     }
 
-    // Legacy Support cleanup
+    // Cached State
+    private _lastKnownInventory: Inventory | null = null;
+    public activeContainerItem: any = null; // Track open container
+
     toggleBag() {
         if (this.bagPanel.classList.contains('hidden')) {
             this.bagPanel.classList.remove('hidden');
@@ -897,6 +895,42 @@ export class UIManager {
         } else {
             this.bagPanel.classList.add('hidden');
             this.bagPanel.style.display = 'none';
+        }
+    }
+
+    updateInventory(inv: Inventory) {
+        this._lastKnownInventory = inv;
+
+        // 1. Equipment Slots
+        const slots = ['head', 'amulet', 'backpack', 'armor', 'right-hand', 'left-hand', 'legs', 'feet', 'ring', 'ammo'];
+        slots.forEach(slotName => {
+            const el = document.getElementById(`slot-${slotName}`);
+            if (el) {
+                el.innerHTML = '';
+                const item = inv.getEquipped(slotName);
+                if (item) {
+                    const icon = this.createItemIcon(item, { type: 'equipment', index: slotName });
+                    el.appendChild(icon);
+                }
+                // Allow Drop onto Slot
+                this.setupDragDrop(el, slotName, 'equipment', inv);
+            }
+        });
+
+        // 2. Backpack Grid
+        this.bagGrid.innerHTML = '';
+        const bag = inv.getEquipped('backpack');
+        if (bag && bag.contents) {
+            bag.contents.forEach((itemInst: any, i: number) => {
+                const slot = document.createElement('div');
+                slot.className = 'slot';
+                if (itemInst) {
+                    const icon = this.createItemIcon(itemInst, { type: 'backpack', index: i });
+                    slot.appendChild(icon);
+                }
+                this.bagGrid.appendChild(slot);
+                this.setupDragDrop(slot, i, 'backpack', inv);
+            });
         }
     }
 
@@ -914,6 +948,113 @@ export class UIManager {
             this.currentMerchant = null;
         }
     }
+
+    // --- DRAG AND DROP LOGIC ---
+    handleMoveItem(inv: Inventory, src: { type: string, index: string | number, containerId?: number }, dest: { type: string, index: string | number, containerId?: number }) {
+        // Prevent No-Op
+        if (src.type === dest.type && src.index === dest.index) return;
+
+        // 1. Resolve Source Item & Container
+        let srcItem: any = null;
+        let srcContainer: any[] | null = null; // Array ref for removal
+        let srcBag = inv.getEquipped('backpack');
+
+        if (src.type === 'equipment') {
+            srcItem = inv.getEquipped(src.index as string);
+        } else if (src.type === 'backpack') {
+            if (srcBag && srcBag.contents) {
+                srcContainer = srcBag.contents;
+                srcItem = srcContainer[src.index as number];
+            }
+        } else if (src.type === 'container') {
+            if (this.activeContainerItem && this.activeContainerItem.inventory) {
+                srcContainer = this.activeContainerItem.inventory;
+                srcItem = srcContainer![src.index as number];
+            }
+        }
+
+        if (!srcItem) return; // Error: Source empty
+
+        // 2. Resolve Destination Context
+        // CASE A: Equip Item
+        if (dest.type === 'equipment') {
+            const slotName = dest.index as string;
+            // Validate compatibility
+            if (srcItem.item.slotType !== slotName && srcItem.item.slotType !== 'any') {
+                if (this.console) this.console.addSystemMessage(`Cannot equip ${srcItem.item.name} in ${slotName}.`);
+                return;
+            }
+
+            // Swap Logic
+            const existing = inv.getEquipped(slotName);
+
+            // Execute
+            this.removeFromSource(inv, src, srcContainer);
+            inv.equip(slotName, srcItem);
+
+            // If existing, put it back to source (Swap)
+            if (existing) {
+                this.putToSource(inv, src, existing);
+            }
+
+            // CASE B: Backpack / Container (Grid Operations)
+        } else {
+            let destContainer: any[] | null = null;
+
+            if (dest.type === 'backpack') {
+                if (srcBag) destContainer = srcBag.contents;
+            } else if (dest.type === 'container') {
+                if (this.activeContainerItem) destContainer = this.activeContainerItem.inventory;
+            }
+
+            if (destContainer) {
+                const destIndex = dest.index as number;
+                const existing = destContainer[destIndex];
+
+                // Execute Swap/Move
+                this.removeFromSource(inv, src, srcContainer);
+                destContainer[destIndex] = srcItem;
+
+                if (existing) {
+                    this.putToSource(inv, src, existing);
+                }
+            }
+        }
+
+        // 3. Update UI
+        this.updateInventory(inv);
+        if (this.activeContainerItem) this.renderContainer(this.activeContainerItem);
+    }
+
+    // Helper: Remove item from its origin
+    private removeFromSource(inv: Inventory, src: any, srcContainer: any[] | null) {
+        if (src.type === 'equipment') {
+            inv.equipment.delete(src.index);
+        } else if (srcContainer) {
+            srcContainer[src.index] = null; // Grid clearance
+        }
+    }
+
+    // Helper: Return item to where it came from (for swaps)
+    private putToSource(inv: Inventory, src: any, item: any) {
+        if (src.type === 'equipment') {
+            // If source was equipment, re-equip? (Swap logic handled this mostly)
+            // But if we swapped Ring1 with Ring2, we need to set Ring1
+            inv.equip(src.index, item);
+        } else if (src.type === 'backpack' || src.type === 'container') {
+            // We need to resolve the container ref again or reuse srcContainer if valid
+            // For simplicity, re-resolve logic similar to handleMove:
+            let container: any[] | null = null;
+            if (src.type === 'backpack') container = inv.getEquipped('backpack')?.contents;
+            if (src.type === 'container') container = this.activeContainerItem?.inventory;
+
+            if (container) {
+                container[src.index] = item;
+            }
+        }
+    }
+
+
 
     renderShop(merchant: any, playerInv: Inventory) {
         // Reset Inspection to prevent stuck panels
@@ -1061,6 +1202,119 @@ export class UIManager {
         this.lootPanel.style.display = 'block';
 
         this.renderLoot(lootable, playerInv);
+    }
+
+    // --- CONTAINER UI (New) ---
+    public containerPanel!: HTMLElement;
+
+    openContainer(containerItem: any) {
+        // --- FORCE RESET ---
+        // Verify if we have a STALE panel in DOM that doesn't match our instance
+        const existing = document.getElementById('container-panel');
+        if (existing && !this.containerPanel) {
+            console.warn("[UI] Found Stale Container Panel! Nuking it to force upgrade.");
+            existing.remove();
+        }
+
+        if (!this.containerPanel) {
+            this.containerPanel = this.createContainerPanel();
+        }
+
+        // Double Check: If containerPanel exists but is not in DOM?
+        if (!document.getElementById('container-panel')) {
+            console.warn("[UI] Panel lost from DOM? Re-appending.");
+            // Reset to force create
+            this.containerPanel = undefined!;
+            this.containerPanel = this.createContainerPanel();
+        }
+
+        this.containerPanel.classList.remove('hidden');
+        this.containerPanel.style.display = 'block';
+        this.renderContainer(containerItem);
+    }
+
+    createContainerPanel(): HTMLElement {
+        if (this.containerPanel) return this.containerPanel;
+
+        const panel = document.createElement('div');
+        panel.id = 'container-panel';
+        panel.className = 'panel hidden tibia-panel'; // Apply Tibia Theme
+
+        // --- TIBIA STYLES (Positioning Refined) ---
+        panel.style.display = 'none';
+        panel.style.position = 'absolute';
+        panel.style.top = '100px';
+        panel.style.left = '50%';
+        panel.style.transform = 'translateX(-50%)';
+        panel.style.minWidth = '176px'; // 5 slots * 34px + padding approx
+        panel.style.zIndex = '1000';
+        panel.style.pointerEvents = 'auto';
+
+        panel.innerHTML = `
+            <div class="tibia-header">
+                <span>Container</span>
+                <div id="container-close-btn" class="tibia-btn-close" title="Close"></div>
+            </div>
+            <div id="container-grid" class="tibia-grid" style="pointer-events:auto;"></div>
+        `;
+
+        // Stop Propagation to prevent clicking through to canvas
+        panel.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        }, false);
+
+        panel.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+
+        // Bind Close
+        const closeBtn = panel.querySelector('#container-close-btn') as HTMLElement;
+        if (closeBtn) {
+            closeBtn.onclick = (e) => {
+                e.stopPropagation();
+                panel.style.display = 'none';
+            };
+        }
+
+        // APPEND TO VIEWPORT (Direct Sibling of Canvas)
+        const viewport = document.getElementById('viewport');
+        if (viewport) {
+            viewport.appendChild(panel);
+        } else {
+            console.warn("[UI] Viewport not found, appending to body fallback");
+            document.body.appendChild(panel);
+        }
+
+        return panel;
+    }
+
+    renderContainer(containerItem: any) {
+        // Ensure panel exists safely
+        const grid = this.containerPanel.querySelector('#container-grid');
+        if (!grid) return;
+
+        grid.innerHTML = '';
+        const items = containerItem.inventory || [];
+        const size = containerItem.containerSize || 10; // Default 10 slots for standard look
+
+        for (let i = 0; i < size; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'tibia-slot'; // Use Tibia Slot Class
+
+            if (items[i]) {
+                // Pre-Wrapped Item Instance from main.ts
+                const inst = items[i];
+                const icon = this.createItemIcon(inst, { type: 'container', index: i });
+                slot.appendChild(icon);
+            }
+            grid.appendChild(slot);
+
+            // Allow Drop ONTO container slots
+            if (this._lastKnownInventory) {
+                this.setupDragDrop(slot, i, 'container', this._lastKnownInventory);
+            }
+        }
     }
 
     renderLoot(lootable: Lootable, playerInv: Inventory) {

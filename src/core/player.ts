@@ -13,7 +13,7 @@ export class Player {
     id: number = 0;
 
     // Visual State
-    spriteId: number = 0; // Default: 0 (SPRITES.PLAYER)
+    spriteId: number = 100; // Default: 100 (Hero)
     flipX: boolean = false;
     frame: number = 0; // Animation Frame (0-2)
     direction: 0 | 1 | 2 | 3 = 0;

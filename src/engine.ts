@@ -2,6 +2,7 @@ export class InputHandler {
     keys: Set<string> = new Set();
     justPressedMap: Set<string> = new Set();
     mouse: { x: number, y: number } = { x: 0, y: 0 };
+    screenMouse: { x: number, y: number } = { x: 0, y: 0 };
     mouseKeys: Set<number> = new Set();
 
     constructor() {
@@ -28,6 +29,10 @@ export class InputHandler {
 
         // Mouse Support
         window.addEventListener('mousemove', (e) => {
+            // Raw Logic
+            this.screenMouse.x = e.clientX;
+            this.screenMouse.y = e.clientY;
+
             const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
             if (!canvas) return;
 
@@ -49,6 +54,10 @@ export class InputHandler {
                 if (!this.keys.has('MouseLeft')) this.justPressedMap.add('MouseLeft');
                 this.keys.add('MouseLeft');
             }
+            if (e.button === 2) {
+                if (!this.keys.has('MouseRight')) this.justPressedMap.add('MouseRight');
+                this.keys.add('MouseRight');
+            }
         });
 
         window.addEventListener('mouseup', (e) => {
@@ -56,6 +65,14 @@ export class InputHandler {
             if (e.button === 0) {
                 this.keys.delete('MouseLeft');
             }
+            if (e.button === 2) {
+                this.keys.delete('MouseRight');
+            }
+        });
+
+        // 4. Prevent Context Menu
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
         });
     }
 

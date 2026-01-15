@@ -1,5 +1,11 @@
 import { Tile, Item } from './types';
 
+// Tile Types / Item IDs
+export const GRASS = 16;
+export const WALL = 17;
+export const TOWN_WALL = 200;
+export const TOWN_FLOOR = 201;
+
 export class WorldMap {
     width: number;
     height: number;

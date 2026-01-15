@@ -3,293 +3,424 @@ import { TILE_SIZE } from '../core/types';
 import { Player } from '../core/player';
 import { assetManager } from '../assets';
 import { damageTextManager } from './damage_text';
+import { Tint } from '../components';
+
+// Define RenderItem type based on its usage in the original code
+type RenderItem = { y: number, draw: () => void, debugId?: string };
 
 export class PixelRenderer {
-    ctx: CanvasRenderingContext2D;
     canvas: HTMLCanvasElement;
     scale: number = 1;
+    private hasLogged: boolean = false; // Debug flag
+    private loggedMissing: Record<number, boolean> = {}; // Track missing sprites to avoid log spam
+    private ctx: CanvasRenderingContext2D;
+    private renderList: RenderItem[] = [];
+    private scratchCanvas: HTMLCanvasElement;
+    private scratchCtx: CanvasRenderingContext2D;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d')!;
-        // Limit smoothing
+        this.ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D;
         this.ctx.imageSmoothingEnabled = false;
 
-        // Force Resolution REMOVED for Flexbox Layout
-        // this.canvas.width = 800; 
-        // this.canvas.height = 600;
+        // Scratch Canvas for Tinting
+        this.scratchCanvas = document.createElement('canvas');
+        this.scratchCanvas.width = 128; // Max sprite size
+        this.scratchCanvas.height = 128;
+        this.scratchCtx = this.scratchCanvas.getContext('2d')!;
+        this.scratchCtx.imageSmoothingEnabled = false;
     }
 
     getScale(): number {
         return this.scale;
     }
 
+    // RENDERABLE SORTING STRUCTURE
+    // We collect all items, entities, and player into this list
+    // then sort by Y coordinate before drawing.
+    private renderList: Array<{ y: number, draw: () => void }> = [];
+
     draw(map: WorldMap, player: Player, visibleEntities: any[] = [], world: any = null) {
         const screenWidth = this.canvas.width;
         const screenHeight = this.canvas.height;
-
-        this.ctx.imageSmoothingEnabled = false;
-        this.ctx.globalAlpha = 1.0;
-        // Clear Screen (Dark Green)
-        this.ctx.fillStyle = '#1e331e';
+        // TIBIA GREEN BACKGROUND: Masks gaps in "jagged" grass tiles
+        this.ctx.fillStyle = '#426829'; // Tibia Grass Green
         this.ctx.fillRect(0, 0, screenWidth, screenHeight);
 
-        // Camera Calculation
-        const camX = Math.floor((player.x * TILE_SIZE) - (screenWidth / 2) + (TILE_SIZE / 2));
-        const camY = Math.floor((player.y * TILE_SIZE) - (screenHeight / 2) + (TILE_SIZE / 2));
+        // PIXEL ART MODE: Disable Smoothing (Fixes "Blurry" sprites)
+        this.ctx.imageSmoothingEnabled = false;
 
-        const startCol = Math.floor(Math.max(0, camX / TILE_SIZE));
-        const endCol = Math.floor(Math.min(map.width, (camX + screenWidth) / TILE_SIZE + 1));
-        const startRow = Math.floor(Math.max(0, camY / TILE_SIZE)) - 1; // Buffer for tall objects above
-        const endRow = Math.floor(Math.min(map.height, (camY + screenHeight) / TILE_SIZE + 2)); // Buffer for sorting
+        const pX = player ? player.x : 0;
+        const pY = player ? player.y : 0;
+        const camX = Math.floor((pX * TILE_SIZE) - (screenWidth / 2) + (TILE_SIZE / 2));
+        const camY = Math.floor((pY * TILE_SIZE) - (screenHeight / 2) + (TILE_SIZE / 2));
 
-        // Z-SORTED RENDER LOOP (Row by Row)
-        let debugDrawn = false;
+        const startCol = Math.max(0, Math.floor(camX / TILE_SIZE));
+        const endCol = Math.min(map.width, Math.ceil((camX + screenWidth) / TILE_SIZE) + 1);
+        const startRow = Math.max(0, Math.floor(camY / TILE_SIZE));
+        const endRow = Math.min(map.height, Math.ceil((camY + screenHeight) / TILE_SIZE) + 1);
+
+        // STEP 1: Draw Floor (Always Bottom)
+        // STEP 1: Draw Floor (Always Bottom)
+        // Check sprite existence and size to decide if we skip (Tall objects draw later)
+
         for (let r = startRow; r < endRow; r++) {
-
-            // 1. Draw Floor & Decor (Layer 0)
             for (let c = startCol; c < endCol; c++) {
-                if (r < 0 || r >= map.height) continue;
-                const tile = map.getTile(c, r);
-                if (!tile) continue;
+                if (c >= 0 && c < map.width && r >= 0 && r < map.height) {
+                    const idx = r * map.width + c;
+                    const tile = map.tiles[idx];
+                    if (tile && tile.items.length > 0) {
+                        const itemId = tile.items[0].id;
+                        // Check Height
+                        const rect = assetManager.getSpriteRect(itemId);
+                        const isTall = rect.h > 32;
 
-                if (!debugDrawn && Math.random() < 0.0001) {
-                    // console.log(`[Renderer] Drawing Tile ${c},${r}. Items: ${tile.items.length}`);
-                    debugDrawn = true;
-                }
-
-                const drawX = Math.round(c * TILE_SIZE - camX);
-                const drawY = Math.round(r * TILE_SIZE - camY);
-
-                // Render floor items FIRST
-                for (const item of tile.items) {
-                    // Skip 'Tall' items here? No, we just exclude Player.
-                    // Ideally we should distinguish "Floor" vs "Object"
-                    // Hack: ID 0=Player. ID 17=Wall (Tall). ID 5=Tree (Tall).
-
-                    if (item.id === 0) continue; // Skip Player (handled specifically)
-
-                    const sprite = assetManager.getSpriteSource(item.id);
-                    if (sprite) {
-                        // Tall Object Logic is baked into drawY offset
-                        const tallOffset = sprite.sh - 32;
-
-                        // FIX: seamless tiles & connected walls
-                        // We use "Aggressive Overlap" to hide texture borders and connect pillars.
-
-                        const isFloor = sprite.sh === 32;
-
-                        // Floor: Overlap all sides to hide grid gaps
-                        // Wall: Overlap width to connect pillars, keep height strict
-                        const dilateX = 1; // -1 to +2 (Total 2px extra width)
-                        const dilateY = isFloor ? 1 : 0; // Only dilate floors vertically
-
-                        // Draw Position: x - 1, y - 1
-                        // Draw Size: w + 2, h + 2
-
-                        this.ctx.drawImage(
-                            sprite.image,
-                            sprite.sx, sprite.sy, sprite.sw, sprite.sh,
-                            drawX - dilateX, drawY - tallOffset - dilateY,
-                            sprite.sw + (dilateX * 2), sprite.sh + (dilateY * 2)
-                        );
-                    } else {
-                        this.ctx.fillStyle = '#ff00ff';
-                        this.ctx.fillRect(drawX, drawY, 32, 32);
+                        // Only draw as floor if NOT tall
+                        if (!isTall) {
+                            this.drawItem(itemId, c, r, camX, camY);
+                        }
                     }
                 }
             }
+        }
 
-            // 2. Draw Player
-            // If the player is structurally "standing" on this row, draw them now.
-            // This ensures they are drawn AFTER this row's floor/walls (standing on top),
-            // but BEFORE the next row's walls (which will cover their head).
-            // Using Math.floor(player.y) correctly places player 'behind' row+1 walls.
-            if (r === Math.floor(player.y)) {
-                // Calculate PCoords here
-                const pDrawX = Math.floor(player.x * TILE_SIZE - camX);
-                const pDrawY = Math.floor(player.y * TILE_SIZE - camY);
-                // The new renderPlayer expects pure screen coords, but also handles 32x32 draw.
-                // We pass in the TOP-LEFT.
-                // Note: Previous code had `pDrawY - 12` offset. The new Prompt code uses `screenY`.
-                // If I pass pDrawY directly, it draws at tile top-left.
-                // The prompt code `ctx.drawImage(..., screenX, screenY, 32, 32)`.
-                // I will pass `pDrawY - 12` to maintain the feet alignment visual, 
-                // OR adhere to strict prompt `screenX, screenY`.
-                // Strict prompt implies "Draw EXACTLY 32x32".
-                // If I remove offset, player might look like they are floating or low?
-                // Standard tile: 32x32. Player: 32x32. If strict, they overlap perfectly.
-                // I'll stick to strict `pDrawY` (no offset) if the prompting suggests standardizing.
-                // Actually, let's keep the -12 logic IF it was about "feet alignment" to center on tile.
-                // But prompt said "No Cut-off".
-                // I'll pass pDrawY - 12.
-                // Wait. `row` logic relies on `player.direction`.
-                this.renderPlayer(this.ctx, player, pDrawX, pDrawY - 12);
+        // STEP 2: Collect Sortables (Layer 1 Items, Entities, Player, Tall Layer 0 Items)
+        this.renderList = [];
+
+        // A. World Items
+        for (let r = startRow; r < endRow; r++) {
+            for (let c = startCol; c < endCol; c++) {
+                if (c >= 0 && c < map.width && r >= 0 && r < map.height) {
+                    const idx = r * map.width + c;
+                    const tile = map.tiles[idx];
+                    if (tile && tile.items.length > 0) {
+                        // Check ALL items
+                        for (let i = 0; i < tile.items.length; i++) {
+                            const itemId = tile.items[i].id;
+                            const rect = assetManager.getSpriteRect(itemId);
+                            const isTall = rect.h > 32;
+
+                            // If it's tall OR it's a stacked item (index > 0), add to sort list
+                            if (isTall || i > 0) {
+                                this.renderList.push({
+                                    y: (r + 1) * TILE_SIZE, // Base of the tile
+                                    draw: () => this.drawItem(itemId, c, r, camX, camY),
+                                    debugId: isTall ? "TALL_OBJ" : "OBJ"
+                                } as any);
+                            }
+                        }
+                    }
+                }
             }
         }
 
+        // B. Entities (Mobs)
+        visibleEntities.forEach(ent => {
+            const baseX = Math.round(ent.x - camX);
+            const baseY = Math.round(ent.y - camY);
+            // Sort Key: Entity Y + Height (approx 32)
+            this.renderList.push({
+                y: ent.y * TILE_SIZE + 32,
+                draw: () => {
+                    const tint = ent.tint;
+                    const sprite = assetManager.getSpriteSource(ent.spriteIndex);
+                    if (sprite && sprite.image) {
+                        // 2.5D Projection using sprite source
+                        const ratio = sprite.sh / sprite.sw;
+                        const dstW = TILE_SIZE;
+                        const dstH = Math.round(TILE_SIZE * ratio);
+                        const verticalOffset = dstH - TILE_SIZE;
+                        const drawY = baseY - verticalOffset;
 
-        // 3. Draw Visible Entities (Monsters, NPCs)
-        if (visibleEntities && world) {
-            this.drawEntities(visibleEntities, world, player);
-        }
+                        let renderSource: CanvasImageSource = sprite.image;
+                        let sx = sprite.sx;
+                        let sy = sprite.sy;
+                        let sw = sprite.sw;
+                        let sh = sprite.sh;
 
-        // 4. Draw Damage Text
-        damageTextManager.draw(this.ctx, camX, camY);
+                        if (tint) {
+                            // CLEAR scratch
+                            this.scratchCtx.clearRect(0, 0, sw, sh);
+                            // DRAW sprite
+                            this.scratchCtx.globalCompositeOperation = 'source-over';
+                            this.scratchCtx.drawImage(sprite.image, sx, sy, sw, sh, 0, 0, sw, sh);
+                            // TINT
+                            this.scratchCtx.globalCompositeOperation = 'source-atop';
+                            this.scratchCtx.fillStyle = tint.color;
+                            this.scratchCtx.fillRect(0, 0, sw, sh);
 
-        this.ctx.imageSmoothingEnabled = false;
+                            // Use Scratch
+                            renderSource = this.scratchCanvas;
+                            sx = 0; sy = 0;
+                        }
 
-        // --- GHOST ITEM (Drag & Drop) ---
-        if (player.targetId !== null) {
-            // We need to find the entity's position to draw the box.
-            // But checking ALL entities in Renderer might be slow if we rely on ECS map iterations.
-            // Ideally, we passed 'visibleEntities' or similar. 
-            // OR, we just check if the target is in the viewport (which we are iterating).
-            // But we already iterated.
-            // Let's iterate map again? No.
-            // Let's rely on Main.ts passing the target pos? Or ECS query?
-            // Renderer has access to 'map', but map tiles only have Items (IDs), not Entity IDs directly unless linked.
-            // Wait, ECS Entities have Position. Map tiles have Items.
-            // If the target is an ECS entity (Monster), we need its Position.
-            // Renderer doesn't know about current ECS World state directly, it draws 'map'.
-            // BUT, main.ts passes 'map'.
-            // Actually, 'draw' method signature might need 'world' if we want to find any entity by ID.
-            // OR: We just draw the box if we encounter the entity while drawing tiles?
-            // Tile items are just `new Item(id)`. They don't store Entity ID (unless unique).
-            // Monsters are likely ECS entities separate from Tile Items?
-            // Checking Main.ts:
-            // "renderer.draw(game.map, game.player);"
-            // "renderer.draw" iterates `map.getTile`.
-            // Monsters are entities. Do they exist on the map tiles?
-            // Main.ts doesn't seem to push monsters into map tiles exclusively?
-            // "movementSystem" moves them. Does it update map tiles?
-            // If Monsters are NOT on map tiles, Renderer won't draw them in the loop above?
-            // Let's check Main.ts -> Renderer usage.
-            // Step 23130 (Renderer) shows it iterates tiles and draws items.
-            // If monsters aren't items in tiles, they aren't drawn!
-            // Main.ts: "renderer.draw(game.map, game.player)"
-            // Unless monsters are added to tiles?
-            // `movementSystem` usually handles position.
-            // If Renderer only draws Map Tiles, then Monsters MUST be on tiles.
-            // Let's Assume they are.
-            // If so, we need to know linked Entity ID for a Tile Item.
-            // The `Item` class in `core/types.ts` has `id`. Is that Sprite ID? Yes.
-            // It doesn't seem to have Entity ID.
-            // CRITICAL ARCHITECTURE ISSUE: Renderer draws TILES. Monsters are ENTITIES.
-            // If Monsters are not injected into visual Map, they are invisible.
-            // PROMPT assumption: "Modify `renderEntity` (or similar)..."
-            // The prompt assumes I can just check `entity.id === player.targetId` inside the draw loop.
-            // But the draw loop iterates TILES. 
-            // I will add a separate loop for ENTITIES if passed, or rely on a "visibleEntities" list passed to draw.
-            // BUT, I can't change Main.ts signature too much without verifying.
-            // Let's look at `render.ts` again.
-            // It draws `tile.items`.
-            // Does `game.ts` `movementSystem` put monsters in tiles?
-            // `map.getTile(...).items.push(...)`?
-            // If not, the current Renderer DOES NOT DRAW MONSTERS.
-            // (Unless they are static items).
-            // Re-reading `main.ts` spawn: "world.createEntity... Position... Sprite".
-            // It creates ECS entities.
-            // It does NOT seem to add them to `map.tiles`.
-            // SO MONSTERS ARE INVISIBLE currently?
-            // Wait, `renderer.ts` draw loop only draws `map.getTile`.
-            // AND `player` (explicitly).
-            // If so, Monsters never render.
-            // Fix: Pass `entities` to `renderer.draw`.
-            // I will updated `renderer.ts` to accept `entities` list and draw them.
-            // Then I can draw the box.
-        }
+                        this.ctx.globalAlpha = 1.0;
+                        this.ctx.drawImage(
+                            renderSource,
+                            sx, sy, sw, sh,
+                            baseX, drawY,
+                            dstW, dstH
+                        );
 
+                        // --- EQUIPMENT OVERLAY ---
+                        if ((ent as any).equipment) { // Use type assertion or access directly
+                            const eq = (ent as any).equipment;
+                            const slots = ['body', 'head', 'lhand', 'rhand']; // Draw Order
+                            slots.forEach((slot: string) => {
+                                const itemSpriteId = eq[slot];
+                                if (itemSpriteId) {
+                                    const iSprite = assetManager.getSpriteSource(itemSpriteId);
+                                    if (iSprite && iSprite.image) {
+                                        const iDstW = TILE_SIZE;
+                                        const iDstH = Math.round(TILE_SIZE * (iSprite.sh / iSprite.sw));
+
+                                        // Align Bottoms to match 2.5D Entity
+                                        const iDrawY = (drawY + dstH) - iDstH;
+
+                                        this.ctx.drawImage(
+                                            iSprite.image,
+                                            iSprite.sx, iSprite.sy, iSprite.sw, iSprite.sh,
+                                            baseX, iDrawY,
+                                            iDstW, iDstH
+                                        );
+                                    }
+                                }
+                            });
+                        }
+
+                        // NAME & HEALTH BAR
+                        if (ent.name) {
+                            this.ctx.font = '10px monospace';
+                            this.ctx.textAlign = 'center';
+                            const cx = baseX + 16;
+                            const cy = drawY - 12;
+
+                            // Name
+                            this.ctx.fillStyle = '#000';
+                            this.ctx.fillText(ent.name, cx + 1, cy + 1);
+                            this.ctx.fillStyle = '#fff'; // Green? No, white for name
+                            if (ent.tint) this.ctx.fillStyle = ent.tint.color; // Match tint? No, stick to white/green
+                            this.ctx.fillStyle = '#0f0'; // Tibia Green Names
+                            this.ctx.fillText(ent.name, cx, cy);
+
+                            // Health Bar
+                            if (ent.health) {
+                                const pct = ent.health.current / ent.health.max;
+                                const barW = 26;
+                                const barH = 4;
+                                const bx = cx - barW / 2;
+                                const by = cy + 2;
+
+                                // Bg
+                                this.ctx.fillStyle = '#000';
+                                this.ctx.fillRect(bx, by, barW, barH);
+                                // Fg
+                                const hpColor = pct > 0.5 ? '#0f0' : (pct > 0.2 ? '#ff0' : '#f00');
+                                this.ctx.fillStyle = hpColor;
+                                this.ctx.fillRect(bx + 1, by + 1, (barW - 2) * pct, barH - 2);
+                            }
+                        }
+                    } else {
+                        // DEBUG: Log first few failures
+                        if (Math.random() < 0.01) console.warn(`[Renderer] Missing Sprite Image for Entity ID ${ent.spriteIndex}. Obj:`, sprite);
+                        this.ctx.fillStyle = '#ff0000';
+                        this.ctx.fillRect(baseX, baseY, 32, 32);
+                    }
+
+                    // --- TARGET INDICATOR ---
+                    if ((ent as any).isTarget) {
+                        this.ctx.strokeStyle = '#ff0000';
+                        this.ctx.lineWidth = 1;
+                        this.ctx.strokeRect(baseX - 1, drawY, 32 + 2, Math.round(TILE_SIZE * (sprite ? sprite.sh / sprite.sw : 1)));
+                        // Also a small marker above head?
+                        this.ctx.fillStyle = '#ff0000';
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(baseX + 16, drawY - 4);
+                        this.ctx.lineTo(baseX + 12, drawY - 10);
+                        this.ctx.lineTo(baseX + 20, drawY - 10);
+                        this.ctx.fill();
+                    }
+                },
+                debugId: "ENTITY"
+            });
+        });
+
+        // C. Player (The Hero)
+        const pScreenX = Math.floor(pX * TILE_SIZE - camX);
+        const pScreenY = Math.floor(pY * TILE_SIZE - camY);
+
+
+        // Check Player Sprite Height for offset
+        // Assuming player matches current logic, but let's be safe inside renderPlayer or here.
+        // renderPlayer handles drawing, but we need sort key.
+
+        this.renderList.push({
+            y: (pY + 1) * TILE_SIZE - 4, // Player feet
+            draw: () => this.renderPlayer(this.ctx, player, pScreenX, pScreenY),
+            debugId: "PLAYER"
+        } as any);
+
+        // STEP 3: SORT & EXECUTE
+
+        // STEP 3: SORT & EXECUTE
+        // Sort ascending by Y (lower Y draws first/behind, higher Y draws last/front)
+        this.renderList.sort((a, b) => a.y - b.y);
+
+        this.renderList.forEach(item => item.draw());
+
+        // STEP 4: Render Floating Text (Always Top)
+        damageTextManager.render(this.ctx, camX, camY);
     }
 
+    // Deprecated renderLayer (Kept empty or removed, replaced by loop above)
+    // We can remove it to clean up.
+    private noOp() { }
 
-    public drawEntities(entities: any[], world: any, player: Player) {
-        const screenWidth = this.canvas.width;
-        const screenHeight = this.canvas.height;
-        const camX = Math.floor((player.x * TILE_SIZE) - (screenWidth / 2) + (TILE_SIZE / 2));
-        const camY = Math.floor((player.y * TILE_SIZE) - (screenHeight / 2) + (TILE_SIZE / 2));
+    private spyItem: boolean = false;
 
-        // DEBUG: Log entity drawing periodically
-        if (entities.length > 0 && Date.now() % 2000 < 20) {
-            console.log('[Renderer] drawEntities called with', entities.length, 'entities');
+    private drawItem(id: number, tx: number, ty: number, camX: number, camY: number) {
+        // Reset Alpha (Safety)
+        this.ctx.globalAlpha = 1.0;
+
+        const drawX = Math.round(tx * TILE_SIZE - camX);
+        const baseY = Math.round(ty * TILE_SIZE - camY);
+
+        const sprite = assetManager.getSpriteSource(id);
+
+        if (sprite) {
+            // 2.5D PROJECTION FIX:
+            // For 32x64 sprites (walls), we must:
+            // 1. Use the ACTUAL sprite height (not force 32x32)
+            // 2. Apply vertical offset so sprite "stands" on the tile
+
+            // Calculate destination size from source sprite
+            // For procedural 32x64 walls: sw=32, sh=64
+            // We want dstW=32, dstH=64 (1:1 pixel ratio for our procedural sprites)
+            const dstW = TILE_SIZE; // Always 32px wide
+
+            // Calculate height: Use sprite aspect ratio
+            // For 32x64 source: ratio = 64/32 = 2.0, so dstH = 32 * 2 = 64
+            const ratio = sprite.sh / sprite.sw;
+            const dstH = Math.round(TILE_SIZE * ratio);
+
+            // THE VERTICAL OFFSET (The Key to 2.5D):
+            // Formula: drawY = baseY - (spriteHeight - 32)
+            // This makes tall sprites "stand" on the tile, projecting upward
+            const verticalOffset = dstH - TILE_SIZE;
+            const drawY = baseY - verticalOffset;
+
+
+            this.ctx.drawImage(
+                sprite.image,
+                sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+                drawX, drawY,
+                dstW, dstH
+            );
+        } else {
+            // Fallback Debug Box
+            if (id !== 0) {
+                this.ctx.fillStyle = '#ff00ff';
+                this.ctx.fillRect(drawX, baseY, 32, 32);
+            }
+        }
+    }
+
+    public renderPlayer(ctx: CanvasRenderingContext2D, player: Player, screenX: number, screenY: number) {
+        ctx.globalAlpha = 1.0; // Reset Alpha
+
+        // Force Override Checking
+        if (player.spriteId !== 199) {
+            console.warn(`[Renderer] Player Sprite ID was ${player.spriteId}, FORCING 199`);
+            player.spriteId = 199;
         }
 
+        // Get player sprite using unified system
+        const sprite = assetManager.getSpriteSource(player.spriteId);
+
+        if (!sprite || !sprite.image) return;
+
+        // 2.5D PROJECTION FIX for Player:
+        // Player sprites are 32x64, same as walls
+        const TILE_SIZE = 32;
+        const ratio = sprite.sh / sprite.sw;  // For 32x64: ratio = 2.0
+        const dstW = TILE_SIZE;  // Always 32px wide
+        const dstH = Math.round(TILE_SIZE * ratio);  // 64px for tall player
+
+        // Vertical Offset: Player "stands" on the tile, head projects up
+        // Formula: drawY = screenY - (dstH - TILE_SIZE)
+        const verticalOffset = dstH - TILE_SIZE;
+        const drawY = screenY - verticalOffset;
+
+        ctx.drawImage(
+            sprite.image,
+            sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+            screenX, drawY,
+            dstW, dstH
+        );
+    }
+    private hasLoggedPlayer = false;
+
+    public drawEntities(entities: any[], camX: number, camY: number) {
+        const screenWidth = this.canvas.width;
+        const screenHeight = this.canvas.height;
+
         entities.forEach(ent => {
-            // ent structure expected: { id: number, x: number, y: number, spriteIndex: number, name?: string }
-            // Main.ts will form this object to decouple Renderer from ECS classes
+            const baseX = Math.round(ent.x - camX);
+            const baseY = Math.round(ent.y - camY);
 
-            const drawX = Math.round(ent.x - camX);
-            const drawY = Math.round(ent.y - camY);
+            if (baseX < -64 || baseX > screenWidth || baseY < -64 || baseY > screenHeight) return;
 
-            // Bounds Check (Simple)
-            if (drawX < -32 || drawX > screenWidth || drawY < -32 || drawY > screenHeight) return;
-
-            // Draw Sprite
+            // Use unified sprite source for entities
             const sprite = assetManager.getSpriteSource(ent.spriteIndex);
-            if (sprite) {
-                // Monsters/NPCs usually just 1 frame for now? Or pass animation state?
-                // For simplicity Phase 5: Draw frame 0.
-                // If we want animation, ent should include frame info.
 
-                // Draw
+            if (sprite && sprite.image) {
+                // 2.5D Projection for entities
+                const ratio = sprite.sh / sprite.sw;
+                const dstW = TILE_SIZE;
+                const dstH = Math.round(TILE_SIZE * ratio);
+                const verticalOffset = dstH - TILE_SIZE;
+                const drawY = baseY - verticalOffset;
+
                 this.ctx.drawImage(
                     sprite.image,
                     sprite.sx, sprite.sy, sprite.sw, sprite.sh,
-                    drawX, drawY - (sprite.sh - 32), // Offset for tall sprites
-                    sprite.sw, sprite.sh
+                    baseX, drawY,
+                    dstW, dstH
                 );
             } else {
-                // Fallback Box
                 this.ctx.fillStyle = '#ff0000';
-                this.ctx.fillRect(drawX, drawY, 32, 32);
-            }
-
-            // Draw Targeting Box
-            if (player.targetId === ent.id) {
-                this.ctx.strokeStyle = '#ff0000';
-                this.ctx.lineWidth = 2;
-
-                // Animate box? Pulse?
-                const pulse = (Math.sin(Date.now() / 200) * 2) + 2; // 0 to 4 padding modification?
-                // Just keep it simple: 2px gap
-                const gap = 2;
-
-                // Draw Rect around the entity
-                // Note: use sprite.sw/sh size ideally, or tile size.
-                // Lets use TILE_SIZE (32x32) base.
-                this.ctx.strokeRect(drawX - gap, drawY - (sprite ? sprite.sh - 32 : 0) - gap, 32 + (gap * 2), (sprite ? sprite.sh : 32) + (gap * 2));
-
-                // Add "Target" text?
-                // this.ctx.fillStyle = '#ff0000';
-                // this.ctx.font = '10px Arial';
-                // this.ctx.fillText('TARGET', drawX, drawY - 10);
+                this.ctx.fillRect(baseX, baseY, 32, 32);
             }
         });
     }
-    // Updated renderPlayer (Matches User 'Master Fix')
-    public renderPlayer(ctx: CanvasRenderingContext2D, player: Player, screenX: number, screenY: number) {
-        // 0. Get Sprite (AssetManager)
-        const sheet = assetManager.getImage('knight_sheet');
-        if (!sheet) return;
 
-        // 1. SAFE Direction (Row 0-3)
-        let row = player.direction || 0;
-        if (row > 3) row = 0;
+    // Hit Detection Helper
+    public getObjectAt(map: WorldMap, player: Player, worldX: number, worldY: number) {
+        const centerC = Math.floor(worldX / TILE_SIZE);
+        const centerR = Math.floor(worldY / TILE_SIZE);
 
-        // 2. SAFE Animation (Column 0-3)
-        // 150ms per frame. If not moving, show frame 0.
-        const col = player.isMoving
-            ? Math.floor(Date.now() / 150) % 4
-            : 0;
+        for (let r = centerR + 1; r >= centerR - 1; r--) {
+            for (let c = centerC + 1; c >= centerC - 1; c--) {
+                const tile = map.getTile(c, r);
+                if (!tile || tile.items.length === 0) continue;
 
-        // 3. Draw EXACTLY 32x32 pixels
-        // Source: 32x32 | Dest: 32x32
-        ctx.drawImage(
-            sheet,
-            col * 32, row * 32,  // Source X, Y
-            32, 32,              // Source W, H
-            screenX, screenY,    // Dest X, Y
-            32, 32               // Dest W, H
-        );
+                for (let i = tile.items.length - 1; i >= 0; i--) {
+                    const item = tile.items[i];
+                    // Strict Grid Match for now
+                    const itemWorldX = c * TILE_SIZE;
+                    const itemWorldY = r * TILE_SIZE;
+
+                    if (
+                        worldX >= itemWorldX &&
+                        worldX < itemWorldX + 32 &&
+                        worldY >= itemWorldY &&
+                        worldY < itemWorldY + 32
+                    ) {
+                        return { x: c, y: r, item: item, stackIndex: i };
+                    }
+                }
+            }
+        }
+        return null;
     }
 }
