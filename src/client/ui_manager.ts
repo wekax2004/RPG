@@ -2,8 +2,7 @@ import { Entity, World } from '../engine';
 import { SPRITES } from '../constants';
 import { Player } from '../core/player';
 import { WorldMap } from '../core/map';
-import { Health, Name, Position, Sprite, Target, Inventory, ItemInstance, Skills } from '../components';
-import { Item } from '../core/types';
+import { Health, Name, Position, Sprite, Target, Inventory, ItemInstance, Skills, PlayerControllable, Item } from '../components';
 import { assetManager } from '../assets';
 import { ItemRegistry } from '../data/items';
 import { attemptCastSpell } from '../game';
@@ -12,7 +11,7 @@ import { gameEvents, EVENTS } from '../core/events';
 // Define what an Open Window looks like
 interface ContainerWindow {
     uid: string; // Unique ID to track window
-    item: Item;  // Reference to the actual item data
+    item: ItemInstance;  // Reference to the actual item data
     x: number;   // Screen X
     y: number;   // Screen Y
     rows: number;
@@ -37,8 +36,15 @@ export class UIManager {
     public shopPanel: HTMLElement = document.createElement('div');
     public bagPanel: HTMLElement = document.createElement('div'); // Stub for compatibility
     public currentMerchant: any = null;
-    public activeMerchantId: number | null = null;
+    public activeMerchantId: any | null = null;
     public console: any = { addSystemMessage: (msg: string) => this.log(msg) };
+    public world: World | undefined;
+
+    public updateInventory(inv: any): void {
+        // Trigger re-render of bag if open
+        // this.renderBag(inv); 
+    }
+
 
     // Loot Panel Properties
     public activeLootEntityId: number | null = null;
@@ -62,7 +68,7 @@ export class UIManager {
     public mouseX: number = 0;
     public mouseY: number = 0;
 
-    private chatInput: HTMLInputElement;
+    private chatInput!: HTMLInputElement;
 
     // Cache
     private equipmentSlots: Record<string, HTMLElement> = {};
@@ -70,7 +76,6 @@ export class UIManager {
     private inventoryPanel: HTMLElement | null = null; // New Inventory Panel
 
     // Shop
-    public activeMerchantId: number | null = null;
     public targetingItem: any = null;
 
     // Player Reference (Cached from update)
@@ -386,7 +391,7 @@ export class UIManager {
             }
 
             if (cmd === '!gear') {
-                if (this.player && this.player.entity) {
+                if (this.player && this.player.id !== undefined) {
                     this.log("Restoring Starter Gear...", '#00ff00');
                     // Access Global World
                     const world = (window as any).game?.world;
@@ -395,7 +400,7 @@ export class UIManager {
                         return;
                     }
 
-                    const inv = world.getComponent(this.player.entity, Inventory);
+                    const inv = world.getComponent(this.player.id, Inventory);
                     if (inv) {
                         // Add Bag (if not present)
                         if (!inv.getEquipped('backpack')) {
@@ -447,7 +452,7 @@ export class UIManager {
             }
 
             if (cmd === '!debug') {
-                this.log("Debug Info: " + this.player?.entity, '#ffff00');
+                if (this.player) this.log(`Debug: Player ID: ${this.player.id}`, '#ffff00');
                 const world = (window as any).game?.world;
                 this.log("World Entities: " + world?.entities.size, '#ffff00');
                 return;
@@ -513,7 +518,7 @@ export class UIManager {
 
         this.activeLootEntityId = entityId;
         this.lootPanel.style.display = 'block';
-        const header = this.lootPanel.querySelector('.loot-header span');
+        const header = this.lootPanel.querySelector('.loot-header span') as HTMLElement;
         if (header) header.innerText = name;
 
         this.renderLootGrid(items);
@@ -718,7 +723,7 @@ export class UIManager {
         }
 
         this.shopPanel.style.display = 'block';
-        const header = this.shopPanel.querySelector('.shop-header span');
+        const header = this.shopPanel.querySelector('.shop-header span') as HTMLElement;
         if (header) header.innerText = `Shop: ${merchantName}`;
 
         this.renderShop(merchantComp);
@@ -746,7 +751,7 @@ export class UIManager {
             card.className = 'shop-item-card';
 
             // Sprite
-            const spriteInfo = assetManager.getSpriteSource(itemDef.uIndex);
+            const spriteInfo = assetManager.getSpriteSource(itemDef.uIndex || 0);
             let imgHtml = '<div class="shop-icon-placeholder"></div>';
             if (spriteInfo && spriteInfo.image) {
                 // Use canvas for sprite
@@ -757,7 +762,7 @@ export class UIManager {
             card.innerHTML = `
                 <div class="shop-item-info">
                     <div class="shop-item-name">${itemDef.name}</div>
-                    <div class="shop-item-price">${itemDef.value || 10} GP</div>
+                    <div class="shop-item-price">${itemDef.price || 10} GP</div>
                 </div>
                 <button class="buy-btn">Buy</button>
              `;
@@ -788,7 +793,7 @@ export class UIManager {
                 // HACK: Find player inventory via World (global) is hard here.
                 // Let's pass a callback closure when calling toggleShop?
                 // Or just emit a custom event "shopBuy"
-                const event = new CustomEvent('shopBuy', { detail: { item: itemDef, price: itemDef.value } });
+                const event = new CustomEvent('shopBuy', { detail: { item: itemDef, price: itemDef.price || 10 } });
                 document.dispatchEvent(event);
             };
 
@@ -812,26 +817,35 @@ export class UIManager {
         // Wait, Player (visual) has inventory array? Let's check types.ts or how we pass it.
         // Assuming visual player has .inventory as array of items
 
-        const items = this.player.inventory; // Assuming this is an array
+        const inv = this.player.inventory;
+        const items: Item[] = [];
+        if (inv) {
+            inv.equipment.forEach((inst) => {
+                items.push(inst.item);
+                if (inst.item.containerSize) {
+                    inst.contents.forEach(c => items.push(c.item));
+                }
+            });
+        }
 
-        if (!items || items.length === 0) {
+        if (items.length === 0) {
             grid.innerHTML = '<div style="padding:20px; color:#aaa">Nothing to sell.</div>';
             return;
         }
 
-        items.forEach((item: any, index: number) => {
+        items.forEach((item: Item, index: number) => {
             if (!item) return;
 
             const card = document.createElement('div');
             card.className = 'shop-item-card';
 
-            const sellPrice = Math.floor((item.value || 0) * 0.5);
+            const sellPrice = Math.floor((item.price || 0) * 0.5);
 
             // Skip non-valuable items?
             if (sellPrice <= 0) return;
 
             // Sprite logic (Reusing existing logic or simplified)
-            const spriteInfo = assetManager.getSpriteSource(item.uIndex);
+            const spriteInfo = assetManager.getSpriteSource(item.uIndex || 0);
 
             let iconHtml = '';
             if (spriteInfo && spriteInfo.image) {
@@ -891,7 +905,7 @@ export class UIManager {
 
 
     // 1. Function to Open a Window
-    public openContainer(item: Item) {
+    public openContainer(item: ItemInstance) {
         // Check if already open?
         if (this.openContainers.find(c => c.item === item)) return;
 
@@ -952,7 +966,7 @@ export class UIManager {
             const startY = win.y + HEADER + PADDING;
             const startX = win.x + PADDING;
 
-            for (let s = 0; s < win.item.capacity; s++) {
+            for (let s = 0; s < win.item.item.containerSize; s++) {
                 // Math for 2D Grid
                 const col = s % win.cols;
                 const row = Math.floor(s / win.cols);
@@ -965,11 +979,13 @@ export class UIManager {
                 ctx.fillRect(slotX, slotY, 32, 32);
                 ctx.strokeStyle = '#808080';
                 ctx.strokeRect(slotX, slotY, 32, 32);
-
                 // Draw Item inside?
-                if (win.item.inventory[s]) {
-                    const innerItem = win.item.inventory[s];
-                    const sprite = assetManager.getSpriteSource(innerItem.id);
+                if (win.item.contents[s]) {
+                    const innerItem = win.item.contents[s];
+                    // innerItem is ItemInstance, has .item
+                    // We need sprite from item definition
+                    // If innerItem.item is just Item class, it has uIndex.
+                    const sprite = assetManager.getSpriteSource(innerItem.item.uIndex || 0); // Fix: Access .item
                     if (sprite) {
                         ctx.drawImage(
                             sprite.image,
@@ -1001,7 +1017,7 @@ export class UIManager {
                 screenY >= win.y && screenY <= win.y + h) {
 
                 // Inside window, check slots
-                for (let s = 0; s < win.item.capacity; s++) {
+                for (let s = 0; s < win.item.item.containerSize; s++) {
                     const col = s % win.cols;
                     const row = Math.floor(s / win.cols);
                     const slotX = startX + (col * SLOT_SIZE);
@@ -1170,7 +1186,7 @@ export class UIManager {
             if (grid) {
                 grid.innerHTML = '';
                 const bag = inv.getEquipped('backpack');
-                if (bag && bag.contents) {
+                if (bag && bag.item.containerSize) {
                     bag.contents.forEach((inst, idx) => {
                         const slot = document.createElement('div');
                         slot.className = 'loot-slot';
@@ -1254,39 +1270,6 @@ export class UIManager {
         this.draggingFrom = null;
     }
 
-    // --- SKILLS UI INTERACTION ---
-    public toggleSkills(skills: any) {
-        // Highlighting the sidebar instead of opening a modal
-        this.log("Skills are shown in the right sidebar.");
-        const sidebar = document.getElementById('skills-container');
-        if (sidebar) {
-            sidebar.style.transition = "border-color 0.2s";
-            sidebar.style.borderColor = "#ffd700";
-            setTimeout(() => {
-                sidebar.style.borderColor = "#555";
-            }, 500);
-        }
-    }
-    private onChatInput() {
-        if (!this.chatInput) return;
-        const text = this.chatInput.value.trim();
-        if (!text) return;
-
-        this.chatInput.value = '';
-
-        if (this.world) {
-            const player = this.world.query([PlayerControllable])[0];
-            if (player !== undefined && attemptCastSpell(this.world, player, text, this)) {
-                // Spell handled (success or fail with msg)
-                // If success, we might want to log it in orange
-                // If fail, we logged system msg
-                return;
-            }
-        }
-
-        // Local Chat Echo
-        this.log(`You says: "${text}"`, '#fff');
-    }
 
     public setWorld(world: World) {
         this.world = world;

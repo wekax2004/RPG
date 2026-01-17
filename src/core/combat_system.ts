@@ -1,8 +1,6 @@
-
-import {
-    Position, Player, Health, Stats, CombatState, Target, Sprite, Name, Experience, Skills, Lootable, Tint, Corpse, Interactable, CorpseDefinition
-} from '../components';
-import { Item } from './types';
+import { Position, Health, Sprite, Tint, Stats, CombatState, TileMap, FloatingText, Experience, Corpse, ItemInstance, Inventory, Lootable, AI, Target, Skills, Interactable, CorpseDefinition, Item } from '../components';
+import { Player } from './player';
+// import { Item } from './types'; // Removed to use Item from components
 import { SPRITES } from '../constants'; // Moved to top
 import { damageTextManager } from '../client/damage_text';
 import { gameEvents, EVENTS } from './events';
@@ -147,8 +145,8 @@ function handleDeath(world: any, victimId: number) {
         }
 
         const cSprite = new Sprite(corpseSpriteId, 32);
-        cSprite.tint = new Tint('#ffffffff'); // No tint (white)
         world.addComponent(corpseId, cSprite);
+        world.addComponent(corpseId, new Tint('#ffffffff'));
 
         // Add Lootable Component
         const lootItems: Item[] = [];

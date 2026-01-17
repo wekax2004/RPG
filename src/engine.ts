@@ -51,7 +51,7 @@ export class InputHandler {
 
         window.addEventListener('mousedown', (e) => {
             const canvas = document.getElementById('gameCanvas');
-            this.clickedOnCanvas = e.target === canvas || (canvas && canvas.contains(e.target as Node));
+            this.clickedOnCanvas = e.target === canvas || (!!canvas && canvas.contains(e.target as Node));
 
             this.mouseKeys.add(e.button);
             if (e.button === 0) {

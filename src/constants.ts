@@ -15,6 +15,8 @@ export namespace SPRITES {
     export const TORCH = 32;
     export const BACKPACK = 22;
     export const SMALL_BAG = 142;
+    export const ZOMBIE = 300;
+    export const GHOST = 301;
 
     export const GOLD = 40;
     export const POTION = 41;
@@ -161,6 +163,12 @@ export namespace SPRITES {
     export const ICE = 313;
     export const SANDSTONE = 314;
     export const JUNGLE_GRASS = 315;
+
+    // --- NATURE ---
+    export const PINE_TREE = 50; // Reuse/Alias
+    export const CACTUS = 53;    // New ID needed? Using placeholder
+    export const DROWNED_TREE = 54;
+    export const STAIRS_DOWN = 283; // Reuse stairs
 
     // --- BIOME MOBS ---
     export const POLAR_BEAR = 320;

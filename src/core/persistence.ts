@@ -1,5 +1,5 @@
-import { World } from '../engine';
-import { PlayerControllable, Position, Health, Mana, Experience, Inventory, Skills, ItemInstance } from '../components';
+import { World } from '../engine'; // Added World
+import { PlayerControllable, Position, Health, Mana, Experience, Inventory, Skills, ItemInstance, Item } from '../components';
 import { ItemRegistry } from '../data/items';
 import { WorldMap } from './map';
 
@@ -35,7 +35,7 @@ export function saveGame(world: World) {
 
     // Serialize Inventory
     const equippedItems: Array<{ slot: string, itemIdx: number, count: number }> = [];
-    inv.equipment.forEach((inst, slot) => {
+    inv.equipment.forEach((inst: ItemInstance, slot: string) => {
         if (slot !== 'backpack') {
             equippedItems.push({
                 slot: slot,
@@ -132,9 +132,29 @@ export function loadGame(world: World): boolean {
 
             // Re-equip items
             data.player.inventory.equipment.forEach(e => {
-                const itemDef = ItemRegistry[e.itemIdx]; // Assuming Registry is index-based or we need to look up
+                const itemDef = ItemRegistry[e.itemIdx];
                 if (itemDef) {
-                    inv.equip(e.slot, new ItemInstance(itemDef, e.count));
+                    const item = new Item(
+                        itemDef.name,
+                        itemDef.slot || "none",
+                        itemDef.uIndex || 0,
+                        itemDef.attack || 0, // damage
+                        itemDef.price || 0, // price
+                        itemDef.description || "",
+                        itemDef.type === "weapon" ? "melee" : "none",
+                        itemDef.rarity || "common",
+                        itemDef.defense || 0,
+                        0, // bonusHp
+                        0, // bonusMana
+                        itemDef.type === "container",
+                        0, // containerSize
+                        undefined, // glowColor
+                        0, // glowRadius
+                        0, // frame
+                        0, // direction
+                        itemDef.uIndex || 0
+                    );
+                    inv.equip(e.slot, new ItemInstance(item, e.count));
                 }
             });
 
@@ -165,12 +185,44 @@ export function loadGame(world: World): boolean {
             // Simplify: We assume player ALWAYS has a backpack in 'backpack' slot for now.
             // We'll create a new ItemInstance for it.
             if (bagDef) {
-                const bagInst = new ItemInstance(bagDef, 1);
+                const bagItem = new Item(
+                    bagDef.name,
+                    bagDef.slot || "none",
+                    bagDef.uIndex || 0,
+                    bagDef.attack || 0,
+                    bagDef.price || 0,
+                    bagDef.description || "",
+                    bagDef.type === "weapon" ? "melee" : "none",
+                    bagDef.rarity || "common",
+                    bagDef.defense || 0,
+                    0, 0,
+                    true, // isContainer
+                    bagDef.type === "container" ? 20 : 0, // containerSize assumption
+                    undefined, 0, 0, 0,
+                    bagDef.uIndex || 0
+                );
+                const bagInst = new ItemInstance(bagItem, 1);
                 bagInst.contents = [];
                 data.player.inventory.backpack.forEach(b => {
                     const iDef = ItemRegistry[b.itemIdx];
                     if (iDef) {
-                        bagInst.contents.push(new ItemInstance(iDef, b.count));
+                        const item = new Item(
+                            iDef.name,
+                            iDef.slot || "none",
+                            iDef.uIndex || 0,
+                            iDef.attack || 0,
+                            iDef.price || 0,
+                            iDef.description || "",
+                            iDef.type === "weapon" ? "melee" : "none",
+                            iDef.rarity || "common",
+                            iDef.defense || 0,
+                            0, 0,
+                            iDef.type === "container",
+                            0, // containerSize
+                            undefined, 0, 0, 0,
+                            iDef.uIndex || 0
+                        );
+                        bagInst.contents.push(new ItemInstance(item, b.count));
                     }
                 });
                 inv.equip('backpack', bagInst);

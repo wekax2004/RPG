@@ -22,6 +22,9 @@ export class AssetManager {
     async loadAll() {
         console.log("[AssetManager] Loading All Assets (Synchronous Init + Async External)...");
 
+        this.images[310] = this.createSandstone();   // ID 310: Town Ground
+        this.images[311] = this.createTempleFloor(); // ID 311: Temple Floor
+        this.images[312] = this.createSewerGrate();  // ID 312: Rat Sewer
         // 1. Initial procedural setup
         this.init();
 
@@ -202,9 +205,96 @@ export class AssetManager {
                 data[i + 3] = 0;
             }
         }
-
         ctx.putImageData(imageData, 0, 0);
     }
+
+    // =========================================================
+    // ROOKGAARD: SANDSTONE (Town Ground)
+    // =========================================================
+    private createSandstone(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        // Base: Warm Sandy Beige
+        const BASE = '#dccbba';
+        ctx.fillStyle = BASE;
+        ctx.fillRect(0, 0, 32, 32);
+        // Texture: Scatter subtle darker grains
+        for (let i = 0; i < 200; i++) {
+            const x = Math.random() * 32;
+            const y = Math.random() * 32;
+            // Mix of lighter and darker grains
+            ctx.fillStyle = Math.random() > 0.5 ? '#cbbba0' : '#ebdccb';
+            ctx.fillRect(x, y, 1, 1);
+        }
+        // Irregular flagstone cracks (Subtle)
+        ctx.strokeStyle = '#bdaaa0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        // Draw a few random "cracked" lines to look like worn pavement
+        ctx.moveTo(Math.random() * 32, 0);
+        ctx.lineTo(Math.random() * 32, 32);
+        ctx.stroke();
+        return cvs;
+    }
+
+    // =========================================================
+    // ROOKGAARD: TEMPLE BLOCK (Clean Stone)
+    // =========================================================
+    private createTempleFloor(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        // Base: Light Grey / White Stone
+        const BASE = '#e0e0e0';
+        ctx.fillStyle = BASE;
+        ctx.fillRect(0, 0, 32, 32);
+        // Border: Distinct white highlight on top/left
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 32, 1);
+        ctx.fillRect(0, 0, 1, 32);
+        // Shadow: Dark grey on bottom/right
+        ctx.fillStyle = '#a0a0a0';
+        ctx.fillRect(0, 31, 32, 1);
+        ctx.fillRect(31, 0, 1, 32);
+        // Inner Pattern: Large centered square tile
+        ctx.strokeStyle = '#c0c0c0';
+        ctx.strokeRect(4, 4, 24, 24);
+        return cvs;
+    }
+
+    // =========================================================
+    // ROOKGAARD: SEWER GRATE
+    // =========================================================
+    private createSewerGrate(): HTMLCanvasElement {
+        // 1. Draw the floor underneath first (Cobble)
+        const cvs = this.createCobble(); // Reuse your existing cobble
+        const ctx = cvs.getContext('2d')!;
+        // 2. Draw the Iron Bars
+        const GRATE = '#222';
+        const HIGHLIGHT = '#555';
+        ctx.fillStyle = '#111'; // Dark void below
+        ctx.fillRect(4, 4, 24, 24);
+        // Vertical Bars
+        for (let i = 0; i < 3; i++) {
+            const x = 10 + (i * 6);
+            ctx.fillStyle = GRATE;
+            ctx.fillRect(x, 4, 2, 24);
+            ctx.fillStyle = HIGHLIGHT; // Metal shine
+            ctx.fillRect(x, 4, 1, 24);
+        }
+        // Horizontal Bars
+        for (let i = 0; i < 3; i++) {
+            const y = 10 + (i * 6);
+            ctx.fillStyle = GRATE;
+            ctx.fillRect(4, y, 24, 2);
+            ctx.fillStyle = HIGHLIGHT;
+            ctx.fillRect(4, y, 24, 1);
+        }
+        // Frame
+        ctx.strokeStyle = '#444';
+        ctx.strokeRect(4, 4, 24, 24);
+        return cvs;
+    }
+
 
     init() {
         console.log("[AssetManager] Forging Tibia-Quality Textures...");
@@ -588,7 +678,7 @@ export class AssetManager {
             162: '/sprites/ghost.png', // Ghost ID 162? Check constants
             203: '/sprites/slime.png',
             289: '/sprites/necromancer.png',
-            22: '/sprites/zombie.png', // Wait, Zombie Dead is 22. Zombie Live is?
+            // 22: '/sprites/zombie.png', 
             // Checking Mobs.ts again for IDs.
             // Zombie Live: SPRITES.ZOMBIE (Need to check value, likely 200 range)
             // Let's assume ID map is safest way.
@@ -1840,12 +1930,7 @@ export class AssetManager {
     // SKELETON (Monster 32x48)
     // =========================================================
 
-    private createCanvas(w: number, h: number): HTMLCanvasElement {
-        const c = document.createElement('canvas');
-        c.width = w;
-        c.height = h;
-        return c;
-    }
+    // private createCanvas(w: number, h: number): HTMLCanvasElement { ... } // Use existing helper
 
     // =========================================================
     // TIBIA-QUALITY BACKPACK (Volumetric)
@@ -2864,7 +2949,7 @@ export class AssetManager {
         ctx.fillStyle = '#5d4037';
         ctx.beginPath();
         ctx.moveTo(4, 12);
-        ctx.quadTo(16, 2, 28, 12);
+        ctx.quadraticCurveTo(16, 2, 28, 12);
         ctx.closePath();
         ctx.fill();
 

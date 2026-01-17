@@ -12,6 +12,8 @@ export interface ItemDef {
     rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
     glowColor?: string;
     glowRadius?: number;
+    price?: number; // Value in GP
+    description?: string; // Added description
     // Elemental Properties
     elementalDamage?: {
         type: 'fire' | 'ice' | 'lightning' | 'poison';
@@ -33,7 +35,7 @@ export const ItemRegistry: Record<number, ItemDef> = {
     11: { name: "Dirt", type: "other", uIndex: 11 },
     12: { name: "Cobblestone", type: "other", uIndex: 12 },
     13: { name: "Water", type: "other", uIndex: 13 },
-    21: { name: "Stone Wall", type: "other", uIndex: 21 },
+    // 21: { name: "Stone Wall", type: "other", uIndex: 21 },
     17: { name: "Cave Wall", type: "other", uIndex: 17 },
 
     2: { name: "Plate Armor", type: "armor", defense: 8, slot: "body", uIndex: 2 }, // Armor sprite? Need to check assets

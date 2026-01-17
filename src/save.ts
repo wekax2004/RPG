@@ -2,7 +2,7 @@ import { World } from './engine';
 import { Position, Health, Inventory, QuestLog, PlayerControllable, Item, ItemInstance, Experience, Skills, Mana, Vocation, LightSource, VOCATIONS, SpellBook, SkillPoints, ActiveSpell, Passives, Sprite } from './components';
 import { SPRITES } from './assets';
 
-import { UIManager } from './ui';
+import { UIManager } from './client/ui_manager';
 
 interface SaveData {
     position: { x: number, y: number };

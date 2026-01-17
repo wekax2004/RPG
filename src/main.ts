@@ -31,13 +31,11 @@ import {
 } from './game';
 import { PHYSICS } from './physics';
 import { AudioController } from './audio';
-import { UIManager } from './ui';
+import { UIManager } from './client/ui_manager';
 
 import { Position, PlayerControllable, Inventory, Passives, Velocity, Sprite, Health, Mana, Experience, QuestLog, AI, Name, SpellBook, SkillPoints, ActiveSpell, TileMap, Tile as CompTile, TileItem as CompTileItem, Stats, CombatState, Target, Tint, NPC, QuestGiver, Interactable, Merchant, Teleporter, Collider, Skills, ItemInstance, Vocation, VOCATIONS, RegenState, FloatingText, Lootable, LightSource, Corpse, CorpseDefinition, Camera, Item } from './components';
 import { useItem } from './core/interaction';
-import { combatSystem } from './core/combat_system';
 import { saveGame, loadGame } from './core/persistence';
-import { regenSystem } from './core/regen_system';
 import { damageTextManager } from './client/damage_text';
 import { gameEvents, EVENTS } from './core/events';
 
@@ -204,7 +202,7 @@ const game = {
             toolSystem(world, input, ui);
             teleportSystem(world, ui);
             movementSystem(world, dt, audio);
-            cameraSystem(world, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, canvas.width, canvas.height); // Dynamic Viewport
+            cameraSystem(world, dt); // Dynamic Viewport
 
             // Syncing is now handled by Player getters/setters automatically
             if (player && player.id !== undefined) {
@@ -326,6 +324,7 @@ document.addEventListener("playerAction", (e: any) => {
 let lastTime = performance.now();
 const renderEntities: any[] = [];
 const battleEntities: number[] = [];
+let playerObj: any = null;
 
 function loop() {
     const now = performance.now();
@@ -357,7 +356,7 @@ function loop() {
         battleEntities.length = 0;
 
         // Player Obj Shim for Renderer
-        let playerObj: any = null;
+        playerObj = null;
         let playerTargetId: number | null = null;
         const pEnts = world.query([PlayerControllable, Position]);
         if (pEnts.length > 0) {
@@ -421,7 +420,7 @@ function loop() {
 
     if (ui && world) {
         // UI Updates (handled by events)
-        ui.updateBattleList(battleEntities, world);
+        if (playerObj) ui.updateBattleList(battleEntities, world, playerObj);
 
         // Update Stats UI (every frame or throttle if heavy)
         const pEnt = world.query([PlayerControllable, Health, Mana, Inventory, Experience, Skills])[0];
