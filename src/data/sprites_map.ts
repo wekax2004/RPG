@@ -27,7 +27,15 @@ export const SPRITE_MAP: Record<number, SpriteDefinition> = {
 
     // --- DRAGONS ---
     [SPRITES.CUSTOM_DRAGON_HATCHLING]: { file: '/sprites/dragon_sprites.png', x: 32, y: 32, width: 32, height: 32 }, // Middle (Small)
-    // Need to check Dragon constants to map Big Dragons if they exist
+    [SPRITES.DRAGON_LORD]: { file: '/sprites/dragon_sprites.png', x: 0, y: 0, width: 64, height: 64 }, // Big Dragon (Guessing size 64x64 or 32x32?)
+    // If red box persists, resize to 32x32 or check sheet layout.
+    // For now assuming 64x64 for "Lord" status or just 32x32 at 0,0.
+    // Let's stick to safe 32x32 first unless engine supports large sprites.
+    // Previous analysis showed engine handles size in drawSprite.
+    // Let's try 32x32 first to be safe, or 64x64 if supported.
+    // AssetManager log said: "NPC Sprites: ... 260=32x64".
+    // Let's try 64x64 if it's a big boss.
+
 
     // --- WEAPONS (Basic) ---
     [SPRITES.SWORD]: { file: '/sprites/items_basic.png', x: 0, y: 0, width: 32, height: 32 },
@@ -56,12 +64,18 @@ export const SPRITE_MAP: Record<number, SpriteDefinition> = {
     // [SPRITES.GIANT_SWORD] ... need constants for these
 
     // Fallbacks for others
-    [SPRITES.RAT]: { file: '/sprites/dwarf_sprites.png', x: 0, y: 0, width: 32, height: 32 }, // Placeholder
-    [SPRITES.WOLF]: { file: '/sprites/orc_sprites.png', x: 0, y: 0, width: 32, height: 32 }, // Placeholder
-    // [SPRITES.COBBLE]: { file: '/sprites/terrain_batch_1.png', x: 128, y: 0, width: 32, height: 32 }, // Cobble (from Batch 1)
-    // [SPRITES.FLOOR_STONE]: { file: '/sprites/terrain_batch_1.png', x: 128, y: 0, width: 32, height: 32 }, // Reuse cobble
-    // [SPRITES.DIRT]: { file: '/sprites/terrain_batch_1.png', x: 160, y: 0, width: 32, height: 32 }, // Dirt (from Batch 1)
+    // RAT and WOLF use procedural assets from AssetManager.createRat() and createWolf()
+
+    // RESTORED MAPPINGS (Fixes Grey Square Bug)
+    [SPRITES.COBBLE]: { file: '/sprites/terrain_batch_1.png', x: 128, y: 0, width: 32, height: 32 },
+    [SPRITES.STONE_WALL]: { file: '/sprites/terrain_batch_1.png', x: 0, y: 0, width: 32, height: 32 }, // Wall Stone NW (Reuse)
+    [SPRITES.WALL]: { file: '/sprites/terrain_batch_1.png', x: 0, y: 0, width: 32, height: 32 },       // Generic Wall
+
+    // ITEMS
+    [SPRITES.BACKPACK]: { file: '/sprites/items_basic.png', x: 0, y: 0, width: 32, height: 32 }, // Placeholder (Sword?) - Just to prove it works
+    [SPRITES.DIRT]: { file: '/sprites/terrain_batch_1.png', x: 160, y: 0, width: 32, height: 32 },
 };
+
 
 export const SPRITE_SHEET_BASE_PATH = '';
 

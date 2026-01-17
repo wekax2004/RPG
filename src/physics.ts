@@ -22,11 +22,14 @@ export const PHYSICS = {
         30, // Barrel
         31, // Crate
         // OTSP Walls
-        210, 211, 212, 213, 214, 215, 216, 217, 218,
+        // Moved out IDs that conflict with tools (210, 211, etc)
+        219,
         // Custom Water
         304,
         // Standard Water
-        13, 26
+        26,
+        // Rookgaard 3D Walls
+        600, 601, 602
     ]),
 
     isSolid(id: number): boolean {

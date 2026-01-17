@@ -1,5 +1,6 @@
 
 import { Health, Mana, Vocation, VOCATIONS, RegenState } from '../components';
+import { gameEvents, EVENTS } from './events';
 
 export const regenSystem = (world: any, dt: number) => {
     // Query entities with RegenState (Must also have Health/Mana)
@@ -29,6 +30,12 @@ export const regenSystem = (world: any, dt: number) => {
             if (hp.current < hp.max) {
                 hp.current++;
                 regen.hpTimer = 0;
+
+                // UI UPDATE: If entity is player, update HUD
+                const gameObj = (window as any).game;
+                if (gameObj && gameObj.player && id === gameObj.player.id) {
+                    gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+                }
             }
         }
 
@@ -38,6 +45,12 @@ export const regenSystem = (world: any, dt: number) => {
             if (mana.current < mana.max) {
                 mana.current++;
                 regen.manaTimer = 0;
+
+                // UI UPDATE: If entity is player, update HUD
+                const gameObj = (window as any).game;
+                if (gameObj && gameObj.player && id === gameObj.player.id) {
+                    gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+                }
             }
         }
     }

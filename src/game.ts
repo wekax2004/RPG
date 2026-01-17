@@ -1,13 +1,13 @@
 import { World, Entity, InputHandler } from './engine';
 import { PHYSICS } from './physics';
-import { UIManager } from './client/ui_manager';
-import { PixelRenderer } from './client/renderer';
+import { UIManager } from './ui';
+import { PixelRenderer } from './renderer';
 import { WorldMap } from './core/map';
+import { gameEvents, EVENTS } from './core/events';
 import { TILE_SIZE } from './core/types';
 import { AudioController } from './audio';
 import { ItemRegistry } from './data/items';
 
-// --- Components (Re-exported from separate file) ---
 // --- Components (Re-exported from separate file) ---
 export * from './components';
 export * from './assets';
@@ -16,21 +16,24 @@ import {
     Position, Velocity, Sprite, TileMap, PlayerControllable, RemotePlayer, AI, Interactable,
     Item, Inventory, Health, Camera, Particle, ScreenShake, FloatingText, Name, QuestLog,
     QuestGiver, Facing, Projectile, Mana, Experience, Merchant, Skill, Skills, Vocation,
-    VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable,
+    VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable, Destination, CorpseDefinition,
     SpellBook, SkillPoints, ActiveSpell, StatusEffect, Passives, ItemRarity, RARITY_MULTIPLIERS, RARITY_COLORS, StatusOnHit, Locked,
-    DungeonEntrance, DungeonExit, Collider
+    DungeonEntrance, DungeonExit, Collider, Corpse, RegenState, ItemInstance, Stats, CombatState, Tint, NPC, Tile as CompTile, TileItem as CompTileItem,
+    BossAI, MobResistance, SplitOnDeath
 } from './components';
+
 import { generateOverworld, generateDungeon } from './map_gen';
 import { NetworkManager } from './network';
 import { AIState, getStateName } from './ai/states';
 import { SPELLS, findSpellByWords, SpellDefinition } from './data/spells';
 import { MOB_REGISTRY } from './data/mobs';
 import { LOOT_TABLES } from './data/loot_tables';
+import { QUEST_REGISTRY } from './data/quests';
+import { BULK_SPRITES } from './data/bulk_constants';
 
 // Debug flag to visualize collision boxes
 export const DEBUG_COLLIDERS = true;
 
-// Debug flag to show AI state names above enemies
 // Debug flag to show AI state names above enemies
 export const DEBUG_AI_STATES = true;
 
@@ -47,7 +50,8 @@ export class Dialogue {
 
 // --- Systems ---
 
-// --- Systems ---
+
+
 
 let lastAttackTime = 0;
 
@@ -77,13 +81,13 @@ export function attemptCastSpell(world: World, player: Entity, text: string, ui:
             if (hp) {
                 hp.current = Math.min(hp.max, hp.current + spell.power);
                 spawnFloatingText(world, pPos.x, pPos.y, `+${spell.power}`, "#5f5");
-                spawnParticle(world, pPos.x, pPos.y, '#5f5');
+                spawnParticle(world, pPos.x, pPos.y, SPRITES.SPARKLE, 0.5, 1.0, 0, -50);
             }
             break;
         case 'haste':
             const passive = world.getComponent(player, Passives);
             if (passive) {
-                // Temporary Haste? 
+                // Temporary Haste?
                 // We need a StatusEffect component.
                 world.addComponent(player, new StatusEffect('haste', 10.0, spell.power)); // 10s duration
                 spawnFloatingText(world, pPos.x, pPos.y, "Haste!", "#ff5");
@@ -112,11 +116,11 @@ export function attemptCastSpell(world: World, player: Entity, text: string, ui:
             if (hitCount === 0) {
                 if ((ui as any).console) (ui as any).console.addSystemMessage("No target for Exori.");
             }
-            spawnParticle(world, pPos.x, pPos.y, '#f33');
+            spawnMagicEffect(world, pPos.x, pPos.y, 'blue');
             break;
         case 'create_food':
             // Drop Food
-            createItem(world, pPos.x, pPos.y, createItemFromRegistry(SPRITES.BARREL)); // Mushroom?
+            createItem(world, pPos.x, pPos.y, new ItemInstance(createItemFromRegistry(SPRITES.BARREL))); // Mushroom?
             break;
     }
 
@@ -155,7 +159,26 @@ export function teleportSystem(world: World, ui: UIManager) {
     }
 }
 
-export function autoAttackSystem(world: World, dt: number, ui: UIManager) {
+export function cameraSystem(world: World, dt: number) {
+    const pEnt = world.query([PlayerControllable, Position])[0];
+    if (pEnt === undefined) return;
+    const pPos = world.getComponent(pEnt, Position)!;
+
+    const cEnt = world.query([Camera])[0];
+    if (cEnt === undefined) return;
+    const camera = world.getComponent(cEnt, Camera)!;
+
+    const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // SYNC CAMERA WITH RENDERER LOGIC
+    // Renderer: Math.floor((pX * TILE_SIZE) - (screenWidth / 2) + (TILE_SIZE / 2));
+    // Here pPos is pixels, so we just do:
+    camera.x = Math.floor(pPos.x - (canvas.width / 2) + 16);
+    camera.y = Math.floor(pPos.y - (canvas.height / 2) + 16);
+}
+
+export function autoAttackSystem(world: World, dt: number, ui: UIManager, input: InputHandler) {
     const player = world.query([PlayerControllable, Target, Position])[0];
     if (player === undefined) return;
 
@@ -172,19 +195,36 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager) {
 
     if (!tHp || !tPos || tHp.current <= 0) {
         // Target dead or gone
-        world.removeComponent(player, Target);
+        targetComp.targetId = null;
         if ((ui as any).console) (ui as any).console.addSystemMessage("Target lost.");
         return;
     }
 
-    // Check Range (Melee = 40px, Distance = ???)
-    // For now assume Melee
+    // Check Range (Melee = 40px)
     const range = 50;
-    const dist = Math.sqrt(Math.pow(tPos.x - pPos.x, 2) + Math.pow(tPos.y - pPos.y, 2));
+    const dx = tPos.x - pPos.x;
+    const dy = tPos.y - pPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Cancel Chase if User Moves Manually
+    const vel = world.getComponent(player, Velocity);
+    if (Math.abs(input.axisX) > 0 || Math.abs(input.axisY) > 0) {
+        // User is steering, don't auto-chase (optional: clear target?)
+        // For Tibia style: Manual move STOPS auto-attack/chase usually? 
+        // Or just pauses it? Let's Break Target for full control.
+        targetComp.targetId = null;
+        if ((ui as any).console) (ui as any).console.addSystemMessage("Target lost (moved).");
+        return;
+    }
 
     if (dist <= range) {
+        // Stop moving to attack
+        if (vel) {
+            vel.x = 0;
+            vel.y = 0;
+        }
+
         // Cooldown Check (2.0s attack speed)
-        // We use a global or component timer. For simplicity, use component on player or global var relative to Date.now()
         // Using Date.now() for simplicity
         const now = Date.now();
         if (now - lastAttackTime >= 2000) {
@@ -228,7 +268,7 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager) {
             let might = 0;
             if (pPassives) might = pPassives.might * 2;
 
-            // Tibia-ish Formula: 
+            // Tibia-ish Formula:
             // MaxDmg = 0.085 * factor * skill * weapon + (level / 5)
             // Customized: (Weapon * 0.5) + (Skill * 1.0) + Might
             const maxDmg = Math.floor((weaponDmg * 0.6) + (skillVal * 1.5) + might);
@@ -250,7 +290,7 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager) {
 
             // Check Death
             if (tHp.current <= 0) {
-                world.removeComponent(player, Target);
+                targetComp.targetId = null;
 
                 // Gain XP
                 const pXp = world.getComponent(player, Experience);
@@ -276,15 +316,31 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager) {
                     loot.push(createItemFromRegistry(SPRITES.POTION));
                 }
 
+
                 if (loot.length > 0) {
                     createCorpse(world, tPos.x, tPos.y, loot);
                 } else {
                     createCorpse(world, tPos.x, tPos.y, []);
                 }
-                // ------------------
-            } else {
-                // Log (optional, can span console)
-                // console.log(`Hit target for ${damage}`);
+            }
+        }
+    } else {
+        // CHASE BEHAVIOR (Out of Range)
+        if (vel) {
+            const speed = 60; // Match player speed
+            vel.x = (dx / dist) * speed;
+            vel.y = (dy / dist) * speed;
+
+            // Update Facing
+            const sprite = world.getComponent(player, Sprite);
+            if (sprite) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    sprite.direction = dx > 0 ? 3 : 2; // R : L
+                    sprite.flipX = dx < 0;
+                } else {
+                    sprite.direction = dy > 0 ? 0 : 1; // D : U
+                }
+                sprite.animState = 'walk';
             }
         }
     }
@@ -317,7 +373,7 @@ export function inputSystem(world: World, input: InputHandler) {
         // If not manually moving, check for a Target
         if (!isMoving) {
             const targetComp = world.getComponent(id, Target);
-            if (targetComp) {
+            if (targetComp && targetComp.targetId !== null) {
                 const tPos = world.getComponent(targetComp.targetId, Position);
                 const tHp = world.getComponent(targetComp.targetId, Health);
 
@@ -341,10 +397,39 @@ export function inputSystem(world: World, input: InputHandler) {
                             y: Math.abs(moveY) > 0.5 ? Math.sign(moveY) : 0
                         };
                         isMoving = true;
+                        // console.log(`[Chase] Chasing Target ${targetComp.targetId} (Dist: ${dist.toFixed(1)})`);
                     }
                 } else {
                     // Target dead? Stop chasing.
-                    world.removeComponent(id, Target);
+                    targetComp.targetId = null;
+                }
+            }
+        }
+
+        // --- 4. CLICK-TO-MOVE LOGIC ---
+        // If not moving and no target, check Destination
+        if (!isMoving) {
+            const dest = world.getComponent(id, Destination);
+            if (dest) {
+                const dx = dest.x - pos.x;
+                const dy = dest.y - pos.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > 4) { // Stop when close (4px)
+                    const moveX = (dx / dist);
+                    const moveY = (dy / dist);
+
+                    vel.x = moveX * speed;
+                    vel.y = moveY * speed;
+
+                    dir = {
+                        x: Math.abs(moveX) > 0.5 ? Math.sign(moveX) : 0,
+                        y: Math.abs(moveY) > 0.5 ? Math.sign(moveY) : 0
+                    };
+                    isMoving = true;
+                } else {
+                    // Arrived
+                    world.removeComponent(id, Destination);
                 }
             }
         }
@@ -353,26 +438,38 @@ export function inputSystem(world: World, input: InputHandler) {
         if (isMoving) {
             // Manual input overwrites chase
             if (input.getDirection().x !== 0 || input.getDirection().y !== 0) {
-                vel.x = dir.x * speed;
-                vel.y = dir.y * speed;
+                // Normalize diagonal movement to prevent 41% speed boost
+                const rawDir = input.getDirection();
+                const len = Math.sqrt(rawDir.x * rawDir.x + rawDir.y * rawDir.y);
+                if (len > 0) {
+                    vel.x = (rawDir.x / len) * speed;
+                    vel.y = (rawDir.y / len) * speed;
+                }
+
+                // Clear automove destinations
+                if (world.getComponent(id, Destination)) world.removeComponent(id, Destination);
+                // Clear target if manual move? Tibia behavior: Moving manually breaks chase.
+                const t = world.getComponent(id, Target);
+                if (t) t.targetId = null;
             }
+
 
             // Update Facing
             if (dir.x < 0) {
                 pc.facingX = -1; pc.facingY = 0;
-                if (sprite) { sprite.uIndex = 2; sprite.direction = 2; sprite.flipX = true; }
+                if (sprite) { sprite.direction = 2; sprite.flipX = true; }
             }
             else if (dir.x > 0) {
                 pc.facingX = 1; pc.facingY = 0;
-                if (sprite) { sprite.uIndex = 2; sprite.direction = 3; sprite.flipX = false; }
+                if (sprite) { sprite.direction = 3; sprite.flipX = false; }
             }
             else if (dir.y < 0) {
                 pc.facingX = 0; pc.facingY = -1;
-                if (sprite) { sprite.uIndex = 1; sprite.direction = 1; sprite.flipX = false; }
+                if (sprite) { sprite.direction = 1; sprite.flipX = false; }
             }
             else if (dir.y > 0) {
                 pc.facingX = 0; pc.facingY = 1;
-                if (sprite) { sprite.uIndex = 0; sprite.direction = 0; sprite.flipX = false; }
+                if (sprite) { sprite.direction = 0; sprite.flipX = false; }
             }
 
             if (sprite) {
@@ -418,24 +515,34 @@ export function createNPC(world: World, x: number, y: number, text: string = "He
     world.addComponent(e, new Dialogue(lines, 0, name));
 
     // NPCs can wander slightly
-    // world.addComponent(e, new AI('wander')); 
+    // world.addComponent(e, new AI('wander'));
     // For now static to talk easier
 }
 
 export function interactionSystem(world: World, input: InputHandler, ui: UIManager) {
-    // 1. Dialogue Interaction (E key)
-    if (input.isJustPressed('e')) {
+    // 1. Dialogue Interaction (E key OR Right Click)
+    // Note: InputHandler uses browser key codes ('KeyE' not 'e')
+    if (input.isJustPressed('KeyE') || input.isJustPressed('MouseRight')) {
+        console.log('[Interaction] E or Right-Click detected!');
         const player = world.query([PlayerControllable, Position])[0];
-        if (player === undefined) return;
+        if (player === undefined) {
+            console.log('[Interaction] No player found!');
+            return;
+        }
         const pPos = world.getComponent(player, Position)!;
+        console.log(`[Interaction] Player at ${pPos.x}, ${pPos.y}`);
 
         // Check for NPC Component
         const npcs = world.query([NPC, Position]);
+        console.log(`[Interaction] Found ${npcs.length} NPCs in world`);
+
         for (const eid of npcs) {
             const dPos = world.getComponent(eid, Position)!;
             const dist = Math.sqrt(Math.pow(dPos.x - pPos.x, 2) + Math.pow(dPos.y - pPos.y, 2));
+            const name = world.getComponent(eid, Name)?.value || 'Unknown';
+            console.log(`[Interaction] NPC '${name}' at ${dPos.x},${dPos.y} - Dist: ${dist.toFixed(1)}px`);
 
-            if (dist < 48) {
+            if (dist < 64) { // Increased from 48 to 64 (2 tiles)
                 const npc = world.getComponent(eid, NPC)!;
                 const name = world.getComponent(eid, Name);
                 const npcName = name ? name.value : "Villager";
@@ -450,8 +557,9 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                 if (merchant) {
                     const pInv = world.getComponent(player, Inventory);
                     if (pInv) {
-                        ui.renderShop(merchant, pInv);
-                        ui.showDialogue(npc.dialog[0], npcName);
+                        // Call toggleShop instead of renderShop - toggleShop actually shows the panel!
+                        ui.toggleShop(merchant, pInv, eid);
+                        console.log(`[Interaction] Shop opened for ${npcName}`);
                     }
                 } else if (qGiver) {
                     // Trigger Quest logic manually since we are bypassing the Space/Click loop
@@ -480,78 +588,59 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                             const inv = world.getComponent(player, Inventory);
                             if (inv) inv.gold += existing.reward.gold;
                             ui.showDialogue("Thank you! Here is your reward.", npcName);
+                            console.log(`[Quest] Quest completed and turned in!`);
                         } else {
                             ui.showDialogue(`Quest Progress: ${existing.current}/${existing.required}`, npcName);
                         }
                     } else {
                         ui.showDialogue(npc.dialog[0], npcName);
                     }
+                    console.log(`[Interaction] Quest dialogue shown for ${npcName}`);
+                    return;
                 } else {
+                    // Regular NPC - just show dialogue
                     ui.showDialogue(npc.dialog[0], npcName);
+                    console.log(`[Interaction] Dialogue shown for ${npcName}`);
+                    return;
                 }
-                return;
-            }
-        }
-
-        // Legacy Dialogue Component Support
-        const talkers = world.query([Dialogue, Position]);
-        for (const eid of talkers) {
-            const dPos = world.getComponent(eid, Position)!;
-            const dist = Math.sqrt(Math.pow(dPos.x - pPos.x, 2) + Math.pow(dPos.y - pPos.y, 2));
-
-            if (dist < 48) {
-                const dialogue = world.getComponent(eid, Dialogue)!;
-                const uiEl = document.getElementById('dialogue-ui');
-                const nameEl = document.getElementById('dialogue-name');
-                const textEl = document.getElementById('dialogue-text');
-
-                if (uiEl && nameEl && textEl) {
-                    if (uiEl.style.display === 'none') {
-                        uiEl.style.display = 'block';
-                        dialogue.currentLine = 0;
-                        nameEl.innerText = dialogue.name;
-                        textEl.innerText = dialogue.lines[dialogue.currentLine];
-                    } else {
-                        dialogue.currentLine++;
-                        if (dialogue.currentLine >= dialogue.lines.length) {
-                            uiEl.style.display = 'none';
-                            dialogue.currentLine = 0;
-                        } else {
-                            textEl.innerText = dialogue.lines[dialogue.currentLine];
-                        }
-                    }
-                }
-                return;
             }
         }
     }
 
-    // 2. TARGETING LOGIC (Left Click) - FIXED
-    // Changed isDown -> isJustPressed to prevent "machine gun" clicking
+    // 2. TARGETING & INTERACTION (Left Click)
     if (input.isJustPressed('MouseLeft')) {
+        if (!input.clickedOnCanvas) return;
+        const playerEntity = world.query([PlayerControllable, Position])[0]; // Added Definition
+        if (playerEntity === undefined) return;
+
         const mx = input.mouse.x;
         const my = input.mouse.y;
 
-        let camX = 0, camY = 0;
-        const cam = world.query([Camera])[0];
-        if (cam !== undefined) {
-            const cPos = world.getComponent(cam, Camera)!;
-            camX = Math.floor(cPos.x);
-            camY = Math.floor(cPos.y);
-        }
+        const camEntity = world.query([Camera])[0];
+        const cam = camEntity !== undefined ? world.getComponent(camEntity, Camera) : null;
+        const camX = cam ? Math.floor(cam.x) : 0;
+        const camY = cam ? Math.floor(cam.y) : 0;
 
         const worldX = mx + camX;
         const worldY = my + camY;
 
-        // console.log(`[Interaction] Clicked Screen: ${mx},${my} -> World: ${worldX},${worldY}`);
+        console.log(`[Targeting] Clicked at ${mx},${my} (World: ${worldX},${worldY}) ON_CANVAS: ${input.clickedOnCanvas}`);
 
+        let clickedObject = false;
+
+        // A. Check Interactables & Lootables
+        // We need to query separately or combine. Simplest is to just check both sets.
         const interactables = world.query([Interactable, Position]);
-        let clickedInteractable = false;
+        const lootables = world.query([Lootable, Position]);
+        // Combine unique IDs
+        const clickableIds = new Set([...interactables, ...lootables]);
 
-        // A. Check Interactables (Loot, NPCs, etc)
-        for (const id of interactables) {
+        // Fix: Ensure playerEntity is available for distance checks and interactions if needed
+        // (Removing duplicate declaration that caused crash)
+
+        for (const id of clickableIds) {
             const pos = world.getComponent(id, Position)!;
-            // Standard 32x32 hit box
+            // Hitbox 32x32 for items/interactables is usually fine, but let's be generous
             if (worldX >= pos.x && worldX <= pos.x + 32 &&
                 worldY >= pos.y && worldY <= pos.y + 32) {
 
@@ -563,27 +652,27 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                     const dist = Math.sqrt(dx * dx + dy * dy);
 
                     if (dist <= 80) {
-                        const lootable = world.getComponent(id, Lootable);
                         const merchant = world.getComponent(id, Merchant);
+                        const lootable = world.getComponent(id, Lootable);
                         const questGiver = world.getComponent(id, QuestGiver);
 
-                        if (lootable) {
-                            // Fix: Prevent looting alive mobs
-                            const hp = world.getComponent(id, Health);
-                            if (hp && hp.current > 0) {
-                                if ((ui as any).console) (ui as any).console.addSystemMessage("You cannot loot a living target.");
-                            } else {
-                                const playerInv = world.getComponent(player, Inventory)!;
-                                ui.openLoot(lootable, id, playerInv);
-                                clickedInteractable = true;
-                            }
-                        } else if (merchant) {
-                            const playerInv = world.getComponent(player, Inventory)!;
+                        if (merchant) {
                             ui.currentMerchant = merchant;
                             ui.activeMerchantId = id;
-                            const mName = world.getComponent(id, Name)?.value || "Merchant";
-                            ui.toggleShop(merchant, mName);
-                            clickedInteractable = true;
+                            ui.toggleShop(merchant, world.getComponent(id, Name)?.value || "Merchant");
+                            clickedObject = true;
+                        } else if (lootable) {
+                            // ... Existing Loot Logic ...
+                            const hp = world.getComponent(id, Health);
+                            if (hp && hp.current > 0) {
+                                gameEvents.emit(EVENTS.SYSTEM_MESSAGE, "You cannot loot a living target.");
+                            } else {
+                                const playerInv = world.getComponent(player, Inventory);
+                                if (playerInv) {
+                                    ui.openLoot(lootable, id, playerInv);
+                                    clickedObject = true;
+                                }
+                            }
                         } else if (questGiver) {
                             // Quest Interaction
                             const playerQLog = world.getComponent(player, QuestLog);
@@ -601,285 +690,324 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                                             playerQLog.completedQuestIds.push(quest.id);
                                             // Remove from active
                                             playerQLog.quests = playerQLog.quests.filter(q => q.id !== quest.id);
+
                                             // Give rewards
-                                            if (playerInv) playerInv.gold += quest.reward.gold;
+                                            const reward = giverQuest.reward;
+                                            if (playerInv) playerInv.gold += reward.gold;
                                             if (playerXp) {
-                                                playerXp.current += quest.reward.xp;
+                                                playerXp.current += reward.xp;
                                                 if (playerXp.current >= playerXp.next) {
                                                     playerXp.level++;
                                                     playerXp.current -= playerXp.next;
                                                     playerXp.next = Math.floor(playerXp.next * 1.5);
                                                 }
                                             }
-                                            if ((ui as any).console) {
-                                                (ui as any).console.addSystemMessage(`Quest Complete: "${quest.name}"!`);
-                                                (ui as any).console.addSystemMessage(`Reward: ${quest.reward.gold} gold, ${quest.reward.xp} XP`);
+
+                                            const msgTitle = `Quest Complete: "${quest.name}"!`;
+                                            const msgReward = `Reward: ${reward.gold} gold, ${reward.xp} XP`;
+                                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, msgTitle);
+                                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, msgReward);
+
+                                            // Trigger UI Update
+                                            const gameObj = (window as any).game;
+                                            if (gameObj && gameObj.player) {
+                                                gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+                                                gameEvents.emit(EVENTS.INVENTORY_CHANGED, playerInv);
                                             }
-                                            clickedInteractable = true;
+
+                                            clickedObject = true;
                                             break;
                                         }
                                     }
-                                }
-
-                                // Check for new quests to accept
-                                if (!clickedInteractable) {
-                                    for (const quest of questGiver.availableQuests) {
-                                        // Check if already have or completed this quest
-                                        const hasQuest = playerQLog.quests.some(q => q.id === quest.id);
-                                        const completedQuest = playerQLog.completedQuestIds.includes(quest.id);
-                                        if (!hasQuest && !completedQuest) {
-                                            // Accept quest (deep copy to player)
-                                            const newQuest = { ...quest, current: 0, completed: false, turnedIn: false };
-                                            playerQLog.quests.push(newQuest);
-                                            if ((ui as any).console) {
-                                                (ui as any).console.addSystemMessage(`New Quest: "${quest.name}"`);
-                                                (ui as any).console.addSystemMessage(quest.description);
-                                            }
-                                            clickedInteractable = true;
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                // Already have all quests from this giver
-                                if (!clickedInteractable) {
-                                    const npcNameComp = world.getComponent(id, Name);
-                                    const npcName = npcNameComp ? npcNameComp.value : "NPC";
-                                    if ((ui as any).console) (ui as any).console.addSystemMessage(`${npcName}: "Check back later."`);
-                                    clickedInteractable = true;
                                 }
                             }
+
+                            // 4. Quest Logic Interaction
+                            // -------------------------
+                            const questGiver = world.getComponent(id, QuestGiver);
+                            if (questGiver) {
+                                let dialogFound = false;
+
+                                // Ensure player has QuestLog
+                                let playerQLog = world.getComponent(playerEntity, QuestLog);
+                                if (!playerQLog) {
+                                    playerQLog = new QuestLog();
+                                    world.addComponent(playerEntity, playerQLog);
+                                }
+
+                                // 4a. Check for Turn-Ins (Complete -> Reward)
+                                for (const quest of playerQLog.quests) {
+                                    if (quest.completed && !quest.turnedIn) {
+                                        // Find if this NPC offers this quest (or assume global giver for now?)
+                                        // Ideally check `questGiver.availableQuests.find(q => q.id === quest.id)`
+                                        // But for now, any quest giver can turn in any quest for simplicity, or we check against QUEST_REGISTRY
+                                        // Let's rely on the registry or the component.
+                                        // Does the component store Quest objects? Yes.
+                                        // Does it match?
+                                        // Let's iterate QUEST_REGISTRY to find next.
+
+                                        quest.turnedIn = true;
+                                        playerQLog.completedQuestIds.push(quest.id);
+                                        playerQLog.quests = playerQLog.quests.filter(q => q.id !== quest.id);
+
+                                        // Grant Rewards
+                                        const template = QUEST_REGISTRY[quest.id];
+                                        if (template && template.reward) {
+                                            const r = template.reward;
+                                            const pInv = world.getComponent(playerEntity, Inventory);
+
+                                            if ((ui as any).console) (ui as any).console.sendMessage(`Completed: ${quest.name}!`);
+
+                                            if (pInv) pInv.gold += r.gold;
+                                            gainExperience(world, r.xp, ui, audio);
+
+                                            if (r.items) {
+                                                for (const itemStr of r.items) {
+                                                    // Hack: Handle "Key" vs "Item"
+                                                    if (itemStr.includes("Key")) {
+                                                        // Just msg for now, keys handled by abstract flags in phase 3
+                                                        if ((ui as any).console) (ui as any).console.sendMessage(`Received: ${itemStr}`);
+                                                    } else {
+                                                        // Give actual item 
+                                                        // Need Name->ID map. For now just msg.
+                                                        if ((ui as any).console) (ui as any).console.sendMessage(`Received: ${itemStr}`);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Titles
+                                        const pName = world.getComponent(playerEntity, Name);
+                                        if (pName) {
+                                            if (quest.id === 'rat_catcher') pName.value = "Rat Slayer " + pName.value;
+                                            if (quest.id === 'slay_warlord') pName.value = "Hero " + pName.value;
+                                        }
+
+                                        dialogFound = true;
+                                        break;
+                                    }
+                                }
+
+                                // 4b. Offer New Quest
+                                if (!dialogFound) {
+                                    // Linear Chain: Rat -> Wolf -> Orc -> Warlord
+                                    const chain = ['rat_catcher', 'wolf_hunt', 'orc_menace', 'slay_warlord'];
+                                    const nextQuestId = chain.find(qid => !playerQLog!.completedQuestIds.includes(qid));
+
+                                    if (nextQuestId) {
+                                        // Do we have it active?
+                                        const active = playerQLog.quests.find(q => q.id === nextQuestId);
+                                        const tpl = QUEST_REGISTRY[nextQuestId];
+
+                                        if (!active && tpl) {
+                                            // Accept
+                                            if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "${tpl.description}"`);
+                                            if ((ui as any).console) (ui as any).console.sendMessage(`[Quest] Accepted: ${tpl.name}`);
+
+                                            // Add to log
+                                            playerQLog.quests.push({
+                                                id: nextQuestId,
+                                                name: tpl.name!,
+                                                description: tpl.description!,
+                                                type: tpl.type as any, // Cast to avoid partial mismatch
+                                                target: tpl.target!,
+                                                required: tpl.required!,
+                                                current: 0,
+                                                reward: tpl.reward!,
+                                                completed: false,
+                                                turnedIn: false
+                                            });
+                                            dialogFound = true;
+                                        } else if (active) {
+                                            // Status Check
+                                            if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "Hunt ${active.current}/${active.required} ${active.target}s."`);
+                                            dialogFound = true;
+                                        }
+                                    } else {
+                                        if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "You are a true legend. I have no more tasks."`);
+                                        dialogFound = true;
+                                    }
+                                }
+                                clickedObject = true;
+                            }
+
+                            // Generic NPC Fallback
+                            if (!clickedObject) {
+                                const phrases = [
+                                    "Nice day for fishing, ain't it?",
+                                    "Watch out for the sewers.",
+                                    "I used to be an adventurer like you."
+                                ];
+                                const text = phrases[Math.floor(Math.random() * phrases.length)];
+                                audio.playSound('villager');
+                                spawnFloatingText(world, tPos.x, tPos.y - 16, text, '#aaa');
+                                if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "${text}"`);
+                                clickedObject = true;
+                            }
                         }
-                    } else {
-                        if ((ui as any).console) (ui as any).console.addSystemMessage("Too far away.");
-                        clickedInteractable = true; // Consume click
+                        if (clickedObject) break;
                     }
                 }
-                if (clickedInteractable) break;
-            }
-        }
 
-        if (clickedInteractable) return; // Skip targeting if we interacted
+                if (clickedObject) return; // Skip targeting if we interacted
 
-        const enemies = world.query([Health, Position, Name]);
-        let clickedTarget = false;
+                // B. Check Enemies (Targeting)
+                const enemies = world.query([Health, Position, Name]);
+                let closestDist = 9999; // Fix: Initialize to large value so fallback works
+                let foundTargetId = -1;
 
-        for (const eId of enemies) {
-            if (world.getComponent(eId, PlayerControllable)) continue;
-            const pos = world.getComponent(eId, Position)!;
+                for (const eId of enemies) {
+                    if (world.getComponent(eId, PlayerControllable)) continue;
+                    const pos = world.getComponent(eId, Position)!;
+                    console.log(`[TargetDebug] Checking Ent ${eId} at ${pos.x},${pos.y} vs Click ${worldX},${worldY}`);
 
-            // Box Check (32x32)
-            if (worldX >= pos.x && worldX <= pos.x + 32 &&
-                worldY >= pos.y && worldY <= pos.y + 32) {
+                    // 1. Direct Hitbox Check (Expanded for usability)
+                    const margin = 16; // 16px forgiveness radius
+                    const boxL = pos.x - margin;
+                    const boxR = pos.x + 32 + margin;
+                    const boxT = pos.y - 64 - margin; // Assumes 32x64 sprite (tall)
+                    const boxB = pos.y + margin;
 
-                const player = world.query([PlayerControllable])[0];
-                if (player !== undefined) {
-                    const currentTarget = world.getComponent(player, Target);
-                    if (!currentTarget || currentTarget.targetId !== eId) {
-                        if (currentTarget) world.removeComponent(player, Target);
-                        world.addComponent(player, new Target(eId));
-                        if ((ui as any).console) (ui as any).console.addSystemMessage("Target Locked.");
+                    if (worldX >= boxL && worldX <= boxR && worldY >= boxT && worldY <= boxB) {
+                        // We have a hit!
+                        // Prioritize "closest to center of click" if multiple overlap? 
+                        // For now, just taking the first one or closest dist is fine.
+                        const distV = Math.abs(pos.x - worldX) + Math.abs(pos.y - worldY);
+
+                        if (distV < closestDist) {
+                            closestDist = distV;
+                            foundTargetId = eId;
+                        }
                     }
-                    clickedTarget = true;
+
+                    // 2. Proximity Check (Fallback if no direct hit, but very close)
+                    // (Optional: can add later if this isn't enough, but expanded margins usually work best)
                 }
-                break;
-            }
-        }
 
-        if (!clickedTarget) {
-            // Clicked empty space? Clear target
-            const player = world.query([PlayerControllable])[0];
-            if (player !== undefined) {
-                if (world.getComponent(player, Target)) {
-                    world.removeComponent(player, Target);
-                    if ((ui as any).console) (ui as any).console.addSystemMessage("Target Lost.");
+                if (foundTargetId !== -1) {
+                    const pEntity = world.query([PlayerControllable, Target])[0];
+                    if (pEntity !== undefined) {
+                        const targetComp = world.getComponent(pEntity, Target);
+                        targetComp.targetId = foundTargetId;
+                        console.log(`[Targeting] HIT Entity ${foundTargetId} (${world.getComponent(foundTargetId, Name)?.value}). Dist: ${closestDist}`);
+
+                        // Emit
+                        gameEvents.emit(EVENTS.TARGET_ENTITY, foundTargetId);
+                    }
+                    clickedObject = true;
                 }
-            }
-        }
-    }
 
-    if (!input.isJustPressed('Space')) return;
 
-    if (ui.isShowing()) {
-        ui.hideDialogue();
-        return;
-    }
 
-    const playerEntity = world.query([PlayerControllable, Position])[0];
-    if (playerEntity === undefined) return;
+                // End of scope (if checking for enemies) - WAIT, this is shutting the 'MouseLeft' block too early! 
+                // I need to REMOVE this closing brace so the falling through logic works.
 
-    const pos = world.getComponent(playerEntity, Position)!;
-    // const pc = world.getComponent(playerEntity, PlayerControllable)!;
+                // C. Clear Target & Set Destination (Click-to-Move)
+                if (!clickedObject && input.clickedOnCanvas) {
+                    const pEnt = world.query([PlayerControllable])[0];
+                    if (pEnt !== undefined) {
+                        const pTarget = world.getComponent(pEnt, Target);
+                        if (pTarget) pTarget.targetId = null; // Stop chasing entity
 
-    // Radius check instead of directional
-    const interactRadius = 60;
+                        // Set Destination to walk there
+                        let dest = world.getComponent(pEnt, Destination);
+                        if (!dest) {
+                            dest = new Destination(worldX - 16, worldY - 16); // Center on click (player is 32x32)
+                            world.addComponent(pEnt, dest);
+                        } else {
+                            dest.x = worldX - 16;
+                            dest.y = worldY - 16;
+                        }
 
-    // Find closest interacting entity
-    const interactables = world.query([Interactable, Position]);
-    let closestId = -1;
-    let minDist = interactRadius;
-
-    for (const id of interactables) {
-        const iPos = world.getComponent(id, Position)!;
-        const dx = (pos.x + 16) - (iPos.x + 16);
-        const dy = (pos.y + 16) - (iPos.y + 16);
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < minDist) {
-            minDist = dist;
-            closestId = id;
-        }
-    }
-
-    if (closestId !== -1) {
-        const interact = world.getComponent(closestId, Interactable)!;
-        const qGiver = world.getComponent(closestId, QuestGiver);
-        const merchant = world.getComponent(closestId, Merchant);
-        const lootable = world.getComponent(closestId, Lootable);
-
-        if (lootable) {
-            const playerInv = world.getComponent(playerEntity, Inventory)!;
-            ui.openLoot(lootable, closestId, playerInv);
-            return;
-        }
-
-        if (merchant) {
-            // Open Shop
-            const playerInv = world.getComponent(playerEntity, Inventory)!;
-            ui.currentMerchant = merchant;
-            ui.activeMerchantId = closestId;
-            ui.renderShop(merchant, playerInv);
-            ui.shopPanel.classList.remove('hidden');
-            return;
-        }
-
-        if (qGiver) {
-            let qLog = world.getComponent(playerEntity, QuestLog);
-            if (!qLog) {
-                qLog = new QuestLog();
-                world.addComponent(playerEntity, qLog);
-            }
-
-            if (qGiver.availableQuests.length > 0) {
-                const questTemplate = qGiver.availableQuests[0];
-                const existing = qLog.quests.find(q => q.id === questTemplate.id);
-
-                if (!existing) {
-                    // Accept
-                    // TypeScript hack: define proper Quest object structure matching interface
-                    const newQuest = { ...questTemplate, current: 0, completed: false, turnedIn: false };
-                    qLog.quests.push(newQuest);
-                    ui.showDialogue("Objective: " + newQuest.name);
-                } else if (existing.completed && !existing.turnedIn) {
-                    // Turn In active via dialogue interaction (fallback)
-                    existing.turnedIn = true;
-                    qLog.completedQuestIds.push(existing.id);
-                    ui.showDialogue("Thank you!");
-                    const inv = world.getComponent(playerEntity, Inventory);
-                    if (inv) inv.gold += existing.reward.gold;
-                } else {
-                    ui.showDialogue("Progress: " + existing.current + "/" + existing.required);
+                        // Spawn visual marker (optional/simple)
+                        // spawnMagicEffect(world, worldX, worldY, 'green'); // Reuse magic effect as "click" marker
+                    }
                 }
+
+
+            }
+
+            // 3. LOOK (Right Click)
+            if (input.isJustPressed('MouseRight')) {
+                if (!input.clickedOnCanvas) return;
+                const mx = input.mouse.x;
+                const my = input.mouse.y;
+                // Calc World Coords
+                const camEntity = world.query([Camera])[0];
+                const cam = camEntity !== undefined ? world.getComponent(camEntity, Camera) : null;
+                const camX = cam ? Math.floor(cam.x) : 0;
+                const camY = cam ? Math.floor(cam.y) : 0;
+                const worldX = mx + camX;
+                const worldY = my + camY;
+
+                // Find entity under mouse
+                const allEnts = world.query([Position, Name]);
+                let found = false;
+
+                // Check "Top" entity first (reverse order might be better but iteration order is unsafe deps)
+                for (const id of allEnts) {
+                    if (id === world.query([PlayerControllable])[0]) continue;
+                    const pos = world.getComponent(id, Position)!;
+                    const name = world.getComponent(id, Name)!.value;
+
+                    // Simple 32x32 check + Vertical offset for mobs
+                    // Let's use the generous search
+                    if (worldX >= pos.x && worldX <= pos.x + 32 &&
+                        worldY >= pos.y - 32 && worldY <= pos.y + 32) {
+
+                        let desc = `You see ${name}.`;
+
+                        // Add details
+                        const hp = world.getComponent(id, Health);
+                        if (hp) desc += ` [HP: ${hp.current}/${hp.max}]`;
+
+                        const loot = world.getComponent(id, Lootable);
+                        if (hp) desc += ` [HP: ${hp.current}/${hp.max}]`;
+
+                        // --- FIX: Enable Right-Click interactions (Loot/Open) ---
+                        const lootable = world.getComponent(id, Lootable);
+                        const interactable = world.getComponent(id, Interactable);
+                        const merchant = world.getComponent(id, Merchant);
+
+                        if (lootable) {
+                            desc += " (Right-Click to Open)";
+                            const pEnt = world.query([PlayerControllable])[0];
+                            const pInv = world.getComponent(pEnt, Inventory);
+                            if (pInv) {
+                                ui.openLoot(lootable, id, pInv);
+                                gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You open the ${name}.`);
+                            }
+                        } else if (merchant) {
+                            ui.currentMerchant = merchant;
+                            ui.activeMerchantId = id;
+                            // FIX: Pass Player Inventory (needed for Sell List)
+                            const pEnt = world.query([PlayerControllable, Inventory])[0];
+                            const pInv = world.getComponent(pEnt, Inventory);
+                            if (pInv) {
+                                ui.toggleShop(merchant, pInv, id);
+                            }
+                        } else if (interactable) {
+                            // Generic interact
+                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You look at ${name}.`);
+                        } else {
+                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, desc);
+                        }
+
+                        // Trigger Visual Feedback
+                        spawnParticle(world, worldX, worldY, SPRITES.SPARKLE, 0.3); // Re-use sparkle for look
+                        found = true;
+                        break; // Only look at top renderable entity
+                    }
+                }
+
             }
         }
     }
 }
 
-export function magicSystem(world: World, input: InputHandler, ui: UIManager) {
-    const playerEntity = world.query([PlayerControllable, ActiveSpell])[0];
-    if (!playerEntity) return;
-
-    const activeSpell = world.getComponent(playerEntity, ActiveSpell)!;
-    let changed = false;
-
-    // Spell Selection
-    if (input.isJustPressed('Digit1')) { activeSpell.spellName = 'adori flam'; changed = true; }
-    if (input.isJustPressed('Digit2')) { activeSpell.spellName = 'exori'; changed = true; }
-    if (input.isJustPressed('Digit3')) { activeSpell.spellName = 'exura'; changed = true; }
-    if (input.isJustPressed('Digit4')) { activeSpell.spellName = 'adori frigo'; changed = true; }
-
-    if (changed) {
-        ui.updateMagicHud(activeSpell.spellName);
-    }
-
-    // Cast Active Spell (Only if UI is not blocking)
-    if (!ui.isShowing() && input.isJustPressed('KeyR')) {
-        castSpell(world, ui, activeSpell.spellName);
-    }
-
-    // Toggle Skill Tree
-    if (input.isJustPressed('KeyK')) {
-        const spells = world.getComponent(playerEntity, SpellBook);
-        const points = world.getComponent(playerEntity, SkillPoints);
-        const passives = world.getComponent(playerEntity, Passives);
-        const vocation = world.getComponent(playerEntity, Vocation);
-        const vocName = vocation ? vocation.name.toLowerCase() : 'knight';
-
-        if (spells && points) {
-            ui.toggleSkillTree(spells, points, vocName, passives, () => {
-                updateStatsFromPassives(world, playerEntity);
-            });
-        }
-    }
-
-    // Legacy / Quick Cast Bindings (Optional, keeping F for Exori/Attack match)
-    if (!ui.isShowing() && input.isJustPressed('KeyF')) {
-        castSpell(world, ui, 'exori');
-    }
-}
-
-
-
-export function floatingTextSystem(world: World, dt: number) {
-    const entities = world.query([FloatingText]);
-    for (const id of entities) {
-        const ft = world.getComponent(id, FloatingText)!;
-        ft.life -= dt;
-        if (ft.life <= 0) {
-            world.removeEntity(id);
-        }
-    }
-}
-
-export function particleSystem(world: World, dt: number) {
-    const entities = world.query([Position, Particle]);
-    for (const id of entities) {
-        const pos = world.getComponent(id, Position)!;
-        const part = world.getComponent(id, Particle)!;
-
-        pos.x += part.vx * dt;
-        pos.y += part.vy * dt;
-        part.life -= dt;
-
-        if (part.life <= 0) {
-            world.removeEntity(id);
-        }
-    }
-}
-
-/**
- * Spawn blood particles exploding outward from a point.
- * Used when damage is dealt to enemies.
- */
-export function spawnBloodEffect(world: World, x: number, y: number) {
-    const count = 10 + Math.floor(Math.random() * 6); // 10-15 particles
-    for (let i = 0; i < count; i++) {
-        const e = world.createEntity();
-        world.addComponent(e, new Position(x + 8, y + 8)); // Center of sprite
-
-        // Random direction explosion
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 50 + Math.random() * 100;
-        const vx = Math.cos(angle) * speed;
-        const vy = Math.sin(angle) * speed - 30; // Slight upward bias
-
-        // Red color variations
-        const shade = Math.floor(Math.random() * 100);
-        const color = `rgb(${180 + shade}, ${20 + Math.floor(shade * 0.3)}, ${10 + Math.floor(shade * 0.2)})`;
-
-        world.addComponent(e, new Particle(0.4 + Math.random() * 0.3, 0.7, color, 2 + Math.floor(Math.random() * 2), vx, vy));
-    }
-}
+// ============================================
+// END OF interactionSystem
+// ============================================
 
 /**
  * Spawn magic particles floating gently upward.
@@ -913,16 +1041,15 @@ export function spawnMagicEffect(world: World, x: number, y: number, colorScheme
  * Trigger screen shake effect.
  * Used when player takes damage.
  */
-export function triggerScreenShake(world: World, intensity: number = 5, duration: number = 0.3) {
+function triggerScreenShake(world: World, intensity: number = 5, duration: number = 0.3) {
     const e = world.createEntity();
     world.addComponent(e, new ScreenShake(duration, intensity));
 }
 
-
 let shakeOffsetX = 0;
 let shakeOffsetY = 0;
 
-export function screenShakeSystem(world: World, dt: number) {
+function screenShakeSystem(world: World, dt: number) {
     const entities = world.query([ScreenShake]);
     shakeOffsetX = 0;
     shakeOffsetY = 0;
@@ -939,7 +1066,7 @@ export function screenShakeSystem(world: World, dt: number) {
     }
 }
 
-export function remotePlayerInterpolationSystem(world: World, dt: number) {
+function remotePlayerInterpolationSystem(world: World, dt: number) {
     const entities = world.query([RemotePlayer, Position]);
     const lerpFactor = 10 * dt; // Adjust speed (10 = fast snap, 5 = smoother)
 
@@ -966,7 +1093,7 @@ export function remotePlayerInterpolationSystem(world: World, dt: number) {
 }
 
 // Status Effect System
-export function statusEffectSystem(world: World, dt: number) {
+function statusEffectSystem(world: World, dt: number) {
     const entities = world.query([StatusEffect, AI]); // Only affect AI for now? Or Players too?
     for (const id of entities) {
         const status = world.getComponent(id, StatusEffect)!;
@@ -988,6 +1115,7 @@ export function statusEffectSystem(world: World, dt: number) {
         }
     }
 }
+
 
 export function aiSystem(world: World, dt: number) {
     const players = world.query([PlayerControllable, Position, Health]);
@@ -1017,7 +1145,7 @@ export function aiSystem(world: World, dt: number) {
         let moveSpeed = 0;
 
         // Flee if low HP?
-        if (hp && hp.current < hp.max * 0.2) {
+        if (hp && hp.current < hp.max * ai.fleeHealthThreshold) {
             ai.behavior = 'flee';
             if (targetComp) targetComp.targetId = null; // Stop targeting
         }
@@ -1101,294 +1229,7 @@ export function aiSystem(world: World, dt: number) {
     }
 }
 
-export function uiInteractionSystem(world: World, ui: UIManager, input: InputHandler, player: Player, map: WorldMap, renderer: PixelRenderer) {
-    const TILE_SIZE = 32;
-    const canvas = renderer.ctx.canvas;
 
-    // Calculate Camera Position (Centered on Player)
-    const camX = Math.floor((player.x * TILE_SIZE) - (canvas.width / 2) + (TILE_SIZE / 2));
-    const camY = Math.floor((player.y * TILE_SIZE) - (canvas.height / 2) + (TILE_SIZE / 2));
-
-    const worldMouseX = input.mouse.x + camX;
-    const worldMouseY = input.mouse.y + camY;
-
-    // 0. Interaction (Key E)
-    if (input.isJustPressed('KeyE')) {
-        console.log('[Game] Key E pressed. Checking interactables...');
-        const pPos = world.getComponent(player.id, Position)!;
-        const interactables = world.query([Position, Interactable, Merchant]);
-        console.log(`[Game] Found ${interactables.length} merchants.`);
-
-        let foundMerchant = false;
-        for (const eid of interactables) {
-            const ePos = world.getComponent(eid, Position)!;
-            const dist = Math.sqrt((ePos.x - pPos.x) ** 2 + (ePos.y - pPos.y) ** 2);
-            console.log(`[Game] Distance to merchant ${eid}: ${dist}`);
-
-            // Check Range (e.g. 6 tiles = 192px)
-            if (dist < 200) {
-                const merchant = world.getComponent(eid, Merchant)!;
-                const name = world.getComponent(eid, Name);
-                console.log(`Interacting with Merchant: ${name ? name.value : 'Unknown'}`);
-
-                // Open Shop UI
-                // ui.toggleShop(merchantItems, merchantName)
-                ui.toggleShop(merchant, name ? name.value : "Merchant");
-                foundMerchant = true;
-                break;
-            }
-        }
-
-        if (!foundMerchant) {
-            // Check generic NPCs if not merchant
-            // const npcs = world.query([Position, Interactable, NPC]);
-
-            // CHECK FOR CORPSES / LOOTABLES
-            const lootables = world.query([Position, Lootable]);
-            for (const eid of lootables) {
-                const ePos = world.getComponent(eid, Position)!;
-                const dist = Math.sqrt((ePos.x - pPos.x) ** 2 + (ePos.y - pPos.y) ** 2);
-                if (dist < 48) { // Close range for looting
-                    // Check if alive
-                    const hp = world.getComponent(eid, Health);
-                    if (hp && hp.current > 0) continue; // Cannot loot living mobs
-
-                    const lootComp = world.getComponent(eid, Lootable)!;
-                    const nameComp = world.getComponent(eid, Name);
-                    const entName = nameComp ? nameComp.value : "Remains";
-
-                    console.log(`[Game] Opening Loot Container: ${entName}`);
-                    ui.toggleLoot(eid, entName, lootComp.items);
-                    foundMerchant = true; // reusing flag to stop other interactions
-                    break;
-                }
-            }
-        }
-    }
-
-    // 1. Right Click (Open/Use)
-    if (input.isJustPressed('MouseRight')) {
-        // A. Check UI Items (Inventory/Equipment) - TODO (Context menus on UI?)
-        // For now, focus on World Interaction (Open Chest)
-
-        // A. Check Entities (e.g. Corpses/Lootable)
-        const lootables = world.query([Position, Lootable]);
-        let interactedWithEntity = false;
-
-        for (const eid of lootables) {
-            const pos = world.getComponent(eid, Position)!;
-            // Simple Box Check (32x32 assumed)
-            if (worldMouseX >= pos.x && worldMouseX < pos.x + 32 &&
-                worldMouseY >= pos.y && worldMouseY < pos.y + 32) {
-
-                // Check if alive
-                const hp = world.getComponent(eid, Health);
-                if (hp && hp.current > 0) {
-                    if (interactedWithEntity) continue;
-                    // Optional: Log "You cannot loot this yet"?
-                    // For now just ignore so we don't block attacking/other interactions?
-                    // But right click usually attacks?
-                    // If we block here, we might fall through to nothing.
-                    // Let's Just Continue.
-                    continue;
-                }
-
-                const name = world.getComponent(eid, Name);
-                const loot = world.getComponent(eid, Lootable)!;
-
-                console.log(`[Game] Opening Corpse/Container: ${name ? name.value : 'Unknown'} (ID: ${eid})`);
-
-                // If it has items, open it
-                // We might need to ensure loot.items is populated.
-                // UI expects a container object or list. 
-                // ui.toggleLoot takes (entityId, name, items)
-                ui.toggleLoot(eid, name ? name.value : "Corpse", loot.items || []);
-                interactedWithEntity = true;
-                break;
-            }
-        }
-
-        if (interactedWithEntity) {
-            // Skip map item check if we opened a corpse
-        } else {
-            // B. Check World Items
-            const hit = renderer.getObjectAt(map, player, worldMouseX, worldMouseY);
-
-            if (hit && hit.item) {
-                console.log(`[UI] Right Clicked Item: ${hit.item.id}`);
-
-                // Check if Container (Simple check based on ID range or property)
-                // Using createItemFromRegistry to check prototype properties
-                // We need a way to check if an item ID is a container. 
-                // Ideally ItemRegistry has this info.
-                // For now, hardcode or use existing logic
-                const itemDef = createItemFromRegistry(hit.item.id);
-
-                if (itemDef.isContainer) {
-                    const runtimeItem = hit.item as any;
-                    // Init inventory if needed
-                    if (!runtimeItem.inventory) {
-                        runtimeItem.inventory = [
-                            // Default Loot
-                            { item: createItemFromRegistry(2), count: 1 }, // Sword
-                            { item: createItemFromRegistry(7), count: 3 }  // Potions
-                        ];
-                        runtimeItem.capacity = 8;
-                    }
-                    ui.openContainer(runtimeItem);
-                } else {
-                    // Look at item
-                    if (ui) ui.lookAtItem(itemDef);
-                }
-            }
-        }
-    }
-
-    // 2. Drag & Drop Logic
-    // Start Drag
-    if (input.isJustPressed('MouseLeft')) {
-        // A. Check UI (Containers, Equipment)
-        const uiHit = ui.getContainerSlotAt(input.mouse.x, input.mouse.y);
-        // Note: input.mouse is canvas-relative, which matches ui.renderWindows coordinate space
-
-        if (uiHit) {
-            const container = ui.openContainers[uiHit.containerIndex].item;
-            if (container.inventory && container.inventory[uiHit.slotIndex]) {
-                const itemInst = container.inventory[uiHit.slotIndex];
-
-                // Set Drag State
-                ui.draggedItem = itemInst.item; // Instance wrappers? 
-                // ui_manager expects Item. itemInst is { item: Item, count: number } ? 
-                // ui_manager.ts:409: const innerItem = win.item.inventory[s]; -> It seems inventory is Item[]?
-                // Let's check ui_manager.ts Render logic.
-                // Line 409: win.item.inventory[s].id -> implying it's an Item or has .id
-                // If inventory is Item[], then ok. 
-                // But game.ts creates { item: ..., count: ... } for "runtimeItem.inventory".
-                // This is a mismatch I need to solve. 
-                // Looking at main.ts line 152: inventory.push({ item: ..., count: 1 }).
-                // Looking at ui_manager.ts line 410: innerItem.id. 
-                // If innerItem is { item: Item }, it doesn't have .id directly.
-                // BUG: ui_manager.ts render loop expects Item, but main.ts populates { item, count }.
-
-                // FIX: Let's assume for this step we normalize to { id: number, ... } or fix ui_manager later.
-                // In ui_manager.ts renderWindows: const sprite = assetManager.getSpriteSource(innerItem.id);
-                // So ui_manager expects objects with .id. 
-                // If I push { item: Item, count: 1 } -> innerItem.item.id is correct.
-                // I will assume inventory holds Items directly for now to match ui_manager, OR ui_manager handles ItemInstance.
-                // ui_manager line 409: const innerItem = win.item.inventory[s];
-
-                // Let's stick to: Inventory = Item[] for simple containers for now.
-                // So runtimeItem.inventory.push(new Item(2));
-
-                ui.draggedItem = container.inventory[uiHit.slotIndex];
-                ui.draggingFrom = { type: 'container', index: uiHit.slotIndex, containerIndex: uiHit.containerIndex };
-
-                // Remove from container? Visuals usually keep it until drop. 
-                // But dragging a ghost implies moving.
-                // Let's leave it for now (copy).
-            }
-        } else {
-            // B. Check World
-            const hit = renderer.getObjectAt(map, player, worldMouseX, worldMouseY);
-            if (hit && hit.item && hit.item.id !== 0) {
-                ui.draggedItem = hit.item;
-                ui.draggingFrom = { type: 'world', index: 0 }; // index 0 is placeholder? Needs coords.
-                // We need to store source coords
-                ui.draggingFrom = { type: 'world', index: 0 };
-                // Hack: Store coords in the "index" or extend the type.
-                // ui.draggingFrom signature: { type: ..., index: number, containerIndex?: number }
-                // I cannot store x/y in index.
-                // I should assume index = hash or I must modify UIManager types.
-                // For now, let's attach data to ui directly as a temp hack or just use index as flat index (y * width + x)?
-                // Yes, tile index!
-                const tileIdx = hit.y * map.width + hit.x;
-                ui.draggingFrom = { type: 'world', index: tileIdx };
-            }
-        }
-    }
-
-    // End Drag
-    if (ui.draggedItem && !input.isDown('MouseLeft')) {
-        // DROP LOGIC
-        const dropX = input.mouse.x; // Canvas coords
-        const dropY = input.mouse.y;
-
-        // 1. Drop in UI?
-        const uiHit = ui.getContainerSlotAt(dropX, dropY);
-        if (uiHit) {
-            const targetCont = ui.openContainers[uiHit.containerIndex].item;
-            if (!targetCont.inventory) targetCont.inventory = [];
-
-            // Add item
-            targetCont.inventory.push(ui.draggedItem);
-
-            // Remove from Source
-            removeFromSource(ui, map);
-
-            console.log("Dropped in Container");
-        } else {
-            // 2. Drop in World
-            const dropWorldX = dropX + camX;
-            const dropWorldY = dropY + camY;
-            const tx = Math.floor(dropWorldX / TILE_SIZE);
-            const ty = Math.floor(dropWorldY / TILE_SIZE);
-
-            const tile = map.getTile(tx, ty);
-            if (tile) {
-                tile.addItem(ui.draggedItem);
-                removeFromSource(ui, map);
-                // console.log("Dropped in World");
-            }
-        }
-
-        ui.draggedItem = null;
-        ui.draggingFrom = null;
-    }
-}
-
-function removeFromSource(ui: UIManager, map: WorldMap) {
-    if (!ui.draggingFrom) return;
-
-    if (ui.draggingFrom.type === 'container') {
-        const cIdx = ui.draggingFrom.containerIndex!;
-        const sIdx = ui.draggingFrom.index;
-        const cont = ui.openContainers[cIdx].item;
-        if (cont && cont.inventory) {
-            cont.inventory.splice(sIdx, 1);
-        }
-    } else if (ui.draggingFrom.type === 'world') {
-        const tIdx = ui.draggingFrom.index;
-        // Map is 1D array? map.tiles
-        const tile = map.tiles[tIdx];
-        if (tile) {
-            tile.removeItem(); // Pops top
-        }
-    }
-}
-
-export function createItemFromRegistry(id: number): Item {
-    const def = ItemRegistry[id];
-    if (def) {
-        // Use uIndex from registry, fallback to id if not defined
-        const spriteId = def.uIndex !== undefined ? def.uIndex : id;
-        return new Item(
-            def.name,
-            id, // Pass ID to constructor
-            def.slot || 'other',
-            spriteId,  // uIndex for sprite
-            0,         // frame
-            0,         // direction
-            def.attack || 0,  // damage
-            10,        // price
-            "",        // description
-            def.type === 'weapon' ? 'melee' : 'none',  // weaponType
-            'common',  // rarity
-            def.defense || 0  // defense
-        );
-    }
-    // Fallback: Create basic item with id as sprite
-    return new Item(String(id), 'other', id);
-}
 
 // FIX: Code fragment detached from aiSystem. Commenting out to prevent crash.
 // const playerPos = world.getComponent(players[0], Position)!;
@@ -1435,11 +1276,6 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
         const pos = world.getComponent(id, Position)!;
         const vel = world.getComponent(id, Velocity)!;
         const sprite = world.getComponent(id, Sprite);
-
-        // DEBUG: Trace Velocity
-        if (Math.random() < 0.01 && (vel.x !== 0 || vel.y !== 0)) {
-            console.log(`[MoveSys] Entity ${id} Attempting Move. Vel: ${vel.x}, ${vel.y}`);
-        }
 
         // --- NEW: Animation Logic ---
         if (sprite) {
@@ -1511,445 +1347,485 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
 
                 // Let's iterate items to find floor
                 // Simplification: Check for specific IDs
-                if (tile.has(28) || tile.has(SPRITES.WATER)) speedMult = 0.5; // Swamp/Water
-                else if (tile.has(27)) speedMult = 0.7; // Sand
+                if (tile) {
+                    if (tile.has(28) || tile.has(SPRITES.WATER)) speedMult = 0.5; // Swamp/Water
+                    else if (tile.has(27)) speedMult = 0.7; // Sand
+                }
             }
-        }
 
-        const nextX = pos.x + vel.x * speedMult * dt;
-        const nextY = pos.y + vel.y * speedMult * dt;
+            // --- NORMALIZE DIAGONAL MOVEMENT ---
+            let dx = vel.x;
+            let dy = vel.y;
+            if (dx !== 0 && dy !== 0) {
+                // Speed is implicitly the magnitude of vel.x or vel.y (if uniform input).
+                // If input is (150, 150), magnitude is 212. Normalize to 1.0 then mult by speed.
+                // Simplified: If both are non-zero, divide by sqrt(2) to maintain singular axis speed.
+                const factor = 1 / Math.sqrt(2); // ~0.707
+                dx *= factor;
+                dy *= factor;
+            }
 
-        if (map) {
-            // --- ENTITY-TO-ENTITY COLLISION CHECK (using Collider component) ---
-            const myCollider = world.getComponent(id, Collider);
-            let blockedByEntity = false;
+            const nextX = pos.x + dx * speedMult * dt;
+            const nextY = pos.y + dy * speedMult * dt;
 
-            if (myCollider) {
-                // Calculate my collision box at next position
-                const myBoxNextX = nextX + myCollider.offsetX;
-                const myBoxNextY = nextY + myCollider.offsetY;
-                const myBoxW = myCollider.width;
-                const myBoxH = myCollider.height;
+            if (map) {
+                // --- ENTITY-TO-ENTITY COLLISION CHECK (using Collider component) ---
+                const myCollider = world.getComponent(id, Collider);
+                let blockedByEntity = false;
 
-                // Check against all other entities with Colliders
-                const collidables = world.query([Collider, Position]);
-                for (const otherId of collidables) {
-                    if (otherId === id) continue; // Skip self
+                if (myCollider) {
+                    // Calculate my collision box at next position
+                    const myBoxNextX = nextX + myCollider.offsetX;
+                    const myBoxNextY = nextY + myCollider.offsetY;
+                    const myBoxW = myCollider.width;
+                    const myBoxH = myCollider.height;
 
-                    const otherPos = world.getComponent(otherId, Position)!;
-                    const otherCollider = world.getComponent(otherId, Collider)!;
+                    // Check against all other entities with Colliders
+                    const collidables = world.query([Collider, Position]);
+                    for (const otherId of collidables) {
+                        if (otherId === id) continue; // Skip self
 
-                    const otherBoxX = otherPos.x + otherCollider.offsetX;
-                    const otherBoxY = otherPos.y + otherCollider.offsetY;
-                    const otherBoxW = otherCollider.width;
-                    const otherBoxH = otherCollider.height;
+                        const otherPos = world.getComponent(otherId, Position)!;
+                        const otherCollider = world.getComponent(otherId, Collider)!;
 
-                    // AABB overlap check
-                    if (myBoxNextX < otherBoxX + otherBoxW &&
-                        myBoxNextX + myBoxW > otherBoxX &&
-                        myBoxNextY < otherBoxY + otherBoxH &&
-                        myBoxNextY + myBoxH > otherBoxY) {
-                        blockedByEntity = true;
-                        break;
+                        const otherBoxX = otherPos.x + otherCollider.offsetX;
+                        const otherBoxY = otherPos.y + otherCollider.offsetY;
+                        const otherBoxW = otherCollider.width;
+                        const otherBoxH = otherCollider.height;
+
+                        // AABB overlap check
+                        if (myBoxNextX < otherBoxX + otherBoxW &&
+                            myBoxNextX + myBoxW > otherBoxX &&
+                            myBoxNextY < otherBoxY + otherBoxH &&
+                            myBoxNextY + myBoxH > otherBoxY) {
+                            blockedByEntity = true;
+                            break;
+                        }
                     }
                 }
-            }
 
-            if (blockedByEntity) continue;
+                if (blockedByEntity) continue;
 
-            const checkCollision = (x: number, y: number, debug: boolean = false): boolean => {
-                if (!map) return false;
+                const checkCollision = (x: number, y: number, debug: boolean = false): boolean => {
+                    if (!map) return false;
 
-                // Map Bounds
-                if (x < 0 || x >= map.width * map.tileSize || y < 0 || y >= map.height * map.tileSize) {
-                    if (debug) console.log(`[Collision] Out of bounds: ${x}, ${y}`);
-                    return true;
-                }
-
-                const tileX = Math.floor(x / map.tileSize);
-                const tileY = Math.floor(y / map.tileSize);
-                const idx = tileY * map.width + tileX;
-
-                if (idx < 0 || idx >= map.tiles.length) return true;
-
-                const tile = map.tiles[idx];
-
-                // Check Stack for Solids
-                for (const item of tile.items) {
-                    if (PHYSICS.isSolid(item.id)) {
-                        if (debug) console.log(`[Collision] Solid Item: ${item.id} at ${tileX},${tileY}`);
+                    // Map Bounds
+                    if (x < 0 || x >= map.width * map.tileSize || y < 0 || y >= map.height * map.tileSize) {
+                        // if (debug) console.log(`[Collision] Out of bounds: ${x}, ${y}`);
                         return true;
                     }
-                }
-                return false;
-            };
 
-            // Helper to update tile occupancy
-            const updateOccupancy = (oldX: number, oldY: number, newX: number, newY: number) => {
-                if (!map) return;
-                const oldTx = Math.floor((oldX + 8) / map.tileSize);
-                const oldTy = Math.floor((oldY + 8) / map.tileSize);
-                const newTx = Math.floor((newX + 8) / map.tileSize);
-                const newTy = Math.floor((newY + 8) / map.tileSize);
+                    const tileX = Math.floor(x / map.tileSize);
+                    const tileY = Math.floor(y / map.tileSize);
+                    const idx = tileY * map.width + tileX;
 
-                if (oldTx !== newTx || oldTy !== newTy) {
-                    // Clear old
-                    if (oldTx >= 0 && oldTx < map.width && oldTy >= 0 && oldTy < map.height) {
-                        const oldIdx = oldTy * map.width + oldTx;
-                        if (map.tiles[oldIdx].creature === id) {
-                            map.tiles[oldIdx].creature = null;
+                    if (idx < 0 || idx >= map.tiles.length) return true;
+
+                    const tile = map.tiles[idx];
+
+                    // Check Stack for Solids
+                    for (const item of tile.items) {
+                        if (PHYSICS.isSolid(item.id)) {
+                            if (debug) console.log(`[Collision] Solid Item: ${item.id} at ${tileX},${tileY}`);
+                            return true;
                         }
                     }
-                    // Set new
-                    if (newTx >= 0 && newTx < map.width && newTy >= 0 && newTy < map.height) {
-                        const newIdx = newTy * map.width + newTx;
-                        map.tiles[newIdx].creature = id;
-                    }
-                }
-            };
+                    return false;
+                };
 
-            // X Axis
-            const cx1 = nextX + (vel.x > 0 ? 12 : 4);
-            const cy1 = pos.y + 12;
-            const cx2 = nextX + (vel.x > 0 ? 12 : 4);
-            const cy2 = pos.y + 28;
+                // Helper to update tile occupancy
+                const updateOccupancy = (oldX: number, oldY: number, newX: number, newY: number) => {
+                    if (!map) return;
+                    const oldTx = Math.floor((oldX + 8) / map.tileSize);
+                    const oldTy = Math.floor((oldY + 8) / map.tileSize);
+                    const newTx = Math.floor((newX + 8) / map.tileSize);
+                    const newTy = Math.floor((newY + 8) / map.tileSize);
 
-            if (!checkCollision(cx1, cy1) && !checkCollision(cx2, cy2)) {
-                // No collision
-                updateOccupancy(pos.x, pos.y, nextX, pos.y);
-                pos.x = nextX;
-            } else {
-                // Collision!
-                console.log(`[MoveSystem] Blocked X! Pos: ${pos.x}, Target: ${nextX}`);
-                // Debug what blocked it
-                checkCollision(cx1, cy1, true); // Add verbose flag if possible, or just manually check here
-                vel.x = 0;
-            }
-
-            // Y Axis
-            const nextYAfterX = pos.y + vel.y * dt;
-            if (!checkCollision(pos.x + 4, nextYAfterX + (vel.y > 0 ? 28 : 12)) &&
-                !checkCollision(pos.x + 12, nextYAfterX + (vel.y > 0 ? 28 : 12))) {
-                updateOccupancy(pos.x, pos.y, pos.x, nextYAfterX);
-                pos.y = nextYAfterX;
-            } else {
-                vel.y = 0;
-            }      // Network Update (Player Only)
-            if (world.getComponent(id, PlayerControllable)) {
-                if (network) network.sendMove(pos.x, pos.y);
-
-                // Teleport Check
-                const teleporters = world.query([Teleporter, Position]);
-                for (const tId of teleporters) {
-                    const tPos = world.getComponent(tId, Position)!;
-                    const tData = world.getComponent(tId, Teleporter)!;
-
-                    if (Math.abs((pos.x + 8) - (tPos.x + 8)) < 12 && Math.abs((pos.y + 8) - (tPos.y + 8)) < 12) {
-                        pos.x = tData.targetX;
-                        pos.y = tData.targetY;
-                        // Sync Teleport too
-                        if (network) network.sendMove(pos.x, pos.y);
-                        return;
-                    }
-                }
-
-                // Footsteps
-                // Footsteps
-                const pc = world.getComponent(id, PlayerControllable)!;
-                pc.footstepTimer -= dt;
-                if (pc.footstepTimer <= 0) {
-                    let material: 'grass' | 'stone' | 'wood' = 'grass';
-
-                    if (map) {
-                        const tx = Math.floor((pos.x + 8) / map.tileSize);
-                        const ty = Math.floor((pos.y + 8) / map.tileSize);
-                        if (tx >= 0 && tx < map.width && ty >= 0 && ty < map.height) {
-                            const tile = map.tiles[ty * map.width + tx];
-                            const top = tile.items.length > 0 ? tile.items[tile.items.length - 1].id : 0;
-
-                            if (top === 19 || top === 20) material = 'wood';
-                            else if (top >= 23 || top === 17) material = 'stone';
+                    if (oldTx !== newTx || oldTy !== newTy) {
+                        // Clear old
+                        if (oldTx >= 0 && oldTx < map.width && oldTy >= 0 && oldTy < map.height) {
+                            const oldIdx = oldTy * map.width + oldTx;
+                            if (map.tiles[oldIdx].creature === id) {
+                                map.tiles[oldIdx].creature = null;
+                            }
+                        }
+                        // Set new
+                        if (newTx >= 0 && newTx < map.width && newTy >= 0 && newTy < map.height) {
+                            const newIdx = newTy * map.width + newTx;
+                            map.tiles[newIdx].creature = id;
                         }
                     }
+                };
 
-                    audio.playFootstep(material);
-                    pc.footstepTimer = 0.4;
-                }
-            }
-        }
-    }
-}
+                // X Axis
+                const cx1 = nextX + (vel.x > 0 ? 12 : 4);
+                const cy1 = pos.y + 12;
+                const cx2 = nextX + (vel.x > 0 ? 12 : 4);
+                const cy2 = pos.y + 28;
 
-
-export function cameraSystem(world: World, mapWidth: number, mapHeight: number) {
-    const playerEntity = world.query([PlayerControllable, Position])[0];
-    if (playerEntity === undefined) return;
-    const pos = world.getComponent(playerEntity, Position)!;
-
-    const cameraEntity = world.query([Camera])[0];
-    if (cameraEntity === undefined) return;
-    const cam = world.getComponent(cameraEntity, Camera)!;
-
-    // Center camera on player (screen 320x240)
-    let targetX = pos.x - 320 / 2;
-    let targetY = pos.y - 240 / 2;
-
-    // Clamp
-    targetX = Math.max(0, Math.min(targetX, mapWidth - 320));
-    targetY = Math.max(0, Math.min(targetY, mapHeight - 240));
-
-    cam.x = targetX;
-    cam.y = targetY;
-}
-
-// --- RENDERING ---
-import { spriteSheet, spriteCanvas, SPRITES, SHEET_TILE_SIZE, SHEET_COLS, assetManager } from './assets';
-
-
-export function combatSystem(world: World, input: InputHandler, audio: AudioController, ui: UIManager, network?: any, pvpEnabled: boolean = false) {
-    // Auto-Attack (Target Locked)
-    const playerEntity = world.query([PlayerControllable, Position, Inventory])[0];
-    if (playerEntity === undefined) return;
-
-    const targetComp = world.getComponent(playerEntity, Target);
-    let autoAttack = false;
-
-    const now = Date.now();
-    if (now - lastAttackTime < 1000) return; // 1.0s Attack Speed
-
-    if (targetComp) {
-        // Check range
-        const tPos = world.getComponent(targetComp.targetId, Position);
-        if (tPos) {
-            const pPos = world.getComponent(playerEntity, Position)!;
-            const dx = (tPos.x + 8) - (pPos.x + 8);
-            const dy = (tPos.y + 8) - (pPos.y + 8);
-            if (Math.abs(dx) <= 24 && Math.abs(dy) <= 24) {
-                autoAttack = true;
-            }
-        }
-    }
-
-    if (!autoAttack && !input.isDown('KeyF')) return;
-    lastAttackTime = now;
-
-    if (input.isDown('KeyF')) audio.playAttack(); // Manual only sound? Or both?
-    if (autoAttack) audio.playAttack();
-
-    // const playerEntity = ... (Already queried)
-    // if (playerEntity === undefined) return; // Redundant check
-
-
-    const pos = world.getComponent(playerEntity, Position)!;
-    const pc = world.getComponent(playerEntity, PlayerControllable)!;
-    const inv = world.getComponent(playerEntity, Inventory)!;
-    const skills = world.getComponent(playerEntity, Skills);
-    const xp = world.getComponent(playerEntity, Experience);
-
-    const targetX = pos.x + 8 + (pc.facingX * 24);
-    const targetY = pos.y + 8 + (pc.facingY * 24);
-
-    let damage = 0; // Base
-    let skillLevel = 10;
-
-    const weapon = inv.getEquipped('rhand');
-    if (weapon) {
-        damage = weapon.item.damage;
-
-        // Skill Damage Bonus
-        if (skills) {
-            // Determine skill type
-            let skillType = weapon.item.weaponType || "sword";
-            // Fallback inference if old save
-            if (weapon.item.name.includes("Sword")) skillType = "sword";
-            else if (weapon.item.name.includes("Axe")) skillType = "axe";
-            else if (weapon.item.name.includes("Club")) skillType = "club";
-
-            const skill = (skills as any)[skillType] as Skill;
-            if (skill) {
-                // Passives: Might now boosts your EFFECTIVE Skill Level
-                // This aligns with "Damage comes from Skill" philosophy
-                const passives = world.getComponent(playerEntity, Passives);
-                const mightBonus = passives ? passives.might : 0;
-
-                // Effective Skill = Trained Skill + (Might * 3)
-                // Might makes you handle weapons like a master
-                skillLevel = skill.level + (mightBonus * 3);
-
-                // --- WEAPON MISS CHANCE ---
-                // Base: 35% Miss. -1% per Effective Skill. Cap at 5% Miss.
-                const missChance = Math.max(0.05, 0.35 - (skillLevel * 0.01));
-
-                if (Math.random() < missChance) {
-                    damage = 0;
-                    spawnFloatingText(world, targetX, targetY, "MISS", '#aaaaaa');
+                if (!checkCollision(cx1, cy1) && !checkCollision(cx2, cy2)) {
+                    // No collision
+                    updateOccupancy(pos.x, pos.y, nextX, pos.y);
+                    pos.x = nextX;
                 } else {
-                    // Tibia Formula approximation: (Level * 0.2) + (Skill * Atk * 0.06) + (Atk * 0.5)
-                    // (Calculation continues below...)
-                    const playerLevel = xp ? xp.level : 1;
-                    const skillDmg = (skillLevel * weapon.item.damage * 0.06) + (playerLevel * 0.2);
+                    // Collision!
+                    // console.log(`[MoveSystem] Blocked X! Pos: ${pos.x}, Target: ${nextX}`);
+                    // Debug what blocked it
+                    // if (DEBUG_COLLIDERS) checkCollision(cx1, cy1, true);
+                    vel.x = 0;
+                }
 
-                    // Final Damage
-                    damage = Math.floor(skillDmg + (Math.random() * (damage * 0.5))); // Variation
+                // Y Axis
+                const nextYAfterX = pos.y + vel.y * dt;
+                if (!checkCollision(pos.x + 4, nextYAfterX + (vel.y > 0 ? 28 : 12)) &&
+                    !checkCollision(pos.x + 12, nextYAfterX + (vel.y > 0 ? 28 : 12))) {
+                    updateOccupancy(pos.x, pos.y, pos.x, nextYAfterX);
+                    pos.y = nextYAfterX;
+                } else {
+                    vel.y = 0;
+                }      // Network Update (Player Only)
+                if (world.getComponent(id, PlayerControllable)) {
+                    if (network) network.sendMove(pos.x, pos.y);
 
-                    // --- CRITICAL HIT ---
-                    // 5% Chance
-                    if (Math.random() < 0.05) {
-                        damage *= 2;
-                        spawnFloatingText(world, targetX, targetY, "CRIT!", '#ff0000');
-                        // Screen Shake Magnitude
-                        const s = world.createEntity();
-                        world.addComponent(s, new ScreenShake(0.2, 5.0));
+                    // Teleport Check
+                    const teleporters = world.query([Teleporter, Position]);
+                    for (const tId of teleporters) {
+                        const tPos = world.getComponent(tId, Position)!;
+                        const tData = world.getComponent(tId, Teleporter)!;
+
+                        if (Math.abs((pos.x + 8) - (tPos.x + 8)) < 12 && Math.abs((pos.y + 8) - (tPos.y + 8)) < 12) {
+                            pos.x = tData.targetX;
+                            pos.y = tData.targetY;
+                            // Sync Teleport too
+                            if (network) network.sendMove(pos.x, pos.y);
+                            return;
+                        }
+                    }
+
+                    // Footsteps
+                    // Footsteps
+                    const pc = world.getComponent(id, PlayerControllable)!;
+                    pc.footstepTimer -= dt;
+                    if (pc.footstepTimer <= 0) {
+                        let material: 'grass' | 'stone' | 'wood' = 'grass';
+
+                        if (map) {
+                            const tx = Math.floor((pos.x + 8) / map.tileSize);
+                            const ty = Math.floor((pos.y + 8) / map.tileSize);
+                            if (tx >= 0 && tx < map.width && ty >= 0 && ty < map.height) {
+                                const tile = map.tiles[ty * map.width + tx];
+                                const top = tile.items.length > 0 ? tile.items[tile.items.length - 1].id : 0;
+
+                                if (top === 19 || top === 20) material = 'wood';
+                                else if (top >= 23 || top === 17) material = 'stone';
+                            }
+                        }
+
+                        audio.playFootstep(material);
+                        pc.footstepTimer = 0.4;
                     }
                 }
+            }
+        }
+    }
 
-                // Skill Gain
-                skill.xp += 1;
-                // Simple exponential curve: 10 * 1.1^Level
-                const nextXp = Math.floor(50 * Math.pow(1.1, skill.level - 10));
-                if (skill.xp >= nextXp) {
-                    skill.xp = 0;
-                    skill.level++;
-                    if ((ui as any).console) (ui as any).console.addSystemMessage(`You advanced to ${skillType} fighting level ${skill.level}.`);
-                    audio.playLevelUp();
+
+
+    // --- RENDERING ---
+    // NOTE: Assets already exported at top of file via `export * from './assets'` - removed redundant nested import
+
+
+    function combatSystem(world: World, input: InputHandler, audio: AudioController, ui: UIManager, network?: any, pvpEnabled: boolean = false) {
+        // Auto-Attack (Target Locked)
+        const playerEntity = world.query([PlayerControllable, Position, Inventory])[0];
+        if (playerEntity === undefined) return;
+
+        const targetComp = world.getComponent(playerEntity, Target);
+        let autoAttack = false;
+
+        const now = Date.now();
+        if (now - lastAttackTime < 1000) return; // 1.0s Attack Speed
+
+        if (targetComp) {
+            // Check range
+            const tPos = world.getComponent(targetComp.targetId, Position);
+            if (tPos) {
+                const pPos = world.getComponent(playerEntity, Position)!;
+                const dx = (tPos.x + 8) - (pPos.x + 8);
+                const dy = (tPos.y + 8) - (pPos.y + 8);
+                if (Math.abs(dx) <= 24 && Math.abs(dy) <= 24) {
+                    autoAttack = true;
                 }
             }
         }
-    } else {
-        // Fist fighting use Club logic for now? Or just base
-        damage = 1 + (skills ? Math.floor(skills.club.level * 0.2) : 0);
-    }
+
+        if (!autoAttack && !input.isDown('KeyF')) return;
+        lastAttackTime = now;
+
+        if (input.isDown('KeyF')) audio.playAttack(); // Manual only sound? Or both?
+        if (autoAttack) audio.playAttack();
+
+        // const playerEntity = ... (Already queried)
+        // if (playerEntity === undefined) return; // Redundant check
 
 
-    const attackRadius = 24;
+        const pos = world.getComponent(playerEntity, Position)!;
+        const pc = world.getComponent(playerEntity, PlayerControllable)!;
+        const inv = world.getComponent(playerEntity, Inventory)!;
+        const skills = world.getComponent(playerEntity, Skills);
+        const xp = world.getComponent(playerEntity, Experience);
 
-    const enemies = world.query([Health, Position]);
-    let hit = false;
-    let targetId = -1;
+        const targetX = pos.x + 8 + (pc.facingX * 24);
+        const targetY = pos.y + 8 + (pc.facingY * 24);
 
-    // 1. Check Locked Target First
-    // Use existing variable from outer scope if accessible, or rename to avoid conflict
-    // The outer one is line 504. Let's start fresh for clarity or reuse.
-    // Actually, line 504 is 'if (targetComp)'. Where is it defined?
-    // It was passed into the function? No.
-    // It must be defined earlier in the function. Let me check line 48... NO.
-    // Ah, I missed where 'targetComp' was defined in the original file.
-    // Let's assume it IS defined earlier. I will use a NEW name 'lockedTarget'.
+        let damage = 0; // Base
+        let skillLevel = 10;
 
-    const lockedTarget = world.getComponent(playerEntity, Target);
-    if (lockedTarget) {
-        const tPos = world.getComponent(lockedTarget.targetId, Position);
-        if (tPos) {
-            const dx = (pos.x + 8) - (tPos.x + 8);
-            const dy = (pos.y + 8) - (tPos.y + 8);
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= attackRadius) {
-                targetId = lockedTarget.targetId;
-            }
-        }
-    }
+        const weapon = inv.getEquipped('rhand');
+        if (weapon) {
+            damage = weapon.item.damage;
 
-    // 2. Fallback to Closest Enemy if no locked target or out of range
-    if (targetId === -1) {
-        const targets: { id: number, dist: number }[] = [];
-        for (const id of enemies) {
-            if (id === playerEntity) continue;
-            const ePos = world.getComponent(id, Position)!;
-            const dx = (pos.x + 8) - (ePos.x + 8);
-            const dy = (pos.y + 8) - (ePos.y + 8);
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= attackRadius) targets.push({ id, dist });
-        }
-        targets.sort((a, b) => a.dist - b.dist);
-        if (targets.length > 0) targetId = targets[0].id;
-    }
+            // Skill Damage Bonus
+            if (skills) {
+                // Determine skill type
+                let skillType = weapon.item.weaponType || "sword";
+                // Fallback inference if old save
+                if (weapon.item.name.includes("Sword")) skillType = "sword";
+                else if (weapon.item.name.includes("Axe")) skillType = "axe";
+                else if (weapon.item.name.includes("Club")) skillType = "club";
 
-    if (targetId !== -1) {
-        const ePos = world.getComponent(targetId, Position)!;
+                const skill = (skills as any)[skillType] as Skill;
+                if (skill) {
+                    // Passives: Might now boosts your EFFECTIVE Skill Level
+                    // This aligns with "Damage comes from Skill" philosophy
+                    const passives = world.getComponent(playerEntity, Passives);
+                    const mightBonus = passives ? passives.might : 0;
 
-        // Check Network Target
-        const rp = world.getComponent(targetId, RemotePlayer);
-        if (rp && (ui as any).network && (ui as any).network.connected) {
-            if (pvpEnabled) {
-                (ui as any).network.sendAttack(rp.id);
+                    // Effective Skill = Trained Skill + (Might * 3)
+                    // Might makes you handle weapons like a master
+                    skillLevel = skill.level + (mightBonus * 3);
 
-                // Visual Feedback for PvP
-                // Red 'Ping' effect
-                const ft = world.createEntity();
-                world.addComponent(ft, new Position(ePos.x, ePos.y - 10));
-                world.addComponent(ft, new Velocity(0, -10));
-                world.addComponent(ft, new FloatingText("Attack!", '#ff5555', 0.5, 0.5));
-            } else {
-                if ((ui as any).console) (ui as any).console.addSystemMessage("PvP is Disabled. Press 'P' to enable.");
+                    // --- WEAPON MISS CHANCE ---
+                    // Base: 35% Miss. -1% per Effective Skill. Cap at 5% Miss.
+                    const missChance = Math.max(0.05, 0.35 - (skillLevel * 0.01));
+
+                    if (Math.random() < missChance) {
+                        damage = 0;
+                        spawnFloatingText(world, targetX, targetY, "MISS", '#aaaaaa');
+                    } else {
+                        // Tibia Formula approximation: (Level * 0.2) + (Skill * Atk * 0.06) + (Atk * 0.5)
+                        // (Calculation continues below...)
+                        const playerLevel = xp ? xp.level : 1;
+                        const skillDmg = (skillLevel * weapon.item.damage * 0.06) + (playerLevel * 0.2);
+
+                        // Final Damage
+                        damage = Math.floor(skillDmg + (Math.random() * (damage * 0.5))); // Variation
+
+                        // --- CRITICAL HIT ---
+                        // 5% Chance
+                        if (Math.random() < 0.05) {
+                            damage *= 2;
+                            spawnFloatingText(world, targetX, targetY, "CRIT!", '#ff0000');
+                            // Screen Shake Magnitude
+                            const s = world.createEntity();
+                            world.addComponent(s, new ScreenShake(0.2, 5.0));
+                        }
+                    }
+
+                    // Skill Gain
+                    skill.xp += 1;
+                    // Simple exponential curve: 10 * 1.1^Level
+                    const nextXp = Math.floor(50 * Math.pow(1.1, skill.level - 10));
+                    if (skill.xp >= nextXp) {
+                        skill.xp = 0;
+                        skill.level++;
+                        if ((ui as any).console) (ui as any).console.addSystemMessage(`You advanced to ${skillType} fighting level ${skill.level}.`);
+                        audio.playLevelUp();
+                    }
+                }
             }
         } else {
-            // Local Enemy Logic
-            const health = world.getComponent(targetId, Health);
-            if (health) {
-                health.current -= damage;
+            // Fist fighting use Club logic for now? Or just base
+            damage = 1 + (skills ? Math.floor(skills.club.level * 0.2) : 0);
+        }
 
-                // Spatial audio: play hit sound from enemy position
-                audio.playSpatialSound('hit', ePos.x, ePos.y, pos.x, pos.y);
 
-                if ((ui as any).console) (ui as any).console.sendMessage(`You hit Enemy for ${damage} dmg.`);
+        const attackRadius = 24;
 
-                // Spawn blood particles on hit
-                spawnBloodEffect(world, ePos.x, ePos.y);
+        const enemies = world.query([Health, Position]);
+        let hit = false;
+        let targetId = -1;
 
-                const ft = world.createEntity();
-                world.addComponent(ft, new Position(ePos.x, ePos.y));
-                world.addComponent(ft, new Velocity(0, -20));
-                world.addComponent(ft, new FloatingText(`-${damage}`, '#ff3333'));
+        // 1. Check Locked Target First
+        // Use existing variable from outer scope if accessible, or rename to avoid conflict
+        // The outer one is line 504. Let's start fresh for clarity or reuse.
+        // Actually, line 504 is 'if (targetComp)'. Where is it defined?
+        // It was passed into the function? No.
+        // It must be defined earlier in the function. Let me check line 48... NO.
+        // Ah, I missed where 'targetComp' was defined in the original file.
+        // Let's assume it IS defined earlier. I will use a NEW name 'lockedTarget'.
 
-                if (health.current <= 0) {
-                    const nameComp = world.getComponent(targetId, Name);
-                    const enemyName = nameComp ? nameComp.value : "Enemy";
-                    if ((ui as any).console) (ui as any).console.sendMessage(`${enemyName} died.`);
+        const lockedTarget = world.getComponent(playerEntity, Target);
+        if (lockedTarget) {
+            const tPos = world.getComponent(lockedTarget.targetId, Position);
+            if (tPos) {
+                const dx = (pos.x + 8) - (tPos.x + 8);
+                const dy = (pos.y + 8) - (tPos.y + 8);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= attackRadius) {
+                    targetId = lockedTarget.targetId;
+                }
+            }
+        }
 
-                    // Quest Progress Tracking
-                    const qLog = world.getComponent(playerEntity, QuestLog);
-                    if (qLog) {
-                        for (const quest of qLog.quests) {
-                            if (!quest.completed && quest.type === 'kill' && quest.target.toLowerCase() === enemyName.toLowerCase()) {
-                                quest.current++;
-                                if ((ui as any).console) (ui as any).console.sendMessage(`Quest "${quest.name}": ${quest.current}/${quest.required} ${quest.target}s`);
-                                if (quest.current >= quest.required) {
-                                    quest.completed = true;
-                                    if ((ui as any).console) (ui as any).console.addSystemMessage(`Quest Complete! Return to turn in "${quest.name}"`);
+        // 2. Fallback to Closest Enemy if no locked target or out of range
+        if (targetId === -1) {
+            const targets: { id: number, dist: number }[] = [];
+            for (const id of enemies) {
+                if (id === playerEntity) continue;
+                const ePos = world.getComponent(id, Position)!;
+                const dx = (pos.x + 8) - (ePos.x + 8);
+                const dy = (pos.y + 8) - (ePos.y + 8);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= attackRadius) targets.push({ id, dist });
+            }
+            targets.sort((a, b) => a.dist - b.dist);
+            if (targets.length > 0) targetId = targets[0].id;
+        }
+
+        if (targetId !== -1) {
+            const ePos = world.getComponent(targetId, Position)!;
+
+            // Check Network Target
+            const rp = world.getComponent(targetId, RemotePlayer);
+            if (rp && (ui as any).network && (ui as any).network.connected) {
+                if (pvpEnabled) {
+                    (ui as any).network.sendAttack(rp.id);
+
+                    // Visual Feedback for PvP
+                    // Red 'Ping' effect
+                    const ft = world.createEntity();
+                    world.addComponent(ft, new Position(ePos.x, ePos.y - 10));
+                    world.addComponent(ft, new Velocity(0, -10));
+                    world.addComponent(ft, new FloatingText("Attack!", '#ff5555', 0.5, 0.5));
+                } else {
+                    if ((ui as any).console) (ui as any).console.addSystemMessage("PvP is Disabled. Press 'P' to enable.");
+                }
+            } else {
+                // Local Enemy Logic
+                const health = world.getComponent(targetId, Health);
+                if (health) {
+                    health.current -= damage;
+
+                    // Spatial audio: play hit sound from enemy position
+                    audio.playSpatialSound('hit', ePos.x, ePos.y, pos.x, pos.y);
+
+                    if ((ui as any).console) (ui as any).console.sendMessage(`You hit Enemy for ${damage} dmg.`);
+
+                    // Spawn blood particles on hit
+                    spawnBloodEffect(world, ePos.x, ePos.y);
+
+                    const ft = world.createEntity();
+                    world.addComponent(ft, new Position(ePos.x, ePos.y));
+                    world.addComponent(ft, new Velocity(0, -20));
+                    world.addComponent(ft, new FloatingText(`-${damage}`, '#ff3333'));
+
+                    if (health.current <= 0) {
+                        const nameComp = world.getComponent(targetId, Name);
+                        const enemyName = nameComp ? nameComp.value : "Enemy";
+                        if ((ui as any).console) (ui as any).console.sendMessage(`${enemyName} died.`);
+
+                        // Quest Progress Tracking
+                        const qLog = world.getComponent(playerEntity, QuestLog);
+                        if (qLog) {
+                            for (const quest of qLog.quests) {
+                                if (!quest.completed && quest.type === 'kill' && quest.target.toLowerCase() === enemyName.toLowerCase()) {
+                                    quest.current++;
+                                    if ((ui as any).console) (ui as any).console.sendMessage(`Quest "${quest.name}": ${quest.current}/${quest.required} ${quest.target}s`);
+                                    if (quest.current >= quest.required) {
+                                        quest.completed = true;
+                                        if ((ui as any).console) (ui as any).console.addSystemMessage(`Quest Complete! Return to turn in "${quest.name}"`);
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    const loot = generateLoot(enemyName.toLowerCase());
-                    gainExperience(world, 50, ui, audio);
-                    createCorpse(world, ePos.x, ePos.y, loot);
-                    world.removeEntity(targetId);
+                        const loot = generateLoot(enemyName.toLowerCase());
+                        gainExperience(world, 50, ui, audio);
+
+                        // Lookup corpse sprite
+                        const def = MOB_REGISTRY[enemyName.toLowerCase()];
+                        const corpseSprite = def && def.corpse ? def.corpse : (SPRITES.BONES || 22);
+
+                        // --- SKILL: SPLIT ON DEATH (Slime) ---
+                        const splitComp = world.getComponent(targetId, SplitOnDeath);
+                        if (splitComp && splitComp.splitCount > 0 && health.max > splitComp.minHealth) {
+                            if ((ui as any).console) (ui as any).console.sendMessage(`${enemyName} splits into smaller pieces!`);
+
+                            for (let i = 0; i < splitComp.splitCount; i++) {
+                                // Find a safe spot nearby
+                                const offX = (Math.random() - 0.5) * 32;
+                                const offY = (Math.random() - 0.5) * 32;
+                                // Recursively create enemy of same type but weaker?
+                                // Or create specific "small_slime"?
+                                // For simplicty, let's create same type but set scale/health in CreateEnemy?
+                                // CreateEnemy takes type.
+                                // If we want "small slime", we might need a registry entry or dynamic modification.
+                                // Let's modify the new entity after creation.
+                                const child = createEnemy(world, ePos.x + offX, ePos.y + offY, splitComp.splitType || enemyName.toLowerCase());
+
+                                // Scale down child
+                                // 1. Health
+                                const childHp = world.getComponent(child, Health);
+                                if (childHp) {
+                                    childHp.max = Math.floor(health.max / 2);
+                                    childHp.current = childHp.max;
+                                }
+                                // 2. Size (Visual)
+                                const childSprite = world.getComponent(child, Sprite);
+                                if (childSprite) {
+                                    childSprite.size = Math.floor(childSprite.size * 0.75);
+                                }
+                                // 3. Prevent infinite splitting if too small?
+                                if (childHp && childHp.max < splitComp.minHealth) {
+                                    world.removeComponent(child, SplitOnDeath);
+                                }
+                            }
+                        } else {
+                            // Only spawn corpse if NOT splitting (or maybe both? Slimes usually leave puddles?)
+                            // If split, the pieces are the remains.
+                            createCorpse(world, ePos.x, ePos.y, loot, corpseSprite);
+                        }
+
+                        world.removeEntity(targetId);
+                    }
                 }
             }
+
+            // Screen Shake (Shared)
+            const shake = world.createEntity();
+            world.addComponent(shake, new ScreenShake(0.2, 2.0));
+
+            // Blood Particles (Shared)
+            for (let i = 0; i < 5; i++) {
+                const p = world.createEntity();
+                world.addComponent(p, new Position(ePos.x + 8, ePos.y + 8));
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 50 + 20;
+                const life = Math.random() * 0.3 + 0.2;
+                world.addComponent(p, new Particle(life, life, '#a00', 2, Math.cos(angle) * speed, Math.sin(angle) * speed));
+            }
+            hit = true;
         }
 
-        // Screen Shake (Shared)
-        const shake = world.createEntity();
-        world.addComponent(shake, new ScreenShake(0.2, 2.0));
-
-        // Blood Particles (Shared)
-        for (let i = 0; i < 5; i++) {
-            const p = world.createEntity();
-            world.addComponent(p, new Position(ePos.x + 8, ePos.y + 8));
-            const angle = Math.random() * Math.PI * 2;
-            const speed = Math.random() * 50 + 20;
-            const life = Math.random() * 0.3 + 0.2;
-            world.addComponent(p, new Particle(life, life, '#a00', 2, Math.cos(angle) * speed, Math.sin(angle) * speed));
+        if (!hit) {
+            if ((ui as any).console) (ui as any).console.addSystemMessage("You swing at the air.");
         }
-        hit = true;
     }
 
-    if (!hit) {
-        if ((ui as any).console) (ui as any).console.addSystemMessage("You swing at the air.");
-    }
 }
 
+// Restored function signature
 export function projectileSystem(world: World, dt: number, ui: UIManager, audio: AudioController) {
     const projectiles = world.query([Position, Projectile]);
     const targets = world.query([Position, Health, Name]); // Possible targets
@@ -2018,7 +1894,7 @@ export function projectileSystem(world: World, dt: number, ui: UIManager, audio:
 // Uses native sprite size unless 'size' override is provided
 // Updated drawSprite using AssetManager
 // Uses native sprite size unless 'size' override is provided
-export function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: number, dy: number, size: number = 0, flipX: boolean = false) {
+function drawSprite(ctx: CanvasRenderingContext2D, uIndex: number, dx: number, dy: number, size: number = 0, flipX: boolean = false) {
     let source = assetManager.getSpriteSource(uIndex);
 
     // --- Dynamic Texture Switching (Fix for prompt) ---
@@ -2082,11 +1958,11 @@ function getTileVariant(x: number, y: number, numVariants: number): number {
  */
 const GRASS_VARIANTS = [16, 16, 16, 62, 63, 64]; // 50% base, 16.6% dark, 16.6% light, 16.6% flowers
 
-export function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
+function tileRenderSystem(world: World, ctx: CanvasRenderingContext2D) {
     // Deprecated. Merged into renderSystem.
 }
 
-export function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
+function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
     // Force Crisp Pixels
     ctx.imageSmoothingEnabled = false;
 
@@ -2382,7 +2258,7 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
         const dy = (pPos.y + 8) - (ePos.y + 8);
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 16) {
+        if (dist < 40) { // 40px range (reach adjacent tiles)
             const last = cooldowns.get(id) || 0;
             if (now - last > 1000) {
                 cooldowns.set(id, now);
@@ -2462,9 +2338,48 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                         }
                     }
 
+                    // The following block is intended for a meleeCombatSystem where 'targetEntity' is the one being hit.
+                    // In enemyCombatSystem, the player is the target.
+                    // Assuming 'isHit' is always true for enemy attacks that reach the player.
+                    // Assuming 'critChance' and 'critMult' are not applicable for enemy attacks on player,
+                    // or would be defined for the enemy. For now, applying the resistance logic to player damage.
+
+                    // --- SKILL: MOB RESISTANCE (Phys/Mag/Elem) ---
+                    // Melee is essentially "Physical" unless weapon has elemental? 
+                    // For now assume Melee = Physical.
+                    const resistance = world.getComponent(playerEntity, MobResistance); // Player is the target here
+                    if (resistance) {
+                        if (resistance.physicalImmune) {
+                            damage = 0; // Reduce damage to 0 if player is immune
+                            spawnFloatingText(world, pPos.x, pPos.y, "IMMUNE", '#ffff00');
+                        } else {
+                            // TODO: Add partial physical resist if needed (e.g. 0.5) using generic prop? 
+                            // Current MobResistance only has immune bool or elemental %. 
+                            // Let's assume standard 'defense' armor handles partial, but ghost is immune.
+                        }
+                    }
+
                     if (damage > 0) {
                         pHealth.current = Math.max(0, pHealth.current - damage);
                         if ((ui as any).console) (ui as any).console.sendMessage(`Ouch! Took ${damage} dmg.`);
+
+                        // --- SKILL: STATUS ON HIT (Poison/Bleed/Freeze) ---
+                        const statusHit = world.getComponent(id, StatusOnHit);
+                        if (statusHit && Math.random() < statusHit.chance) {
+                            // Apply Status
+                            // For simplicity, we just add/overwrite a generic StatusEffect component on player
+                            // In a real system we'd support multiple or queue them. 
+                            // Current StatusEffect is singular.
+                            const existing = world.getComponent(playerEntity, StatusEffect);
+                            // Only overwrite if new one is "stronger" or refresh? or differing types?
+                            // Let's just Apply.
+                            world.addComponent(playerEntity, new StatusEffect(statusHit.effectType, statusHit.duration, statusHit.power));
+
+                            // Visual Feedback
+                            const color = statusHit.effectType === 'poison' ? '#00ff00' : (statusHit.effectType === 'freeze' ? '#00ffff' : '#ff0000');
+                            spawnFloatingText(world, pPos.x, pPos.y, `*${statusHit.effectType.toUpperCase()}*`, color);
+                            if ((ui as any).console) (ui as any).console.sendMessage(`You are ${statusHit.effectType}!`);
+                        }
 
                         // Spatial audio: play hit sound from enemy position
                         audio.playSpatialSound('hit', ePos.x, ePos.y, pPos.x, pPos.y);
@@ -2476,54 +2391,28 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                         const ft = world.createEntity();
                         world.addComponent(ft, new Position(pPos.x, pPos.y));
                         world.addComponent(ft, new Velocity(0, -20));
-                        world.addComponent(ft, new FloatingText(`-${damage}`, '#f00'));
                         if (pHealth.current <= 0) {
                             if ((ui as any).console) (ui as any).console.addSystemMessage("YOU DIED!");
                             audio.playDeath();
+                        }
+
+                        // UI Update
+                        const gameObj = (window as any).game;
+                        if (gameObj && gameObj.player) {
+                            gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
                         }
                     }
                 }
             }
         }
     }
-
-    // B. Check Enemies (Targeting) - if not interacted with something else
-    if (!clickedInteractable) {
-        // Re-query for potential targets (Entities with Health/Sprite/Pos)
-        const targets = world.query([Health, Position, Sprite]);
-        for (const eid of targets) {
-            // Skip player or self
-            if (world.getComponent(eid, PlayerControllable)) continue;
-
-            const pos = world.getComponent(eid, Position)!;
-            // Standard 32x32 hit box
-            if (worldX >= pos.x && worldX <= pos.x + 32 &&
-                worldY >= pos.y && worldY <= pos.y + 32) {
-
-                const player = world.query([PlayerControllable, Target])[0];
-                if (player) {
-                    const pTarget = world.getComponent(player, Target)!;
-                    // Toggle or Set Target
-                    pTarget.entityId = eid; // Set target
-
-                    // Visual/Audio feedback?
-                    const hp = world.getComponent(eid, Health);
-                    const name = world.getComponent(eid, Name)?.value || "Target";
-                    if (hp && hp.current > 0) {
-                        if ((ui as any).console) (ui as any).console.addSystemMessage(`Targeting: ${name}`);
-                    }
-                }
-                break; // Only target top-most
-            }
-        }
-    }
 }
-}
+
 
 
 // Draw Target Reticle
 
-export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonType: 'fire' | 'ice' | 'water' | 'earth' | 'temple' | 'final' = 'temple', seed: number = 0) {
+export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonType: string = 'temple', seed: number = 0) {
     // 1. Clear Entities (Preserve Player)
     const players = world.query([PlayerControllable]);
     if (players.length === 0) return;
@@ -2542,7 +2431,12 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
     if (type === 'overworld') {
         mapData = generateOverworld(256, 256, seed);
     } else {
-        mapData = generateDungeon(64, 64, seed + Math.random(), dungeonType);
+        // Biome-based generation: 'snow', 'desert', 'swamp' -> 'cave' type
+        // If dungeonType is 'temple' or generic, use 'dungeon' type logic?
+        // Let's assume most entrances are caves for now.
+        // We pass the 'dungeonType' string (e.g. 'snow') as the BIOME argument.
+        const isBuilt = dungeonType === 'temple' || dungeonType === 'crypt';
+        mapData = generateDungeon(64, 64, seed + Math.random(), isBuilt ? 'dungeon' : 'cave', dungeonType);
     }
 
     const mapEntity = world.query([TileMap])[0];
@@ -2560,15 +2454,22 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
         if (ent.type === 'player') {
             // Teleport Player
             const pPos = world.getComponent(playerEntity, Position)!;
-            pPos.x = ent.x;
-            pPos.y = ent.y;
+
+            // Force Town Center for Overworld (User Request)
+            if (type === 'overworld') {
+                pPos.x = 128 * 32;
+                pPos.y = 128 * 32;
+            } else {
+                pPos.x = ent.x;
+                pPos.y = ent.y;
+            }
 
             // Reset Camera immediately to prevent flicker
             const cam = world.query([Camera])[0];
             if (cam) {
                 const cPos = world.getComponent(cam, Camera)!;
-                cPos.x = ent.x - 160;
-                cPos.y = ent.y - 120;
+                cPos.x = pPos.x - 160;
+                cPos.y = pPos.y - 120;
             }
         } else if (ent.type === 'dungeon_entrance') {
             const portal = world.createEntity();
@@ -2577,6 +2478,11 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
             world.addComponent(portal, new DungeonEntrance(ent.dungeonType, ent.label));
             world.addComponent(portal, new Interactable(`Enter ${ent.label}`));
             world.addComponent(portal, new Name(ent.label));
+
+            if ((ent as any).locked) {
+                const lockData = (ent as any).locked;
+                world.addComponent(portal, new Locked(lockData.keyIds, lockData.message));
+            }
         } else if (ent.type === 'dungeon_exit') {
             const portal = world.createEntity();
             world.addComponent(portal, new Position(ent.x, ent.y));
@@ -2595,17 +2501,66 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
         } else if (ent.type === 'earth_enemy') {
             createEarthEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
         } else if (ent.type === 'item') {
-            createItem(world, ent.x, ent.y, ent.name, ent.slot, ent.uIndex, ent.damage);
+            createItem(world, ent.x, ent.y, new ItemInstance(new Item(ent.name, ent.slot, ent.uIndex, ent.damage)));
         } else if (ent.type === 'static') {
             const s = world.createEntity();
             world.addComponent(s, new Position(ent.x, ent.y));
             world.addComponent(s, new Sprite(ent.sprite, ent.size));
         } else if (ent.type === 'boss') {
-            if (ent.enemyType === 'hydra') {
-                createWaterEnemy(world, ent.x, ent.y, 'hydra', 2.0);
-            } else {
-                createBoss(world, ent.x, ent.y);
+            // Use createEnemy for bosses, they are defined in MOB_REGISTRY
+            createEnemy(world, ent.x, ent.y, ent.enemyType, 1.5); // 1.5x difficulty scaling
+        } else if (ent.type === 'npc') {
+            // NPC spawning from map_gen (e.g., Aric the Guide, Gorn, Adana)
+            const npcE = world.createEntity();
+            world.addComponent(npcE, new Position(ent.x, ent.y));
+
+            // Determine sprite and dialogue based on npcType
+            let spriteId = SPRITES.NPC_GUIDE;
+            let dialogue = ['Greetings, traveler.', 'Welcome to Rookgaard.'];
+            let interactType = 'Talk';
+
+            if (ent.npcType === 'merchant') {
+                spriteId = SPRITES.NPC_MERCHANT;
+                dialogue = ["Welcome to my Smithy!", "I sell only the essentials."];
+                interactType = 'Trade';
+
+                // Add Merchant items (matches main.ts)
+                const merchItems = [
+                    createItemFromRegistry(SPRITES.POTION),
+                    createItemFromRegistry(SPRITES.SWORD),
+                    new Item("Backpack", "backpack", 142, 0, 200, "20 slots.", "none", "common", 0, 0, 0, true, 20),
+                    new Item("Mana Potion", "none", SPRITES.MANA_POTION || 65, 0, 75, "Restores 30 mana.", "none", "common")
+                ].filter(i => i) as Item[];
+                world.addComponent(npcE, new Merchant(merchItems));
+            } else if (ent.npcType === 'healer') {
+                spriteId = SPRITES.NPC_HEALER;
+                dialogue = ["Blessings upon you.", "Do you need healing?"];
+                interactType = 'Heal';
             }
+
+            world.addComponent(npcE, new Sprite(spriteId));
+            world.addComponent(npcE, new Name(ent.name || 'Villager'));
+            world.addComponent(npcE, new Interactable(interactType));
+            world.addComponent(npcE, new NPC(ent.npcType || 'guide', dialogue));
+
+            // If quest_giver, add QuestGiver component
+            if (ent.npcType === 'quest_giver') {
+                world.addComponent(npcE, new QuestGiver([
+                    {
+                        id: 'aric_1',
+                        name: 'Rat Plague',
+                        description: 'Kill 5 Rats to protect the supplies.',
+                        type: 'kill',
+                        target: 'Rat',
+                        required: 5,
+                        current: 0,
+                        completed: false,
+                        turnedIn: false,
+                        reward: { gold: 100, xp: 200 }
+                    }
+                ]));
+            }
+            console.log(`[SwitchMap] Spawned NPC '${ent.name}' at ${ent.x / 32}, ${ent.y / 32}`);
         }
     }
 }
@@ -2780,7 +2735,16 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
     world.addComponent(e, new LightSource(64, '#cc8844', true));
 
     // Magic System State
+    const sb = new SpellBook();
+    if (!sb.knownSpells.has("Fireball")) sb.knownSpells.set("Fireball", 1);
+    world.addComponent(e, sb);
     world.addComponent(e, new ActiveSpell('adori flam')); // Default Fireball
+
+    world.addComponent(e, new SkillPoints(0, 0));
+    world.addComponent(e, new Stats(10, 5, 1.5));
+    world.addComponent(e, new CombatState());
+    world.addComponent(e, new Target(null));
+    world.addComponent(e, new RegenState());
 
     // RPG Depth
     const vocData = VOCATIONS[vocationKey] || VOCATIONS.knight;
@@ -2797,16 +2761,49 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
     mana.max = vocData.startMana;
     mana.current = vocData.startMana;
 
+    // Equipment Interaction
     const inv = world.getComponent(e, Inventory)!;
-    inv.cap = vocData.startCap;
+    inv.gold = 100; // Start with some gold
 
-    // Collider: Body-sized collision box (smaller than sprite)
+    const defaultEquip = inv.getEquipped('backpack');
+    if (!defaultEquip) {
+        // === KNIGHT STARTING EQUIPMENT ===
+        // Knights start with basic gear - not the best, but functional
+
+        // 1. Small Bag (8 slots only - upgrade to Backpack later!)
+        const bagItem = new Item("Small Bag", "backpack", SPRITES.SMALL_BAG, 0, 30, "A small leather bag. Limited storage.", "none", "common", 0, 0, 0, true, 8);
+        const bagInst = new ItemInstance(bagItem, 1);
+
+        // Add starting consumables to bag
+        const apple = new Item("Apple", "none", SPRITES.APPLE, 0, 2, "Restores 10 HP.", "none", "common");
+        const potion = new Item("Health Potion", "none", SPRITES.POTION, 0, 50, "Restores 50 HP.", "none", "common");
+        bagInst.contents.push(new ItemInstance(apple, 5)); // 5 Apples
+        bagInst.contents.push(new ItemInstance(potion, 2)); // 2 Health Potions
+
+        inv.equip('backpack', bagInst);
+
+        // 2. Knight's Weapon: Wooden Sword (basic, not great)
+        const weapon = new Item("Wooden Sword", "rhand", SPRITES.WOODEN_SWORD, 8, 20, "A practice sword. Deals 8 damage.", "sword", "common", 0);
+        inv.equip('rhand', new ItemInstance(weapon, 1));
+
+        // 3. Knight's Armor: Leather Armor (basic protection)
+        const armor = new Item("Leather Armor", "body", SPRITES.LEATHER_ARMOR, 0, 50, "Basic leather protection.", "none", "common", 4);
+        inv.equip('body', new ItemInstance(armor, 1));
+
+        // 4. Knight's Shield: Wooden Shield
+        const shield = new Item("Wooden Shield", "lhand", SPRITES.WOODEN_SHIELD, 0, 40, "A simple wooden shield.", "none", "common", 5);
+        inv.equip('lhand', new ItemInstance(shield, 1));
+
+        // 5. Basic boots
+        const boots = new Item("Leather Boots", "boots", SPRITES.LEATHER_BOOTS, 0, 25, "Simple leather boots.", "none", "common", 1);
+        inv.equip('boots', new ItemInstance(boots, 1));
+    }
     world.addComponent(e, new Collider(20, 12, 6, 20)); // 20x12 box at bottom center
 
     return e;
 }
 
-export function createEnemy(world: World, x: number, y: number, type: string = "orc", difficulty: number = 1.0) {
+function createEnemy(world: World, x: number, y: number, type: string = "orc", difficulty: number = 1.0) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
@@ -2818,7 +2815,14 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
     const def = MOB_REGISTRY[type];
     if (def) {
         world.addComponent(e, new Sprite(def.spriteIndex, 32));
-        world.addComponent(e, new AI(def.speed));
+        world.addComponent(e, new AI(
+            def.speed,
+            'melee',
+            40,
+            2.0,
+            200,
+            def.fleeThreshold !== undefined ? def.fleeThreshold : 0.2
+        ));
 
         const maxHp = Math.floor(def.hp * hpScale);
         world.addComponent(e, new Health(maxHp, maxHp));
@@ -2831,14 +2835,40 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
         // Equipment Interaction
         if (def.equipment) {
             const inv = new Inventory();
-            // Populate slots
             if (def.equipment.rhand) inv.equip('rhand', new ItemInstance(createItemFromRegistry(def.equipment.rhand), 1));
             if (def.equipment.lhand) inv.equip('lhand', new ItemInstance(createItemFromRegistry(def.equipment.lhand), 1));
             if (def.equipment.body) inv.equip('body', new ItemInstance(createItemFromRegistry(def.equipment.body), 1));
             if (def.equipment.head) inv.equip('head', new ItemInstance(createItemFromRegistry(def.equipment.head), 1));
-
             world.addComponent(e, inv);
         }
+
+        // Skills & Resistances
+        if (def.splitOnDeath) {
+            world.addComponent(e, new SplitOnDeath(2, type, Math.floor(def.hp / 2))); // Split into 2 of same type
+        }
+        if (def.statusOnHit) {
+            world.addComponent(e, new StatusOnHit(def.statusOnHit.type, def.statusOnHit.chance, def.statusOnHit.duration, def.statusOnHit.power));
+        }
+        if (def.resistance) {
+            world.addComponent(e, new MobResistance(
+                (def.resistance.physical || 0) === 1.0,
+                (def.resistance.magic || 0) === 1.0,
+                def.resistance.fire || 0,
+                def.resistance.ice || 0,
+                (def.resistance.poison || 0) === 1.0
+            ));
+        }
+
+        // Boss AI Component
+        if (def.isBoss && def.bossSkills) {
+            world.addComponent(e, new BossAI(def.bossSkills as any, def.enrageThreshold || 0.3));
+        }
+
+        // Corpse Definition
+        if (def.corpse) {
+            world.addComponent(e, new CorpseDefinition(def.corpse));
+        }
+
     } else {
         console.warn(`[Game] Unknown Mob Type: ${type}`);
         world.addComponent(e, new Sprite(SPRITES.ORC || 58, 32));
@@ -2906,7 +2936,7 @@ export function createIceEnemy(world: World, x: number, y: number, type: string 
     return e;
 }
 
-export function createWaterEnemy(world: World, x: number, y: number, type: string = "crab", difficulty: number = 1.0) {
+function createWaterEnemy(world: World, x: number, y: number, type: string = "crab", difficulty: number = 1.0) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
@@ -2940,7 +2970,7 @@ export function createWaterEnemy(world: World, x: number, y: number, type: strin
     return e;
 }
 
-export function createEarthEnemy(world: World, x: number, y: number, type: string = "golem", difficulty: number = 1.0) {
+function createEarthEnemy(world: World, x: number, y: number, type: string = "golem", difficulty: number = 1.0) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Velocity(0, 0));
@@ -2969,7 +2999,7 @@ export function createEarthEnemy(world: World, x: number, y: number, type: strin
 }
 
 
-export function createMerchant(world: World, x: number, y: number) {
+function createMerchant(world: World, x: number, y: number) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Sprite(SPRITES.NPC, 32));
@@ -3073,39 +3103,6 @@ export function createSealedGate(world: World, x: number, y: number) {
     return e;
 }
 
-export function createItem(world: World, x: number, y: number, name: string, slot: string, uIndex: number, damage: number = 0, price: number = 10, description: string = '', weaponType: string = '', rarity: string = 'common', defense: number = 0, bonusHp: number = 0, bonusMana: number = 0, glowColor?: string, glowRadius?: number, network?: NetworkManager, networkItem?: NetworkItem) {
-    // 1. Network Spawn Logic
-    if (network && network.connected && !networkItem) {
-        network.sendSpawnItem(x, y, uIndex, name);
-        return;
-    }
-
-    const e = world.createEntity();
-    world.addComponent(e, new Position(x, y));
-    world.addComponent(e, new Sprite(uIndex, 24)); // Items slightly smaller than players
-    if (slot === 'potion') price = 50;
-    if (slot === 'lhand') price = 100;
-    if (slot === 'rhand') price = 150;
-    if (name === "Potion") price = 50;
-    if (name === "Wooden Shield") price = 50;
-    if (name === "Wooden Sword") price = 50;
-    if (name === "Tower Shield") price = 200;
-    if (name === "Noble Sword") price = 400;
-
-    // Pass price to Item (assuming Item constructor takes it?)
-    // Checking Item component...
-    // In components.ts: Item(name, slot, damage, price, uIndex) ??
-    // Step 1068 says: new Item(name, slot, uIndex, damage, price)
-    // Wait, uIndex is 3rd arg? 
-    // Wait, line 1080: `new Item(name, slot, uIndex, damage, price)`
-    // This looks quirky. Keep it as is.
-    world.addComponent(e, new Item(name, slot, uIndex, damage, price, description, weaponType, rarity as ItemRarity, defense, bonusHp, bonusMana, false, 0, glowColor, glowRadius));
-    if (networkItem) {
-        world.addComponent(e, networkItem);
-    }
-    return e;
-}
-
 
 export function itemPickupSystem(world: World, ui: UIManager, audio: AudioController, network?: NetworkManager) {
     const playerEntity = world.query([PlayerControllable, Position, Inventory])[0];
@@ -3138,7 +3135,7 @@ export function itemPickupSystem(world: World, ui: UIManager, audio: AudioContro
                 iPos.x = -1000;
                 if ((ui as any).console) (ui as any).console.sendMessage(`You picked up a ${item.name}.`);
                 audio.playCoin();
-                if (spriteSheet.complete) ui.updateInventory(inventory);
+                if (spriteSheet) ui.updateInventory(inventory);
             } else {
                 // If addItem fails, it means no space in main slots or storage
                 if ((ui as any).console) (ui as any).console.sendMessage(`No space for ${item.name}.`);
@@ -3148,7 +3145,7 @@ export function itemPickupSystem(world: World, ui: UIManager, audio: AudioContro
     }
 }
 
-export function autocloseSystem(world: World, ui: UIManager) {
+function autocloseSystem(world: World, ui: UIManager) {
     if (ui.activeMerchantId !== null) {
         const playerEntity = world.query([PlayerControllable, Position])[0];
         if (!playerEntity) return;
@@ -3173,7 +3170,7 @@ export function autocloseSystem(world: World, ui: UIManager) {
     }
 }
 
-export function consumeItem(world: World, entity: number, item: Item, audio: AudioController, ui: UIManager) {
+function consumeItem(world: World, entity: number, item: Item, audio: AudioController, ui: UIManager) {
     const hp = world.getComponent(entity, Health);
     const mana = world.getComponent(entity, Mana);
 
@@ -3200,7 +3197,7 @@ export function consumeItem(world: World, entity: number, item: Item, audio: Aud
     return consumed;
 }
 
-export function safeZoneRegenSystem(world: World, dt: number, ui: UIManager) {
+function safeZoneRegenSystem(world: World, dt: number, ui: UIManager) {
     const playerEntity = world.query([PlayerControllable, Position, Health, Mana])[0];
     if (playerEntity === undefined) return;
 
@@ -3263,7 +3260,7 @@ export function deathSystem(world: World, ui: UIManager, spawnX: number = TEMPLE
 }
 
 
-export function castSpell(world: World, ui: UIManager, spellName: string, network?: NetworkManager) {
+function castSpell(world: World, ui: UIManager, spellName: string, network?: NetworkManager) {
     const playerEntity = world.query([PlayerControllable, Health, Mana, Position, Facing])[0];
     if (playerEntity === undefined) return;
     const hp = world.getComponent(playerEntity, Health)!;
@@ -3759,20 +3756,21 @@ export function castSpell(world: World, ui: UIManager, spellName: string, networ
     }
 }
 
-export function spawnFloatingText(world: World, x: number, y: number, text: string, color: string) {
+function spawnFloatingText(world: World, x: number, y: number, text: string, color: string) {
     const ft = world.createEntity();
     world.addComponent(ft, new Position(x, y));
     world.addComponent(ft, new Velocity(0, -20));
     world.addComponent(ft, new FloatingText(text, color));
 }
 
-export function gainExperience(world: World, amount: number, ui: UIManager, audio: AudioController) {
+function gainExperience(world: World, amount: number, ui: UIManager, audio: AudioController) {
     const playerEntity = world.query([PlayerControllable, Experience, Health, Mana, Position])[0];
     if (playerEntity === undefined) return;
     const xp = world.getComponent(playerEntity, Experience)!;
     const hp = world.getComponent(playerEntity, Health)!;
     const mana = world.getComponent(playerEntity, Mana)!;
     const pos = world.getComponent(playerEntity, Position)!;
+    const inv = world.getComponent(playerEntity, Inventory);
     const gameConsole = (ui as any).console;
 
     xp.current += amount;
@@ -3819,23 +3817,18 @@ export function gainExperience(world: World, amount: number, ui: UIManager, audi
         world.addComponent(lu, new FloatingText("LEVEL UP!", '#ffd700', 3.0));
     }
 
-    // Refresh UI
-    const inv = world.getComponent(playerEntity, Inventory);
-    const skills = world.getComponent(playerEntity, Skills);
-    const curLevel = xp.level;
-    const curXP = xp.current;
-    const nextXP = xp.next;
-    const curHP = hp.current;
-    const maxHP = hp.max;
-    // const maxHP = hp.max; // Removed duplicate
-    const curMana = mana ? mana.current : 0;
-    const maxMana = mana ? mana.max : 0;
-    const curCap = inv ? inv.cap : 0;
     const curGold = inv ? inv.gold : 0;
-    ui.updateStatus(curHP, maxHP, curMana, maxMana, curCap, curGold, curLevel, curXP, nextXP, skills);
+
+    // UI Update
+    const gameObj = (window as any).game;
+    if (gameObj && gameObj.player) {
+        gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+    }
+
+    // ui.updateStatus(curHP, maxHP, curMana, maxMana, curCap, curGold, curLevel, curXP, nextXP, skills); // Removed Legacy
 }
 
-export function updateStatsFromPassives(world: World, playerEntity: number) {
+function updateStatsFromPassives(world: World, playerEntity: number) {
     const passives = world.getComponent(playerEntity, Passives);
     const hp = world.getComponent(playerEntity, Health);
     const mana = world.getComponent(playerEntity, Mana);
@@ -3903,13 +3896,90 @@ export function generateLoot(enemyType: string = "orc"): Item[] {
                 // We'll just push 1 for now, or check if Item has stack logic.
                 // Hack: For gold/stackables, we might want a property?
                 const item = createItemFromRegistry(entry.itemId, count);
-                // If it's gold, we might want to stash the count in a property?
-                // item.properties = { count: count }; // If we add this field
                 items.push(item);
             }
         });
     }
     return items;
+}
+
+// Helper to create Item Component from Registry
+export function createItemFromRegistry(id: number | string, count: number = 1): Item {
+    // Assuming ItemRegistry keys are available
+    // We treat 'id' as 'uIndex' (number) usually
+    const def = (ItemRegistry[id as number] || ItemRegistry[id as any]) as any;
+
+    if (def) {
+        // Create Item component
+        // Constructor: name, slotType, uIndex, ...
+        const item = new Item(
+            def.name,
+            def.slot,
+            def.uIndex,
+            0, 0, // frame, direction
+            def.damage,
+            def.price,
+            def.description,
+            def.weaponType,
+            def.rarity || 'common',
+            def.defense
+        );
+        item.id = (typeof id === 'number') ? id : (def.id || 0);
+        return item;
+    }
+    // Fallback
+    return new Item("Unknown", "none", 0);
+}
+
+// --- Restored Helpers ---
+
+function spawnParticle(world: World, x: number, y: number, spriteId: number, duration: number = 0.5, scale: number = 1.0, vx: number = 0, vy: number = 0, fadeRate: number = 0.9) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Sprite(spriteId, 16, false, 0));
+    world.addComponent(e, new Particle(duration, duration, '#fff', 2, vx, vy));
+}
+
+function spawnBloodEffect(world: World, x: number, y: number) {
+    for (let i = 0; i < 5; i++) {
+        const e = world.createEntity();
+        world.addComponent(e, new Position(x, y));
+        world.addComponent(e, new Particle(0.5, 0.5, '#FF0000', 2, (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100));
+        world.addComponent(e, new Decay(0.5));
+    }
+}
+
+function createItem(world: World, x: number, y: number, itemInst: ItemInstance): Entity {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Sprite(itemInst.item.uIndex || 0, 16));
+
+    // Clone item component (simplistic clone)
+    const old = itemInst.item;
+    const newItem = new Item(
+        old.name,
+        old.slotType,
+        old.uIndex,
+        old.frame,
+        old.direction,
+        old.damage,
+        old.price,
+        old.description,
+        old.weaponType,
+        old.rarity,
+        old.bonusHp,
+        old.bonusMana,
+        old.isContainer,
+        old.containerSize,
+        old.glowColor,
+        old.glowRadius,
+        old.id
+    );
+
+    world.addComponent(e, newItem);
+    world.addComponent(e, new Name(old.name));
+    world.addComponent(e, new Interactable('Pick up'));
+    return e;
 }
 
 // --- LIGHTING SYSTEM (Moved up due to deletion) ---
@@ -3921,7 +3991,7 @@ export function generateLoot(enemyType: string = "orc"): Item[] {
 let lightCanvas: HTMLCanvasElement | null = null;
 let lightCtx: CanvasRenderingContext2D | null = null;
 
-export function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D, ambientLight: number = 0.9) {
+function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D, ambientLight: number = 0.9) {
     let camX = 0, camY = 0;
     const cameraEntity = world.query([Camera])[0];
     if (cameraEntity !== undefined) {
@@ -4013,7 +4083,7 @@ export function lightingRenderSystem(world: World, ctx: CanvasRenderingContext2D
     ctx.restore();
 }
 
-export function equipmentLightSystem(world: World) {
+function equipmentLightSystem(world: World) {
     const players = world.query([PlayerControllable, Inventory]);
     for (const playerEntity of players) {
         const inv = world.getComponent(playerEntity, Inventory)!;
@@ -4058,7 +4128,7 @@ export function equipmentLightSystem(world: World) {
 
 
 
-export function createCorpse(world: World, x: number, y: number, loot: Item[] = []) {
+function createCorpse(world: World, x: number, y: number, loot: Item[] = [], spriteId: number = 22) {
     // Spawn death particles (blood/smoke burst)
     for (let i = 0; i < 12; i++) {
         const p = world.createEntity();
@@ -4073,8 +4143,8 @@ export function createCorpse(world: World, x: number, y: number, loot: Item[] = 
 
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
-    // Use BONES sprite (22)
-    world.addComponent(e, new Sprite(SPRITES.BONES || 22, 16));
+    // Use generic BONES sprite (22) or Custom
+    world.addComponent(e, new Sprite(spriteId, 16));
     world.addComponent(e, new Decay(300)); // 300s decay (5 mins)
     world.addComponent(e, new Interactable("Loot Corpse"));
     world.addComponent(e, new Lootable(loot));
@@ -4104,7 +4174,7 @@ export function decaySystem(world: World, dt: number) {
     }
 }
 
-export function uiControlSystem(world: World, input: InputHandler, ui: UIManager) {
+function uiControlSystem(world: World, input: InputHandler, ui: UIManager) {
     if (input.isJustPressed('KeyEscape')) {
         console.log("ESC Pressed - Closing UI");
 
@@ -4283,7 +4353,7 @@ export function calculatePlayerStats(world: World, playerEntity: Entity) {
 
 
 // Helper to spawn items directly into the MAP GRID (so getObjectAt works)
-export function spawnMapItem(x: number, y: number, id: number) {
+function spawnMapItem(x: number, y: number, id: number) {
     const game = (window as any).game;
     if (!game || !game.map) return;
 
@@ -4303,7 +4373,7 @@ export function spawnMapItem(x: number, y: number, id: number) {
 }
 
 // --- MUSEUM SPAWN ---
-import { BULK_SPRITES } from './data/bulk_constants';
+// NOTE: This import was incorrectly placed inside a function block. BULK_SPRITES should be imported at top of file.
 
 export function spawnDebugSet(world: World, ui?: UIManager) {
     const playerEntity = world.query([PlayerControllable, Position])[0];
@@ -4360,3 +4430,6 @@ export function spawnDebugSet(world: World, ui?: UIManager) {
         }
     }
 }
+
+
+

@@ -1,46 +1,109 @@
 import { WorldMap } from './map';
+import { World } from '../engine';
+import { Position, Health, Mana, Experience, Inventory, Skills, Sprite, Target } from '../components';
+import { SPRITES } from '../constants';
+import { PHYSICS } from '../physics';
+import { TILE_SIZE } from './types';
 
 export type Direction = 'north' | 'south' | 'east' | 'west';
 
 export class Player {
-    x: number;
-    y: number;
     nextMoveTime: number = 0;
     queuedDx: number = 0;
     queuedDy: number = 0;
 
     // ECS Link
-    id: number = 0;
+    constructor(public world: World, public id: number) { }
 
-    // Visual State
-    spriteId: number = 100; // Default: 100 (Hero)
-    flipX: boolean = false;
-    frame: number = 0; // Animation Frame (0-2)
-    direction: 0 | 1 | 2 | 3 = 0;
+    // --- PROXIES TO ECS (Single Source of Truth) ---
+    get spriteId(): number {
+        const spr = this.world.getComponent(this.id, Sprite);
+        return (spr && spr.uIndex !== 0) ? spr.uIndex : SPRITES.PLAYER;
+    }
+    set spriteId(val: number) {
+        const spr = this.world.getComponent(this.id, Sprite);
+        if (spr) spr.uIndex = val;
+    }
 
-    // Targeting
-    targetId: number | null = null;
+    get flipX(): boolean {
+        const spr = this.world.getComponent(this.id, Sprite);
+        return spr ? spr.flipX : false;
+    }
+    set flipX(val: boolean) {
+        const spr = this.world.getComponent(this.id, Sprite);
+        if (spr) spr.flipX = val;
+    }
 
-    // Stats (Synced from ECS for Logic/UI)
-    hp: number = 100;
-    maxHp: number = 100;
-    mana: number = 50;
-    maxMana: number = 50;
-    capacity: number = 400;
-    level: number = 1;
-    xp: number = 0;
-    nextXp: number = 100;
-    gold: number = 0;
-    attack: number = 0;
-    defense: number = 0;
+    get frame(): number {
+        const spr = this.world.getComponent(this.id, Sprite);
+        return spr ? spr.frame : 0;
+    }
+    set frame(val: number) {
+        const spr = this.world.getComponent(this.id, Sprite);
+        if (spr) spr.frame = val;
+    }
+
+    get direction(): 0 | 1 | 2 | 3 {
+        const spr = this.world.getComponent(this.id, Sprite);
+        return spr ? spr.direction : 0;
+    }
+    set direction(val: 0 | 1 | 2 | 3) {
+        const spr = this.world.getComponent(this.id, Sprite);
+        if (spr) spr.direction = val;
+    }
+
+    get targetId(): number | null {
+        const target = this.world.getComponent(this.id, Target);
+        return target ? target.targetId : null;
+    }
+    set targetId(val: number | null) {
+        let target = this.world.getComponent(this.id, Target);
+        if (!target) {
+            if (val !== null) {
+                target = new Target(val);
+                this.world.addComponent(this.id, target);
+            }
+        } else {
+            target.targetId = val;
+        }
+    }
+
+    get inventory(): Inventory {
+        return this.world.getComponent(this.id, Inventory)!;
+    }
+
+    get x(): number {
+        const pos = this.world.getComponent(this.id, Position);
+        return pos ? pos.x / TILE_SIZE : 0;
+    }
+    set x(val: number) {
+        const pos = this.world.getComponent(this.id, Position);
+        if (pos) pos.x = val * TILE_SIZE;
+    }
+
+    get y(): number {
+        const pos = this.world.getComponent(this.id, Position);
+        return pos ? pos.y / TILE_SIZE : 0;
+    }
+    set y(val: number) {
+        const pos = this.world.getComponent(this.id, Position);
+        if (pos) pos.y = val * TILE_SIZE;
+    }
+
+    get hp(): number { return this.world.getComponent(this.id, Health)?.current || 0; }
+    get maxHp(): number { return this.world.getComponent(this.id, Health)?.max || 100; }
+    get mana(): number { return this.world.getComponent(this.id, Mana)?.current || 0; }
+    get maxMana(): number { return this.world.getComponent(this.id, Mana)?.max || 50; }
+
+    get level(): number { return this.world.getComponent(this.id, Experience)?.level || 1; }
+    get xp(): number { return this.world.getComponent(this.id, Experience)?.current || 0; }
+    get nextXp(): number { return this.world.getComponent(this.id, Experience)?.next || 100; }
+
+    get gold(): number { return this.world.getComponent(this.id, Inventory)?.gold || 0; }
+    get capacity(): number { return this.world.getComponent(this.id, Inventory)?.cap || 400; }
 
     get isMoving(): boolean {
         return this.queuedDx !== 0 || this.queuedDy !== 0;
-    }
-
-    constructor(startX: number, startY: number) {
-        this.x = startX;
-        this.y = startY;
     }
 
     tryMove(direction: Direction, map: WorldMap): boolean {
@@ -65,15 +128,14 @@ export class Player {
         if (!tile) return false;
 
         // 2. Check Collision (Stack-based)
-        // If any item in the stack is "Blocking" (ID 17 = Wall), we cannot move.
-        // In a real engine, we'd check item.properties.isBlocking
-        const isBlocked = tile.items.some(item => item.id === 17);
+        // ✅ FIXED: Using PHYSICS module instead of hardcoded ID 17
+        const isBlocked = tile.items.some(item => PHYSICS.isSolid(item.id));
 
         if (isBlocked) {
             return false;
         }
 
-        // 3. Move
+        // 3. Move (Triggers ECS Update via Setters)
         this.x = targetX;
         this.y = targetY;
         this.nextMoveTime = Date.now() + 200; // 200ms Step Delay (Grid Lock)
@@ -96,22 +158,7 @@ export class Player {
             else if (this.queuedDx === 1) dir = 'east';
 
             if (dir) {
-                if (this.tryMove(dir, map)) {
-                    // Move successful, clear queue logic or keep it for continuous movement?
-                    // Tibia style: Key down keeps queue populated. Key up clears it (handled in Input).
-                    // In main.ts, we preventDefault on keydown.
-                    // We can clear queue after one attempt for strict step-by-step or keep it.
-                    // Let's clear it for now to prevent "flying".
-                    // Actually, main.ts sets it on 'keydown'. If we clear it, user has to repress.
-                    // But if we don't clear it, they slide.
-                    // The "Tick" implies we check.
-                    // Let's leave queues active until input system explicitly stops it, OR clear it if we want distinct steps.
-                    // User said: "You step, wait, step, wait."
-                    // If we don't clear, and key is held, `tryMove` checks cooldown.
-                    // If cooldown is active, `tryMove` returns false.
-                    // Next tick, we check again.
-                    // This creates continuous stepping. Perfect.
-                }
+                this.tryMove(dir, map);
             }
         }
     }

@@ -17,8 +17,7 @@
 
             <div id="chat-console">
                 <div id="chat-log">
-                    <div class="msg-system">12:00: Welcome to the server.</div>
-                    <div class="msg-info">Use WASD or Arrows to move.</div>
+                    <!-- Dynamic chat messages will appear here -->
                 </div>
                 <input id="chat-input" type="text" placeholder="Type to chat..." autocomplete="off">
             </div>
@@ -41,6 +40,10 @@
                     <div class="bar-bg">
                         <div id="mana-bar" class="bar-fg mana"></div>
                     </div>
+                </div>
+                <div class="status-group">
+                    <div class="status-header">Capacity <span id="cap-val">0</span></div>
+                    <div class="status-header">Gold <span id="gold-val">0</span></div>
                 </div>
             </div>
 
@@ -113,18 +116,33 @@
                 </div>
             </div>
 
-            <div id="inventory-container">
-                <div class="slot head" id="slot-head" title="Head"></div>
-                <div class="slot chest" id="slot-body" title="Body"></div>
-                <div class="slot legs" id="slot-legs" title="Legs"></div>
-                <div class="slot feet" id="slot-boots" title="Feet"></div>
-                <div class="slot rhand" id="slot-rhand" title="Right Hand"></div>
-                <div class="slot lhand" id="slot-lhand" title="Left Hand"></div>
-                <!-- Extra slots for Tibia layout -->
-                <div class="slot amulet" id="slot-amulet" title="Amulet"></div>
-                <div class="slot ring" id="slot-ring" title="Ring"></div>
-                <div class="slot ammo" id="slot-ammo" title="Ammo"></div>
-                <div class="slot backpack" id="slot-backpack" title="Backpack"></div>
+            <!-- Tibia-Style Equipment Doll (3x4 Grid) -->
+            <div id="inventory-container" class="equip-doll">
+                <!-- Row 1: Head, Amulet, Backpack -->
+                <div class="equip-slot" id="slot-head" title="Head"></div>
+                <div class="equip-slot" id="slot-amulet" title="Amulet"></div>
+                <div class="equip-slot" id="slot-backpack" title="Backpack"></div>
+
+                <!-- Row 2: Left Hand (Shield), Body, Right Hand (Weapon) -->
+                <div class="equip-slot" id="slot-lhand" title="Shield"></div>
+                <div class="equip-slot" id="slot-body" title="Armor"></div>
+                <div class="equip-slot" id="slot-rhand" title="Weapon"></div>
+
+                <!-- Row 3: Ring, Legs, Ammo -->
+                <div class="equip-slot" id="slot-ring" title="Ring"></div>
+                <div class="equip-slot" id="slot-legs" title="Legs"></div>
+                <div class="equip-slot" id="slot-ammo" title="Ammo"></div>
+
+                <!-- Row 4: Empty, Boots, Empty -->
+                <div class="equip-slot empty"></div>
+                <div class="equip-slot" id="slot-boots" title="Boots"></div>
+                <div class="equip-slot empty"></div>
+            </div>
+
+            <!-- Backpack Contents (Inline below equipment in sidebar) -->
+            <div id="backpack-panel" class="panel">
+                <div class="panel-header">Backpack</div>
+                <div id="backpack-grid" class="inventory-grid"></div>
             </div>
 
             <div id="controls">
@@ -136,6 +154,24 @@
             <div id="battle-list">
                 <!-- Entities go here -->
             </div>
+        </div>
+
+        <!-- Floating Panels (outside sidebar) -->
+        <div id="shop-panel" class="hidden">
+            <!-- Dynamic shop content -->
+            <div class="shop-header">Shop <span class="close-btn"
+                    onclick="document.getElementById('shop-panel').classList.add('hidden')">X</span></div>
+            <div id="shop-buy-list" class="shop-grid"></div>
+            <div id="shop-sell-list" class="shop-grid hidden"></div>
+        </div>
+
+        <!-- Loot Panel (Dynamic) -->
+        <div id="loot-panel" class="panel hidden" style="position: absolute; top: 200px; right: 240px; z-index: 500;">
+            <div class="panel-header">
+                <span>Corpse</span>
+                <div class="close-btn" onclick="document.getElementById('loot-panel').style.display='none'">X</div>
+            </div>
+            <div id="loot-grid" class="inventory-grid" style="padding: 10px;"></div>
         </div>
     </div>
 

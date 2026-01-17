@@ -1,11 +1,13 @@
 import { Entity, World } from '../engine';
+import { SPRITES } from '../constants';
 import { Player } from '../core/player';
 import { WorldMap } from '../core/map';
-import { Health, Name, Position, Sprite, Target, Inventory, ItemInstance } from '../components';
+import { Health, Name, Position, Sprite, Target, Inventory, ItemInstance, Skills } from '../components';
 import { Item } from '../core/types';
 import { assetManager } from '../assets';
 import { ItemRegistry } from '../data/items';
 import { attemptCastSpell } from '../game';
+import { gameEvents, EVENTS } from '../core/events';
 
 // Define what an Open Window looks like
 interface ContainerWindow {
@@ -140,6 +142,19 @@ export class UIManager {
         this.xpVal = document.getElementById('xp-pct')!;
         this.goldVal = document.getElementById('gold-val')!;
 
+        // --- PHASE 5: EVENT-DRIVEN UI ---
+        gameEvents.on(EVENTS.PLAYER_STATS_CHANGED, (player: Player) => {
+            this.handleStatsUpdate(player);
+        });
+
+        gameEvents.on(EVENTS.INVENTORY_CHANGED, (inv: Inventory) => {
+            this.updateEquipment(inv);
+        });
+
+        gameEvents.on(EVENTS.SYSTEM_MESSAGE, (msg: string) => {
+            this.log(msg);
+        });
+
         // 2. Initialize the Loot Panel
         this.lootPanel = document.createElement('div');
         this.lootPanel.id = 'loot-panel';
@@ -228,10 +243,8 @@ export class UIManager {
         if ((this as any)._lastBattleUpdate && now - (this as any)._lastBattleUpdate < 250) return;
         (this as any)._lastBattleUpdate = now;
 
-        this.battleList.innerHTML = '';
-
-        // 1. Get Player Position
         const playerPos = world.getComponent(player.id, Position);
+        const activeIds = new Set<number>();
 
         entities.forEach(entityId => {
             if (entityId === player.id) return;
@@ -242,46 +255,88 @@ export class UIManager {
 
             if (!nameComp || (healthComp && healthComp.current <= 0) || !posComp) return;
 
-            // --- 2. DISTANCE CHECK (The Fix) ---
-            // Only show monsters within 320 pixels (approx 10 tiles)
+            // Distance Check
             if (playerPos) {
                 const dist = Math.sqrt(Math.pow(playerPos.x - posComp.x, 2) + Math.pow(playerPos.y - posComp.y, 2));
-                if (dist > 320) return; // <--- This line hides the far-away mobs
+                if (dist > 320) return;
             }
-            // -----------------------------------
 
-            const entry = document.createElement('div');
-            entry.className = 'battle-entry';
-            const hpPercent = Math.floor((healthComp.current / healthComp.max) * 100);
-            entry.innerText = `${nameComp.value} [${hpPercent}%]`;
+            activeIds.add(entityId);
 
-            // Highlight target
+            // Find existing entry
+            let entry = document.getElementById(`battle-entry-${entityId}`);
+            let hpBarFill: HTMLElement | null = null;
+
+            if (!entry) {
+                entry = document.createElement('div');
+                entry.id = `battle-entry-${entityId}`;
+                entry.className = 'battle-entry';
+
+                // Construct inner HTML structure once
+                // Using a progress bar look
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'be-name';
+
+                const hpBar = document.createElement('div');
+                hpBar.className = 'be-hp-bar';
+                hpBarFill = document.createElement('div');
+                hpBarFill.className = 'be-hp-fill';
+                hpBar.appendChild(hpBarFill);
+
+                entry.appendChild(nameSpan);
+                entry.appendChild(hpBar);
+
+                // Click Handler - defined once
+                entry.onclick = (e) => {
+                    e.stopPropagation(); // Safe habit
+                    // Re-fetch component to get latest target status
+                    const pTarg = world.getComponent(player.id, Target);
+                    const currentTargId = pTarg ? pTarg.targetId : null;
+
+                    if (currentTargId === entityId) {
+                        player.targetId = null;
+                    } else {
+                        player.targetId = entityId;
+                    }
+                    // Force visual update next frame if needed, but styling handles immediate feedback usually
+                    (this as any)._lastBattleUpdate = 0; // Trigger immediate refresh
+                };
+
+                this.battleList.appendChild(entry);
+            } else {
+                hpBarFill = entry.querySelector('.be-hp-fill');
+            }
+
+            // Update Content
+            const pct = Math.floor((healthComp.current / healthComp.max) * 100);
+            const nameSpan = entry.querySelector('.be-name') as HTMLElement;
+            if (nameSpan) nameSpan.innerText = `${nameComp.value} [${pct}%]`;
+
+            if (hpBarFill) {
+                hpBarFill.style.width = `${pct}%`;
+                hpBarFill.style.backgroundColor = pct < 25 ? '#d00' : (pct < 50 ? '#da0' : '#0d0');
+            }
+
+            // Highlight
             const currentTarget = world.getComponent(player.id, Target);
             const isTargeted = player.targetId === entityId || (currentTarget && currentTarget.targetId === entityId);
 
             if (isTargeted) {
-                entry.style.color = '#ff5555';
-                entry.style.border = '1px solid #ff5555';
-                entry.style.backgroundColor = '#442222';
+                entry.classList.add('targeted');
+                entry.style.borderColor = '#ff5555';
+            } else {
+                entry.classList.remove('targeted');
+                entry.style.borderColor = '#444';
             }
+        });
 
-            // Click Handler
-            entry.onclick = () => {
-                if (isTargeted) {
-                    player.targetId = null;
-                    world.removeComponent(player.id, Target);
-                } else {
-                    player.targetId = entityId;
-                    if (world.getComponent(player.id, Target)) {
-                        world.removeComponent(player.id, Target);
-                    }
-                    world.addComponent(player.id, new Target(entityId));
-                }
-                document.body.focus();
-                (this as any)._lastBattleUpdate = 0;
-            };
-
-            this.battleList.appendChild(entry);
+        // Cleanup removed entities
+        Array.from(this.battleList.children).forEach((child: any) => {
+            const idStr = child.id.replace('battle-entry-', '');
+            const id = parseInt(idStr);
+            if (!activeIds.has(id)) {
+                this.battleList.removeChild(child);
+            }
         });
     }
 
@@ -310,62 +365,143 @@ export class UIManager {
         this.chatLog.scrollTop = this.chatLog.scrollHeight;
     }
 
-    /**
-     * Updates HUD elements (HP, Mana, etc) from the Visual Player state.
-     */
-    update(player: Player) {
-        this.player = player; // Cache for Shop UI
+    private onChatInput() {
+        const text = this.chatInput.value.trim();
+        if (!text) return;
 
-        // Health
-        if (this.hpVal) this.hpVal.innerText = `${Math.floor(player.hp)}`;
-        if (this.hpBar) this.hpBar.style.width = `${Math.min(100, Math.max(0, (player.hp / player.maxHp) * 100))}%`;
+        this.chatInput.value = ''; // Clear
 
-        // Mana
-        if (this.manaVal) this.manaVal.innerText = `${Math.floor(player.mana)}`;
-        if (this.manaBar) this.manaBar.style.width = `${Math.min(100, Math.max(0, (player.mana / player.maxMana) * 100))}%`;
+        // Handle Commands
+        if (text.startsWith('!')) {
+            const parts = text.split(' ');
+            const cmd = parts[0].toLowerCase();
+            this.log(`Command: ${text}`, '#ffff00');
 
-        // Stats
-        if (this.lvlVal) this.lvlVal.innerText = player.level.toString();
-        if (this.capVal) this.capVal.innerHTML = `Cap:<br>${player.capacity}`;
-        if (this.goldVal) this.goldVal.innerText = `${player.gold} GP`;
-        if (this.xpVal) {
-            const nextXp = Math.floor(50 * Math.pow(1.1, player.level));
-            const pct = nextXp > 0 ? Math.floor((player.xp / nextXp) * 100) : 0;
-            this.xpVal.innerText = `${pct}%`;
-            const xpBar = document.getElementById('xp-bar');
-            if (xpBar) xpBar.style.width = `${pct}%`;
+            if (cmd === '!reset') {
+                this.log("HARD RESET INITIATED...", '#ff0000');
+                this.log("Clearing Save Data...", '#ff0000');
+                localStorage.clear();
+                setTimeout(() => location.reload(), 1000);
+                return;
+            }
+
+            if (cmd === '!gear') {
+                if (this.player && this.player.entity) {
+                    this.log("Restoring Starter Gear...", '#00ff00');
+                    // Access Global World
+                    const world = (window as any).game?.world;
+                    if (!world) {
+                        this.log("Error: World not found.", '#ff0000');
+                        return;
+                    }
+
+                    const inv = world.getComponent(this.player.entity, Inventory);
+                    if (inv) {
+                        // Add Bag (if not present)
+                        if (!inv.getEquipped('backpack')) {
+                            const bagItem = new Item("Small Bag", "backpack", SPRITES.SMALL_BAG, 0, 30, "A small leather bag.", "none", "common", 0, 0, 0, true, 8);
+                            const bagInst = new ItemInstance(bagItem, 1);
+
+                            // Content
+                            bagInst.contents.push(new ItemInstance(new Item("Apple", "none", SPRITES.APPLE, 0, 2, "Restores 10 HP", "none", "common"), 5));
+                            bagInst.contents.push(new ItemInstance(new Item("Health Potion", "none", SPRITES.POTION, 0, 50, "Restores 50 HP", "none", "common"), 2));
+
+                            inv.equip('backpack', bagInst);
+                            this.log("Added Small Bag.", '#ccc');
+                        }
+
+                        // Sword
+                        if (!inv.getEquipped('rhand')) {
+                            const weapon = new Item("Wooden Sword", "rhand", SPRITES.WOODEN_SWORD, 8, 20, "Practice sword.", "sword", "common");
+                            inv.equip('rhand', new ItemInstance(weapon, 1));
+                            this.log("Added Wooden Sword.", '#ccc');
+                        }
+
+                        // Shield
+                        if (!inv.getEquipped('lhand')) {
+                            const shield = new Item("Wooden Shield", "lhand", SPRITES.WOODEN_SHIELD, 0, 40, "Wooden shield.", "none", "common", 5);
+                            inv.equip('lhand', new ItemInstance(shield, 1));
+                            this.log("Added Wooden Shield.", '#ccc');
+                        }
+
+                        // Armor
+                        if (!inv.getEquipped('body')) {
+                            const armor = new Item("Leather Armor", "body", SPRITES.LEATHER_ARMOR, 0, 50, "Leather armor.", "none", "common", 4);
+                            inv.equip('body', new ItemInstance(armor, 1));
+                            this.log("Added Leather Armor.", '#ccc');
+                        }
+
+                        // Boots
+                        if (!inv.getEquipped('boots')) {
+                            const boots = new Item("Leather Boots", "boots", SPRITES.LEATHER_BOOTS, 0, 25, "Leather boots.", "none", "common", 1);
+                            inv.equip('boots', new ItemInstance(boots, 1));
+                            this.log("Added Leather Boots.", '#ccc');
+                        }
+
+                        this.log("Starter Gear Check Complete.", '#00ff00');
+                        // Force Inventory UI Update via Event if possible, or expect game loop to catch it
+                        gameEvents.emit(EVENTS.INVENTORY_CHANGED, inv);
+                    }
+                }
+                return;
+            }
+
+            if (cmd === '!debug') {
+                this.log("Debug Info: " + this.player?.entity, '#ffff00');
+                const world = (window as any).game?.world;
+                this.log("World Entities: " + world?.entities.size, '#ffff00');
+                return;
+            }
         }
+
+        // Normal chat
+        this.log(`You: ${text}`);
     }
 
     /**
-     * Called by Game Logic (gainExperience, etc) to push non-visual-player stats.
+     * Updates HUD elements from the Visual Player state.
+     * DEPRECATED: UI now updates via events.
      */
-    public updateStatus(
-        curHP: number, maxHP: number,
-        curMana: number, maxMana: number,
-        curCap: number, curGold: number,
-        curLevel: number, curXP: number, nextXP: number,
-        skills: any
-    ) {
-        // Update basic trackers if they exist
+    update(player: Player) {
+        this.player = player; // Still cache for Shop/Loot logic context
+    }
+
+    private handleStatsUpdate(player: Player) {
+        if (!player) return;
+        const curHP = Math.floor(player.hp);
+        const maxHP = player.maxHp;
+        const curMana = Math.floor(player.mana);
+        const maxMana = player.maxMana;
+        const curLevel = player.level;
+        const curXP = player.xp;
+        const nextXP = player.nextXp;
+        const curCap = player.capacity;
+        const curGold = player.gold;
+
         if (this.hpVal) this.hpVal.innerText = `${curHP}`;
-        if (this.hpBar) this.hpBar.style.width = `${Math.min(100, (curHP / maxHP) * 100)}%`;
+        if (this.hpBar) this.hpBar.style.width = `${Math.min(100, Math.max(0, (curHP / maxHP) * 100))}%`;
 
         if (this.manaVal) this.manaVal.innerText = `${curMana}`;
-        if (this.manaBar) this.manaBar.style.width = `${Math.min(100, (curMana / maxMana) * 100)}%`;
+        if (this.manaBar) this.manaBar.style.width = `${Math.min(100, Math.max(0, (curMana / maxMana) * 100))}%`;
 
         if (this.lvlVal) this.lvlVal.innerText = curLevel.toString();
         if (this.capVal) this.capVal.innerHTML = `Cap:<br>${curCap}`;
         if (this.goldVal) this.goldVal.innerText = `${curGold} GP`;
 
         const xpBar = document.getElementById('xp-bar');
-        const xpPct = nextXP > 0 ? Math.floor((curXP / nextXP) * 100) : 0;
+        const xpPct = nextXP > 0 ? Math.floor((player.xp / nextXP) * 100) : 0;
         if (this.xpVal) this.xpVal.innerText = `${xpPct}%`;
         if (xpBar) xpBar.style.width = `${xpPct}%`;
 
         // Update Skills Panel
-        this.updateSkills({ level: curLevel }, skills, { name: "Knight" }); // TODO: Vocation passing
+        const skills = player.world.getComponent(player.id, Skills);
+        if (skills) {
+            this.updateSkills({ level: curLevel }, skills, { name: "Knight" });
+        }
     }
+
+    // legacy stub
+    public updateStatus(...args: any[]) { }
 
     // --- LOOT / CONTAINER UI ---
     public toggleLoot(entityId: number, name: string, items: any[]) {

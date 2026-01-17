@@ -1,8 +1,12 @@
-import { Entity } from './core/entity';
+export type Entity = number;
 export { NPC } from './components/npc';
 
 
 export class Position {
+    constructor(public x: number, public y: number) { }
+}
+
+export class Destination {
     constructor(public x: number, public y: number) { }
 }
 
@@ -111,6 +115,48 @@ export class AI {
     ) { }
 }
 
+// Boss AI Component - tracks skill cooldowns and enrage
+export class BossAI {
+    public skillCooldowns: Map<string, number> = new Map();
+    public isEnraged: boolean = false;
+    public enrageMultiplier: number = 1.5; // Damage/speed boost when enraged
+
+    constructor(
+        public skills: { name: string; type: string; damage?: number; range?: number; cooldown: number; summonType?: string; summonCount?: number; statusEffect?: string }[] = [],
+        public enrageThreshold: number = 0.3 // Enrage at 30% HP
+    ) {
+        // Initialize all cooldowns to 0 (ready)
+        for (const skill of skills) {
+            this.skillCooldowns.set(skill.name, 0);
+        }
+    }
+
+    getReadySkill(): typeof this.skills[0] | null {
+        for (const skill of this.skills) {
+            if ((this.skillCooldowns.get(skill.name) || 0) <= 0) {
+                return skill;
+            }
+        }
+        return null;
+    }
+
+    useSkill(skillName: string) {
+        const skill = this.skills.find(s => s.name === skillName);
+        if (skill) {
+            this.skillCooldowns.set(skillName, skill.cooldown);
+        }
+    }
+
+    update(dt: number) {
+        for (const [name, cd] of this.skillCooldowns.entries()) {
+            if (cd > 0) {
+                this.skillCooldowns.set(name, cd - dt);
+            }
+        }
+    }
+}
+
+
 
 
 
@@ -137,12 +183,9 @@ export const RARITY_MULTIPLIERS: Record<ItemRarity, number> = {
 export class Item {
     constructor(
         public name: string,
-        public id: number = 0, // ADDED: Registry ID tracking
         // slotType: Where it fits (head, body, etc)
         public slotType: string,
         public uIndex: number = 0,
-        public frame: number = 0,
-        public direction: 0 | 1 | 2 | 3 = 0, // 0=Down, 1=Up, 2=Left, 3=Right
         public damage: number = 0,
         public price: number = 10,
         public description: string = "",
@@ -156,7 +199,10 @@ export class Item {
         public containerSize: number = 0,
         // Optional Glow Properties
         public glowColor: string | undefined = undefined,
-        public glowRadius: number = 0
+        public glowRadius: number = 0,
+        public frame: number = 0,
+        public direction: 0 | 1 | 2 | 3 = 0, // 0=Down, 1=Up, 2=Left, 3=Right
+        public id: number = 0 // Registry ID moved to end for compatibility
     ) { }
 }
 
@@ -484,6 +530,7 @@ export class NetworkItem {
 
 export class Decay { constructor(public life: number) { } }
 export class Lootable { constructor(public items: Item[] = []) { } }
+export class CorpseDefinition { constructor(public spriteId: number) { } }
 
 export class Consumable {
     constructor(
@@ -565,7 +612,7 @@ export class FreezeEffect {
 // Dungeon Entrance - Loads a new map instance
 export class DungeonEntrance {
     constructor(
-        public dungeonType: 'fire' | 'ice' | 'water' | 'earth' | 'temple' | 'final',
+        public dungeonType: string,
         public label: string = "Enter Dungeon"
     ) { }
 }
@@ -615,7 +662,7 @@ export class Interactable {
 
 export class Merchant {
     constructor(
-        public items: number[] = [] // List of Item IDs this merchant sells
+        public items: Item[] = [] // List of Items
     ) { }
 }
 

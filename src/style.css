@@ -194,9 +194,30 @@ canvas {
     align-items: center;
 }
 
-/* =============================================
-   TIBIA-STYLE INVENTORY (Classic 7.x Layout)
-   ============================================= */
+/* 5x2 Grid Layout */
+.inventory-5x2 {
+    display: grid;
+    grid-template-columns: repeat(2, 34px);
+    grid-template-rows: repeat(5, 34px);
+    gap: 2px;
+    padding: 2px;
+    background: #2b2b2b;
+    border: 1px solid #444;
+}
+
+/* Specific Items override grid placement if needed, or rely on source order */
+/* Order in HTML: Head, Amulet, Backpack, Body, RHand, LHand, Legs, Boots, Ring, Ammo */
+/* Desired 5x2 visual:
+   Head   | Amulet
+   Body   | Backpack
+   Legs   | RHand
+   Boots  | LHand
+   Ring   | Ammo
+*/
+/* Wait, standard Tibia is specialized. User asked for 5x2. */
+/* HTML structure in index.html was changed to just a container with slots. */
+/* Let's assume linear flow fills the 5x2. */
+
 
 /* Main Inventory Container */
 .equip-doll {
@@ -554,4 +575,126 @@ canvas {
 .shop-tab:hover:not(.active) {
     background: #3a3a3a;
     color: #ccc;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 10px;
+    background: #111;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #444;
+    border: 1px solid #555;
+    border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+::-webkit-scrollbar-corner {
+    background: #111;
+}
+
+/* Battle List Scroll Container */
+#battle-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 2px solid #555;
+    border-top-color: #222;
+    border-left-color: #222;
+    border-bottom-color: #666;
+    border-right-color: #666;
+    background: #222;
+    padding: 2px;
+}
+
+/* Battle List Styles */
+.battle-entry {
+    background: #333;
+    border: 1px solid #444;
+    padding: 2px;
+    margin-bottom: 2px;
+    cursor: pointer;
+    font-size: 11px;
+    color: #ccc;
+    font-family: 'Verdana', sans-serif;
+    display: flex;
+    flex-direction: column;
+}
+
+.battle-entry:hover {
+    background: #444;
+    border-color: #666;
+}
+
+.battle-entry.targeted {
+    border-color: #ff5555;
+    background: #4a2a2a;
+}
+
+.be-name {
+    margin-bottom: 2px;
+    font-weight: bold;
+}
+
+.be-hp-bar {
+    width: 100%;
+    height: 4px;
+    background: #111;
+    border: 1px solid #000;
+}
+
+.be-hp-fill {
+    height: 100%;
+    background: #0d0;
+    transition: width 0.2s;
+}
+
+/* Enhanced Equipment Slots (Inset Look) */
+.equip-slot {
+    width: 34px;
+    height: 34px;
+    background: linear-gradient(145deg, #3a3a3a 0%, #252525 100%);
+    border: 2px solid #1a1a1a;
+    border-top-color: #222;
+    /* Darker top for inset */
+    border-left-color: #222;
+    border-bottom-color: #555;
+    /* Lighter bottom for inset */
+    border-right-color: #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #444;
+    /* Darker placeholder text */
+    font-size: 9px;
+    font-weight: bold;
+    position: relative;
+    image-rendering: pixelated;
+    box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    transition: border-color 0.1s;
+}
+
+.equip-slot:hover {
+    border-color: #888;
+    color: #666;
+}
+
+/* UI Status Bars */
+.bar-fg.hp {
+    background-color: #e74c3c;
+    height: 100%;
+}
+
+.bar-fg.mana {
+    background-color: #3498db;
+    height: 100%;
+}
+
+.bar-fg.xp {
+    background-color: #f1c40f;
+    height: 100%;
 }

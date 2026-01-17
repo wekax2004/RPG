@@ -4,6 +4,7 @@ export class InputHandler {
     mouse: { x: number, y: number } = { x: 0, y: 0 };
     screenMouse: { x: number, y: number } = { x: 0, y: 0 };
     mouseKeys: Set<number> = new Set();
+    clickedOnCanvas: boolean = false;
 
     constructor() {
         // 1. Key Down
@@ -49,6 +50,9 @@ export class InputHandler {
         });
 
         window.addEventListener('mousedown', (e) => {
+            const canvas = document.getElementById('gameCanvas');
+            this.clickedOnCanvas = e.target === canvas || (canvas && canvas.contains(e.target as Node));
+
             this.mouseKeys.add(e.button);
             if (e.button === 0) {
                 if (!this.keys.has('MouseLeft')) this.justPressedMap.add('MouseLeft');

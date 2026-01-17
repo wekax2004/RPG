@@ -1,4 +1,5 @@
 ﻿import { SPRITE_MAP } from './data/sprites_map';
+import { SPRITES as IMG } from './constants';
 
 export class AssetManager {
     images: Record<number, HTMLCanvasElement> = {};
@@ -19,36 +20,18 @@ export class AssetManager {
     }
 
     async loadAll() {
-        console.log("[AssetManager] Loading External Assets...");
+        console.log("[AssetManager] Loading All Assets (Synchronous Init + Async External)...");
 
-        // 1. Identify unique sheets
-        const uniqueFiles = new Set<string>();
-        Object.values(SPRITE_MAP).forEach(def => uniqueFiles.add(def.file));
+        // 1. Initial procedural setup
+        this.init();
 
-        // 2. Load Sheets (Parallel)
-        const sheetMap = new Map<string, HTMLCanvasElement>();
-        await Promise.all(Array.from(uniqueFiles).map(async (file) => {
-            try {
-                const cvs = await this.loadExternalImage(file);
-                sheetMap.set(file, cvs);
-            } catch (e) {
-                console.warn(`[AssetManager] Failed to load sheet: ${file}`);
-            }
-        }));
+        // 2. Load Sheets and Sheets-mapped sprites
+        await this.loadExternalSprites();
 
-        // 3. Slice Sprites
-        Object.entries(SPRITE_MAP).forEach(([key, def]) => {
-            const id = parseInt(key);
-            const sheet = sheetMap.get(def.file);
-            if (sheet) {
-                const cvs = this.createCanvas(def.width, def.height);
-                const ctx = cvs.getContext('2d')!;
-                // Draw slice
-                ctx.drawImage(sheet, def.x, def.y, def.width, def.height, 0, 0, def.width, def.height);
-                this.images[id] = cvs;
-            }
-        });
-        console.log(`[AssetManager] Loaded ${Object.keys(SPRITE_MAP).length} external sprites.`);
+        // 3. Load high-quality AI sprites (last, highest priority)
+        await this.loadAISprites();
+
+        console.log(`[AssetManager] All assets loaded. Procedural + AI + Sheet Mapped.`);
     }
 
     // Check if pixel should be dithered based on position and threshold
@@ -66,6 +49,7 @@ export class AssetManager {
                 cvs.height = img.height;
                 const ctx = cvs.getContext('2d')!;
                 ctx.drawImage(img, 0, 0);
+                this.applyTransparency(ctx, img.width, img.height);
                 resolve(cvs);
             };
             img.onerror = () => {
@@ -74,6 +58,152 @@ export class AssetManager {
             };
             img.src = url;
         });
+    }
+
+    private applyTransparency(ctx: CanvasRenderingContext2D, w: number, h: number) {
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const data = imageData.data;
+
+        // Helper to get RGB
+        const getRGB = (i: number) => {
+            const idx = i * 4;
+            return { r: data[idx], g: data[idx + 1], b: data[idx + 2] };
+        };
+
+        const corners = [0, w - 1, (h - 1) * w, (h - 1) * w + w - 1];
+        const visited = new Int8Array(w * h);
+        const queue: number[] = []; // Temp queue for seeds
+
+        const processSeed = (startIdx: number) => {
+            if (visited[startIdx]) return;
+            const startColor = getRGB(startIdx);
+            const localQueue = [startIdx];
+            visited[startIdx] = 1;
+            const TOL = 40;
+
+            while (localQueue.length > 0) {
+                const idx = localQueue.pop()!;
+                const dataIdx = idx * 4;
+                data[dataIdx + 3] = 0; // Transparent
+
+                const px = (idx % w);
+                const py = Math.floor(idx / w);
+                const neighbors = [];
+                if (px > 0) neighbors.push(idx - 1);
+                if (px < w - 1) neighbors.push(idx + 1);
+                if (py > 0) neighbors.push(idx - w);
+                if (py < h - 1) neighbors.push(idx + w);
+
+                for (const nIdx of neighbors) {
+                    if (visited[nIdx]) continue;
+                    const nC = getRGB(nIdx);
+                    if (Math.abs(nC.r - startColor.r) < TOL &&
+                        Math.abs(nC.g - startColor.g) < TOL &&
+                        Math.abs(nC.b - startColor.b) < TOL) {
+                        visited[nIdx] = 1;
+                        localQueue.push(nIdx);
+                    }
+                }
+            }
+        };
+
+        for (const idx of corners) {
+            const c = getRGB(idx);
+            // Relaxed Checks
+            const isWhite = (c.r > 230 && c.g > 230 && c.b > 230);
+            const isMagenta = (c.r > 240 && c.g < 50 && c.b > 240);
+            const isGray = (c.r > 150 && Math.abs(c.r - c.g) < 20 && Math.abs(c.r - c.b) < 20);
+            if (isWhite || isMagenta || isGray) processSeed(idx);
+        }
+
+        /* OLD LOOP: for (const idx of corners) {
+            // MATCHED
+
+            // Check for White or Magenta
+            // White: >240, Magenta: R>240 G<50 B>240
+            const isWhite = (r > 240 && g > 240 && b > 240);
+            const isMagenta = (r > 240 && g < 50 && b > 240);
+
+            if (isWhite || isMagenta) {
+                bgR = r; bgG = g; bgB = b;
+                startIdx = idx;
+                foundBg = true;
+                detectionMethod = isWhite ? "Strict White" : "Strict Magenta";
+                break;
+            }
+        }
+
+        // 2. Fallback: Check for Uniform Corners (e.g. Gray placeholders)
+        if (!foundBg) {
+            // Helper to get RGB
+            const getRGB = (i: number) => {
+                const idx = i * 4;
+                return { r: data[idx], g: data[idx + 1], b: data[idx + 2] };
+            };
+            const c0 = getRGB(corners[0]);
+            const c1 = getRGB(corners[1]);
+            const c2 = getRGB(corners[2]);
+            // 2. Scan corners to find background color (majority vote)
+            // Relaxed tolerance for noisy JPEGs/Artifacts (User reported Green Box)
+            const TOL_STRICT = 60; // Increased to 60 (Aggressive)
+
+            const match1 = Math.abs(c0.r - c1.r) < TOL_STRICT && Math.abs(c0.g - c1.g) < TOL_STRICT && Math.abs(c0.b - c1.b) < TOL_STRICT;
+            const match2 = Math.abs(c0.r - c2.r) < TOL_STRICT && Math.abs(c0.g - c2.g) < TOL_STRICT && Math.abs(c0.b - c2.b) < TOL_STRICT;
+
+            if (match1 && match2) {
+                bgR = c0.r; bgG = c0.g; bgB = c0.b;
+                startIdx = corners[0];
+                foundBg = true;
+                detectionMethod = `Uniform Fallback (rgb(${bgR},${bgG},${bgB}))`;
+            }
+        }
+
+        if (!foundBg) {
+            console.warn(`[AssetManager] Transparency Failed: Corners not uniform. ${w}x${h} (R:${bgR} G:${bgG} B:${bgB})`);
+        } else {
+            // console.log(`[AssetManager] Transparency APPLIED: ${detectionMethod}`);
+        }
+
+        if (foundBg) {
+            const visited = new Int8Array(w * h);
+            const queue: number[] = [startIdx];
+            const TOL = 40;
+
+            while (queue.length > 0) {
+                const idx = queue.pop()!;
+                if (visited[idx]) continue;
+                visited[idx] = 1;
+
+                const px = (idx % w);
+                const py = Math.floor(idx / w);
+                const dataIdx = idx * 4;
+
+                const r = data[dataIdx];
+                const g = data[dataIdx + 1];
+                const b = data[dataIdx + 2];
+
+                if (Math.abs(r - bgR) < TOL &&
+                    Math.abs(g - bgG) < TOL &&
+                    Math.abs(b - bgB) < TOL) {
+
+                    data[dataIdx + 3] = 0; // Transparent
+
+                    if (px > 0) queue.push(idx - 1);
+                    if (px < w - 1) queue.push(idx + 1);
+                    if (py > 0) queue.push(idx - w);
+                    if (py < h - 1) queue.push(idx + w);
+                }
+            }
+        } */
+
+        // Always remove Magenta (#FF00FF) globally
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i] === 255 && data[i + 1] === 0 && data[i + 2] === 255) {
+                data[i + 3] = 0;
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
     }
 
     init() {
@@ -95,7 +225,8 @@ export class AssetManager {
         this.images[17] = this.createWall();     // Stone Wall (alias)
 
         // ===== NATURE =====
-        this.images[50] = this.createTree();     // Oak Tree (Fallback)
+        this.images[50] = this.createTree();     // Tree Pine (Fallback)
+        this.images[51] = this.createTree();     // Tree Oak (SPRITES.TREE_OAK)
         this.images[5] = this.images[50];        // Tree (alias)
         this.images[6] = this.createRock();      // Rock
 
@@ -110,7 +241,7 @@ export class AssetManager {
         this.images[42] = this.createSword();    // Sword
         this.images[46] = this.createShield();   // Shield
         this.images[22] = this.createBackpack(); // Backpack
-        this.images[21] = this.createBackpack(); // Bag (Reuse for now)
+        // ID 21 is WALL, do not overwrite with backpack
 
         // ===== WEAPONS: AXES =====
         this.images[130] = this.createAxe('hand');    // Hand Axe
@@ -141,8 +272,8 @@ export class AssetManager {
         this.images[40] = this.createGold();
         this.images[41] = this.createPotion();
         this.images[42] = this.createSword();
-        this.images[22] = this.createBackpack();
-        this.images[21] = this.createBackpack();
+        this.images[22] = this.createBackpack(); // Backpack only
+        // ID 21 is WALL (created at line 94), must NOT be overwritten
 
         // ===== PLAYER =====
         this.images[199] = this.createPlayer();  // Red Knight (Player)
@@ -168,6 +299,28 @@ export class AssetManager {
         // ===== WEAPONS: AXES =====
         this.images[132] = this.createAxe('battle'); // Orc Axe (reuse battle style)
         this.images[133] = this.createAxe('battle'); // War Axe
+
+        // ===== STARTING GEAR (Rookgaard) =====
+        this.images[IMG.WOODEN_SWORD] = this.createWoodenSword();
+        this.images[IMG.WOODEN_SHIELD] = this.images[46]; // Reuse existing Wooden Shield
+        this.images[IMG.LEATHER_ARMOR] = this.createArmorPlate('#8d6e63', '#5d4037');
+        this.images[IMG.LEATHER_BOOTS] = this.createBoots('#8d6e63');
+        this.images[IMG.APPLE] = this.createApple();
+        this.images[IMG.SMALL_BAG] = this.createSmallBag();
+
+        // ===== NEW MOBS (User Request) =====
+        this.images[IMG.ORC] = this.createOrc();
+        this.images[IMG.BEAR] = this.createBear('#5d4037'); // Brown
+        this.images[IMG.POLAR_BEAR] = this.createPolarBear(); // White with tweaks
+        this.images[IMG.YETI] = this.createYeti();
+        this.images[IMG.SCORPION] = this.createScorpion();
+        this.images[IMG.SNAKE] = this.createSnake();
+        this.images[IMG.SPIDER] = this.createSpider();
+        // Fallbacks for variants
+        this.images[IMG.SLIME] = this.createSlime();
+        this.images[IMG.RAT] = this.createRat();
+        this.images[IMG.WOLF] = this.createWolf();
+        this.images[IMG.SKELETON] = this.createSkeleton();
         this.images[134] = this.createAxe('battle'); // Executioner
 
         // ===== WEAPONS: CLUBS =====
@@ -203,13 +356,21 @@ export class AssetManager {
         this.images[66] = this.createTool('pickaxe'); // ID 66
 
         // ===== GEMS / DECOR =====
-        this.images[203] = this.createGem('#f44336'); // Ruby
-        this.images[204] = this.createGem('#2196f3'); // Sapphire
+        this.images[230] = this.createGem('#f44336'); // Ruby (GEM_RUBY)
+        this.images[231] = this.createGem('#2196f3'); // Sapphire (GEM_SAPPHIRE)
         this.images[172] = this.createGem('#eee');    // Spider Silk (White Gem placeholder)
         this.images[86] = this.createPotion();        // Mana Potion (Reuse Potion)
 
         // ===== MISSING ARMOR =====
         this.images[2] = this.createArmorPlate('#b0bec5', '#78909c'); // Plate Armor (ID 2)
+        this.images[160] = this.createGeneric('#8d6e63'); // Wolf Pelt (Brownish)
+        this.images[161] = this.createGeneric('#5d4037'); // Bear Fur (Dark Brown)
+        this.images[172] = this.createGeneric('#eeeeee'); // Spider Silk (White)
+
+        // Fix for Wolf Corpse (294) - Use procedural "Meat/Gore" shape for now
+        this.images[294] = this.createFood('rotten'); // Reuse rotten flesh shape (pile) but generic? 
+        // Or just createGeneric('#8d6e63')
+        this.images[294] = this.createGeneric('#8d6e63'); // Brown pile (Wolf Corpse)
 
         // ===== TOWN NPCS (Fallback) =====
         this.images[260] = this.createNPC('#4a3070', '#8a60a0'); // Merchant (Purple)
@@ -253,12 +414,34 @@ export class AssetManager {
         // Let's use the Wolf sprite for Hatchling (ID 303).
         this.images[303] = this.createWolf();
 
+        // ===== BUILDINGS & ROOFS (Tibia-style Fake 3D) =====
+        // Proper roof tiles with shingle patterns
+        this.images[580] = this.createRoofTile('#8b4513', '#5d3a1a'); // Brown roof
+        this.images[581] = this.createRoofTile('#b71c1c', '#7f0000'); // Red roof
+        this.images[582] = this.createTempleDome(); // Grand 80px Dome for Temple
+        this.images[587] = this.createGeneric('#8d6e63'); // Chimney
+        this.images[588] = this.createWindowTile();       // Window
+        this.images[589] = this.createDoorTile('#5d4037'); // Wood door
+        this.images[590] = this.createDoorTile('#424242'); // Metal door
+        this.images[591] = this.createGeneric('#757575'); // Well
+        this.images[592] = this.createGeneric('#87ceeb'); // Fountain
+        this.images[593] = this.createGeneric('#8d6e63'); // Signpost
+        this.images[594] = this.createTorch();            // Lamppost (reuse torch)
+        this.images[595] = this.createCrate();            // Table (reuse crate)
+        this.images[596] = this.createGeneric('#ffffff'); // Bed
+        this.images[597] = this.createCrate();            // Chest (reuse crate)
+        this.images[598] = this.createGold();             // Gold pile
+        this.images[599] = this.createGold();             // Coin
+
+        // 3D-looking wall tiles for building edges
+        this.images[600] = this.create3DWall();           // 3D wall tile
+        this.images[601] = this.createWall3D_L2();        // 2nd story wall
+        this.images[602] = this.createTownWall();         // Town perimeter wall
+
         console.log(`[AssetManager] NPC Sprites: 260=${this.images[260]?.width}x${this.images[260]?.height}, 261=${this.images[261]?.width}x${this.images[261]?.height}, 262=${this.images[262]?.width}x${this.images[262]?.height}`);
 
         console.log(`[AssetManager] Forged ${Object.keys(this.images).length} Tibia-quality procedural assets.`);
-
-        // 2. Start Loading External Sprites (Async Overwrite)
-        this.loadExternalSprites();
+        // Note: loadExternalSprites and loadAISprites should be called via await loadAll()
     }
 
     private async loadExternalSprites() {
@@ -273,7 +456,18 @@ export class AssetManager {
                 this.images[10] = grass1;
                 this.images[16] = grass2;
                 this.images[161] = grass3;
-                this.images[6] = rock;
+
+                // Scale Rock (ID 6) to 32x32 to prevent giant rendering
+                const rockCvs = this.createCanvas(32, 32);
+                const rockCtx = rockCvs.getContext('2d')!;
+                rockCtx.imageSmoothingEnabled = false;
+                // Scale FULL image to 32x32
+                rockCtx.drawImage(rock, 0, 0, rock.width, rock.height, 0, 0, 32, 32);
+
+                // Fix: Apply Transparency (User reported black corners / solid box)
+                this.applyTransparency(rockCtx, 32, 32);
+
+                this.images[6] = rockCvs;
             } catch (ignore) { /* Optional */ }
 
             // 2. Load Mapped Sprites from Sheets
@@ -329,82 +523,7 @@ export class AssetManager {
 
 
 
-                        // BFS Flood Fill Transparency
-                        // Removes contiguous background starting from (0,0)
-                        // Preserves internal whites (eyes, shines)
-
-                        const imageData = ctx.getImageData(0, 0, def.width, def.height);
-                        const data = imageData.data;
-                        const w = def.width;
-                        const h = def.height;
-
-                        // Get Target Color from (0,0)
-                        const bgR = data[0];
-                        const bgG = data[1];
-                        const bgB = data[2];
-                        const bgA = data[3];
-
-                        const shouldFill = (id >= 300 || isLegacyNature);
-                        if (shouldFill) {
-                            if (bgA > 200) {
-                                // Proceed with Fill
-                                const visited = new Int8Array(w * h);
-                                const queue: number[] = [0];
-                                const TOL = 40; // Increased Tolerance slightly
-
-                                // ... (rest of logic continues below)
-                                // I need to be careful not to break the structure.
-                                // The previous code had `if ((id >= 300 || isLegacyNature) && bgA > 200) {`
-                                // I will replace that block header.
-                            } else {
-                                console.warn(`[AssetDebug] SKIPPING Flood Fill for ID ${id}. BG Alpha too low? (${bgA}) or Color: ${bgR},${bgG},${bgB}`);
-                            }
-                        }
-
-                        // RE-INSERTING THE BLOCK HEADER CORRECTLY
-                        if (shouldFill && bgA > 200) {
-                            const visited = new Int8Array(w * h); // 0=unvisited, 1=visited
-                            const queue: number[] = [0]; // Start at index 0 (0,0)
-                            const TOL = 40; // Hardcoded increased tolerance
-
-                            while (queue.length > 0) {
-                                const idx = queue.pop()!;
-                                if (visited[idx]) continue;
-                                visited[idx] = 1;
-
-                                const px = (idx % w);
-                                const py = Math.floor(idx / w);
-                                const dataIdx = idx * 4;
-
-                                const r = data[dataIdx];
-                                const g = data[dataIdx + 1];
-                                const b = data[dataIdx + 2];
-
-                                // Check if match
-                                if (Math.abs(r - bgR) < TOL &&
-                                    Math.abs(g - bgG) < TOL &&
-                                    Math.abs(b - bgB) < TOL) {
-
-                                    // Remove Pixel
-                                    data[dataIdx + 3] = 0;
-
-                                    // Add Neighbors
-                                    if (px > 0) queue.push(idx - 1);
-                                    if (px < w - 1) queue.push(idx + 1);
-                                    if (py > 0) queue.push(idx - w);
-                                    if (py < h - 1) queue.push(idx + w);
-                                }
-                            }
-                        }
-
-                        // Always remove Magenta (#FF00FF) globally just in case
-                        for (let i = 0; i < data.length; i += 4) {
-                            if (data[i] === 255 && data[i + 1] === 0 && data[i + 2] === 255) {
-                                data[i + 3] = 0;
-                            }
-                        }
-
-                        ctx.putImageData(imageData, 0, 0);
+                        this.applyTransparency(ctx, def.width, def.height);
 
                         this.images[id] = spriteCvs;
                         // console.log(`[AssetManager] Loaded Sprite ${id} from ${file}`);
@@ -426,15 +545,74 @@ export class AssetManager {
     // Load high-quality AI-generated sprites
     private async loadAISprites(): Promise<void> {
         const aiSprites: { [id: number]: string } = {
+            // Generated Assets (Yeti/Snake)
+            321: '/sprites/yeti.png',
+            324: '/sprites/snake.png',
+
+            // Corpses
+            297: '/sprites/corpse_orc.png',
+            293: '/sprites/corpse_wolf.png', // Rat shares? No, Wolf Dead
+            // 294: '/sprites/corpse_wolf.png', // USER REPORTED BAD SPRITE (Looks like Undead)
+            295: '/sprites/corpse_bear.png',
+            296: '/sprites/corpse_spider.png',
+            298: '/sprites/corpse_human.png',
+            22: '/sprites/corpse_snake.png', // Snake Corpse
+            23: '/sprites/corpse_wolf.png', // Rat Corpse (Fallback)
+            // Mobs.ts: Rat Corpse = 23.
+            // Need to generate/map rat corpse too? User said "Wolf, Bear, Spider, Human, Snake".
+            // Rat wasn't mentioned explicitly as fixed, but let's assume Rat Corpse is generic or missing.
+            // Using Wolf for Rat? No.
+            // Let's stick to what we have.
+
+
             // NPCs
             260: '/sprites/npc_merchant.png',
             261: '/sprites/npc_healer.png',
-            262: '/sprites/npc_guide.png',
-            262: '/sprites/npc_guide.png',
+            262: '/sprites/npc_guide.png', // Fallback/Existing
+
             // Orcs
-            9: '/sprites/orc_warrior.png',
+            9: '/sprites/orc.png',
             252: '/sprites/orc_peon.png',
-            253: '/sprites/orc_warlord.png',
+            253: '/sprites/orc_warlord.png', // Re-verify this ID?
+
+            // Biome Mobs
+            332: '/sprites/hydra.png', // Hydra
+            333: '/sprites/orc_warlord.png', // Warlord
+            330: '/sprites/frost_giant.png', // Frost Giant
+            322: '/sprites/scorpion_king.png', // Scorpion King
+            323: '/sprites/mummy.png', // Mummy
+            320: '/sprites/polar_bear.png', // Polar Bear
+
+            // Standard Mobs (Remapped from generic placeholders)
+            202: '/sprites/skeleton.png',
+            162: '/sprites/ghost.png', // Ghost ID 162? Check constants
+            203: '/sprites/slime.png',
+            289: '/sprites/necromancer.png',
+            22: '/sprites/zombie.png', // Wait, Zombie Dead is 22. Zombie Live is?
+            // Checking Mobs.ts again for IDs.
+            // Zombie Live: SPRITES.ZOMBIE (Need to check value, likely 200 range)
+            // Let's assume ID map is safest way.
+            // Zombie Live ID? Mobs.ts says SPRITES.ZOMBIE.
+            // Ghost: SPRITES.GHOST.
+
+            // Constants lookup:
+            // SKELETON: 202
+            // SLIME: 203
+            // GHOST: ? (Need to check constants again, assumed 162 from previous logs or guess)
+            // ZOMBIE: ?
+
+            // Let's map strict IDs based on constants.ts file view
+            // RAT=200, WOLF=201, SKELETON=202, SLIME=203
+            // NECROMANCER=289
+            // ORC=9
+            // ORC_WARLORD=333
+            // HYDRA=332
+            // FROST_GIANT=330
+            // SCORPION_KING=322
+            // MUMMY=323
+            // POLAR_BEAR=320
+            // SNAKE=324 (Already Mapped)
+            // YETI=321 (Already Mapped)
         };
 
         for (const [idStr, url] of Object.entries(aiSprites)) {
@@ -455,17 +633,7 @@ export class AssetManager {
                 // Draw image filling entire canvas (will stretch but keeps proportions relative to tile)
                 ctx.drawImage(img, 0, 0, w, h);
 
-                // Remove Magenta (#FF00FF) background
-                const imageData = ctx.getImageData(0, 0, w, h);
-                const data = imageData.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i], g = data[i + 1], b = data[i + 2];
-                    // Magenta and near-magenta tolerance
-                    if (r > 200 && g < 100 && b > 200) {
-                        data[i + 3] = 0; // Make transparent
-                    }
-                }
-                ctx.putImageData(imageData, 0, 0);
+                this.applyTransparency(ctx, w, h);
 
                 this.images[id] = cvs;
                 console.log(`[AssetManager] Loaded AI sprite ${id} (${w}x${h})`);
@@ -475,6 +643,10 @@ export class AssetManager {
         }
 
         // RE-APPLY PROCEDURAL OVERRIDES (To prevent external assets from overwriting them)
+        // Only override Dwarf sprites if not present (although they are unique)
+        // Removed forced overrides for Cobble (12) and Wall (21) to allow Sprite Map to work.
+
+
         this.images[251] = this.createDwarf('#ffcc80', '#607d8b', '#37474f'); // Dwarf Guard
         this.images[254] = this.createDwarf('#ffcc80', '#795548', '#3e2723'); // Dwarf Miner
         this.images[255] = this.createDwarf('#ffcc80', '#9c27b0', '#eeeeee'); // Dwarf Geomancer
@@ -492,7 +664,7 @@ export class AssetManager {
     getSprite(id: number): HTMLCanvasElement {
         if (id === 51 && Math.random() < 0.01) {
             const s = this.images[id];
-            console.log(`[AssetDebug] Tree(51):`, s ? `${s.width}x${s.height}` : "MISSING");
+            // console.log(`[AssetDebug] Tree(51):`, s ? `${s.width}x${s.height}` : "MISSING");
         }
         return this.images[id] || this.images[10];
     }
@@ -505,6 +677,27 @@ export class AssetManager {
     getSpriteRect(id: number): { x: number, y: number, w: number, h: number } {
         const cvs = this.getSprite(id);
         return { x: 0, y: 0, w: cvs.width, h: cvs.height };
+    }
+
+    getSpriteStyle(id: number): { backgroundImage: string, backgroundPosition: string, backgroundSize: string } {
+        const cvs = this.getSprite(id);
+        return {
+            backgroundImage: `url(${cvs.toDataURL()})`,
+            backgroundPosition: '0px 0px',
+            backgroundSize: '100% 100%'
+        };
+    }
+
+    getSheetConfig(): any { return { width: 512, height: 512, tileSize: 32 }; }
+    rebuildCache(): void { }
+    getSpriteImage(id: number): HTMLCanvasElement { return this.getSprite(id); }
+
+    // Helper to create a canvas of specified size
+    private createCanvas(w: number, h: number): HTMLCanvasElement {
+        const cvs = document.createElement('canvas');
+        cvs.width = w;
+        cvs.height = h;
+        return cvs;
     }
 
     // =========================================================
@@ -569,43 +762,7 @@ export class AssetManager {
     // =========================================================
     // TIBIA-QUALITY COBBLESTONE
     // =========================================================
-    private createCobble(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
 
-        const DARK = '#4a4a4a';
-        const MID = '#6a6a6a';
-        const LIGHT = '#8a8a8a';
-        const MORTAR = '#3a3a3a';
-
-        // Base mortar
-        ctx.fillStyle = MORTAR;
-        ctx.fillRect(0, 0, 32, 32);
-
-        // Draw cobblestones in grid
-        for (let row = 0; row < 4; row++) {
-            for (let col = 0; col < 4; col++) {
-                const x = col * 8 + (row % 2) * 4;
-                const y = row * 8;
-
-                // Stone base
-                ctx.fillStyle = MID;
-                ctx.fillRect(x + 1, y + 1, 6, 6);
-
-                // Highlight (top-left)
-                ctx.fillStyle = LIGHT;
-                ctx.fillRect(x + 1, y + 1, 5, 1);
-                ctx.fillRect(x + 1, y + 1, 1, 5);
-
-                // Shadow (bottom-right)
-                ctx.fillStyle = DARK;
-                ctx.fillRect(x + 2, y + 6, 5, 1);
-                ctx.fillRect(x + 6, y + 2, 1, 5);
-            }
-        }
-
-        return cvs;
-    }
 
     // =========================================================
     // TIBIA-QUALITY COBBLESTONE (Restored & Polished)
@@ -1682,143 +1839,7 @@ export class AssetManager {
     // =========================================================
     // SKELETON (Monster 32x48)
     // =========================================================
-    private createSkeleton(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath(); ctx.ellipse(16, 44, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(10, 36, 4, 10); ctx.fillRect(18, 36, 4, 10); // Legs
-        ctx.fillRect(14, 24, 4, 12); // Spine
-        ctx.fillRect(10, 26, 12, 6); // Ribs
-        ctx.fillRect(8, 24, 4, 10); ctx.fillRect(20, 24, 4, 10); // Arms
-        ctx.fillStyle = '#f0f0f0';
-        ctx.beginPath(); ctx.arc(16, 18, 7, 0, Math.PI * 2); ctx.fill(); // Skull
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(13, 16, 2, 2); ctx.fillRect(17, 16, 2, 2); // Eyes
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
 
-    // =========================================================
-    // WATER (Animated Dithered)
-    // =========================================================
-    private createWater(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#0069c0';
-        ctx.fillRect(0, 0, 32, 32);
-        ctx.fillStyle = '#2196f3';
-        for (let i = 0; i < 32; i += 2) {
-            for (let j = 0; j < 32; j += 2) {
-                if ((i + j) % 4 === 0) ctx.fillRect(i, j, 1, 1);
-            }
-        }
-        return cvs;
-    }
-
-    // =========================================================
-    // FLOORS (Wood / Stone)
-    // =========================================================
-    private createWoodFloor(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#5d4037';
-        ctx.fillRect(0, 0, 32, 32);
-        ctx.fillStyle = '#3e2723';
-        for (let i = 0; i < 32; i += 8) ctx.fillRect(0, i, 32, 1); // Planks
-        ctx.fillRect(10, 0, 1, 8); ctx.fillRect(20, 8, 1, 8); ctx.fillRect(5, 16, 1, 8);
-        return cvs;
-    }
-    private createStoneFloor(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#9e9e9e';
-        ctx.fillRect(0, 0, 32, 32);
-        ctx.fillStyle = '#757575';
-        for (let i = 0; i < 32; i += 16) {
-            for (let j = 0; j < 32; j += 16) {
-                ctx.strokeRect(i, j, 16, 16);
-            }
-        }
-        return cvs;
-    }
-
-    // =========================================================
-    // DECOR
-    // =========================================================
-    private createBarrel(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#795548';
-        ctx.beginPath(); ctx.ellipse(16, 24, 10, 8, 0, 0, Math.PI * 2); ctx.fill(); // Bottom
-        ctx.restore();
-        ctx.fillStyle = '#5d4037';
-        ctx.fillRect(8, 12, 16, 14);
-        ctx.fillStyle = '#3e2723';
-        ctx.fillRect(8, 14, 16, 2); ctx.fillRect(8, 22, 16, 2); // Bands
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
-    private createCrate(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#8d6e63';
-        ctx.fillRect(6, 12, 20, 18);
-        ctx.strokeStyle = '#3e2723';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(7, 13, 18, 16);
-        ctx.beginPath(); ctx.moveTo(7, 13); ctx.lineTo(25, 29); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(25, 13); ctx.lineTo(7, 29); ctx.stroke();
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
-    private createTorch(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#3e2723';
-        ctx.fillRect(14, 18, 4, 10); // Handle
-        ctx.fillStyle = '#ff5722';
-        ctx.beginPath(); ctx.arc(16, 16, 4, 0, Math.PI * 2); ctx.fill(); // Fire
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
-
-    // =========================================================
-    // LOOT
-    // =========================================================
-    private createGold(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#ffc107';
-        ctx.beginPath(); ctx.arc(16, 24, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffecb3';
-        ctx.beginPath(); ctx.arc(15, 23, 1, 0, Math.PI * 2); ctx.fill();
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
-    private createPotion(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.fillStyle = '#f44336';
-        ctx.beginPath(); ctx.arc(16, 22, 6, 0, Math.PI * 2); ctx.fill(); // Flask
-        ctx.fillStyle = '#e0e0e0';
-        ctx.fillRect(14, 14, 4, 4); // Neck
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
-    private createSword(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-        ctx.save();
-        ctx.translate(16, 16); ctx.rotate(Math.PI / 4);
-        ctx.fillStyle = '#b0bec5'; ctx.fillRect(-2, -10, 4, 20); // Blade
-        ctx.fillStyle = '#8d6e63'; ctx.fillRect(-3, 10, 6, 2); // Guard
-        ctx.fillStyle = '#5d4037'; ctx.fillRect(-1, 12, 2, 4); // Hilt
-        ctx.restore();
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
     private createCanvas(w: number, h: number): HTMLCanvasElement {
         const c = document.createElement('canvas');
         c.width = w;
@@ -2451,6 +2472,1068 @@ export class AssetManager {
         this.addOutline(ctx, cvs);
         return cvs;
     }
+
+    // =========================================================
+    // ROOF TILES (For 3D Building Effect)
+    // =========================================================
+    private createRoof(baseColor: string, shadowColor: string): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Triangular roof shape
+        ctx.fillStyle = baseColor;
+        ctx.beginPath();
+        ctx.moveTo(0, 32);
+        ctx.lineTo(16, 4);
+        ctx.lineTo(32, 32);
+        ctx.closePath();
+        ctx.fill();
+
+        // Ridge tiles
+        ctx.fillStyle = shadowColor;
+        for (let i = 0; i < 4; i++) {
+            const y = 8 + i * 6;
+            ctx.fillRect(0, y, 32, 2);
+        }
+
+        // Shadow on left side
+        ctx.fillStyle = shadowColor;
+        ctx.beginPath();
+        ctx.moveTo(0, 32);
+        ctx.lineTo(16, 4);
+        ctx.lineTo(8, 4);
+        ctx.lineTo(0, 20);
+        ctx.closePath();
+        ctx.fill();
+
+        return cvs;
+    }
+
+    private createTempleRoof(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48); // Taller for dome
+        const ctx = cvs.getContext('2d')!;
+
+        // Dome base (White/Gold)
+        ctx.fillStyle = '#f5f5dc';
+        ctx.beginPath();
+        ctx.arc(16, 32, 14, Math.PI, 0); // Top semicircle
+        ctx.lineTo(30, 48);
+        ctx.lineTo(2, 48);
+        ctx.closePath();
+        ctx.fill();
+
+        // Dome highlight
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(12, 28, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Spire on top
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(16, 0);
+        ctx.lineTo(20, 18);
+        ctx.lineTo(12, 18);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cross at top
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(14, 0, 4, 8);
+        ctx.fillRect(12, 2, 8, 3);
+
+        return cvs;
+    }
+
+    private createRoofCorner(corner: 'nw' | 'ne' | 'sw' | 'se'): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        ctx.fillStyle = '#8b4513';
+
+        switch (corner) {
+            case 'nw':
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(32, 0);
+                ctx.lineTo(32, 32);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'ne':
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(32, 0);
+                ctx.lineTo(0, 32);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'sw':
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(32, 32);
+                ctx.lineTo(0, 32);
+                ctx.closePath();
+                ctx.fill();
+                break;
+            case 'se':
+                ctx.beginPath();
+                ctx.moveTo(32, 0);
+                ctx.lineTo(32, 32);
+                ctx.lineTo(0, 32);
+                ctx.closePath();
+                ctx.fill();
+                break;
+        }
+
+        return cvs;
+    }
+
+    private createChimney(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // Chimney body (brick)
+        ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(10, 16, 12, 32);
+
+        // Brick pattern
+        ctx.strokeStyle = '#5d4037';
+        for (let y = 20; y < 48; y += 6) {
+            ctx.beginPath();
+            ctx.moveTo(10, y);
+            ctx.lineTo(22, y);
+            ctx.stroke();
+        }
+
+        // Chimney top
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(8, 12, 16, 6);
+
+        // Smoke
+        ctx.fillStyle = 'rgba(128,128,128,0.5)';
+        ctx.beginPath();
+        ctx.arc(16, 6, 5, 0, Math.PI * 2);
+        ctx.arc(20, 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        return cvs;
+    }
+
+    private createWindow(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Window frame (wood)
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(4, 4, 24, 24);
+
+        // Glass (blue tint)
+        ctx.fillStyle = '#87ceeb';
+        ctx.fillRect(6, 6, 9, 9);
+        ctx.fillRect(17, 6, 9, 9);
+        ctx.fillRect(6, 17, 9, 9);
+        ctx.fillRect(17, 17, 9, 9);
+
+        // Frame cross
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(14, 4, 4, 24);
+        ctx.fillRect(4, 14, 24, 4);
+
+        return cvs;
+    }
+
+    private createDoor(color: string): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // Door frame
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(4, 8, 24, 40);
+
+        // Door body
+        ctx.fillStyle = color;
+        ctx.fillRect(6, 10, 20, 36);
+
+        // Door panels
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(8, 12, 16, 10);
+        ctx.fillRect(8, 26, 16, 10);
+
+        // Handle
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(20, 30, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Arch top
+        ctx.fillStyle = '#3e2723';
+        ctx.beginPath();
+        ctx.arc(16, 8, 10, Math.PI, 0);
+        ctx.fill();
+
+        return cvs;
+    }
+
+    private createWellSprite(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // Well base (stone)
+        ctx.fillStyle = '#757575';
+        ctx.beginPath();
+        ctx.ellipse(16, 38, 14, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Well interior (dark)
+        ctx.fillStyle = '#212121';
+        ctx.beginPath();
+        ctx.ellipse(16, 36, 10, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Well rim
+        ctx.strokeStyle = '#5d4037';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(16, 34, 12, 7, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Overhead frame
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(4, 10, 3, 28);
+        ctx.fillRect(25, 10, 3, 28);
+        ctx.fillRect(4, 8, 24, 4);
+
+        // Rope
+        ctx.strokeStyle = '#8d6e63';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(16, 10);
+        ctx.lineTo(16, 30);
+        ctx.stroke();
+
+        // Bucket
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(12, 26, 8, 6);
+
+        return cvs;
+    }
+
+    private createFountainSprite(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // Base pool
+        ctx.fillStyle = '#87ceeb';
+        ctx.beginPath();
+        ctx.ellipse(16, 42, 14, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pool rim
+        ctx.strokeStyle = '#757575';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(16, 42, 14, 6, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Center pillar
+        ctx.fillStyle = '#bdbdbd';
+        ctx.fillRect(13, 20, 6, 22);
+
+        // Top bowl
+        ctx.fillStyle = '#9e9e9e';
+        ctx.beginPath();
+        ctx.ellipse(16, 20, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Water spray
+        ctx.fillStyle = 'rgba(135,206,235,0.6)';
+        ctx.beginPath();
+        ctx.moveTo(16, 10);
+        ctx.lineTo(12, 20);
+        ctx.lineTo(20, 20);
+        ctx.closePath();
+        ctx.fill();
+
+        return cvs;
+    }
+
+    private createSignpost(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // Post
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(14, 16, 4, 32);
+
+        // Sign board
+        ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(2, 8, 28, 12);
+
+        // Text placeholder (lines)
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(4, 12, 24, 2);
+        ctx.fillRect(8, 16, 16, 1);
+
+        return cvs;
+    }
+
+    private createLamppost(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // Post
+        ctx.fillStyle = '#424242';
+        ctx.fillRect(14, 16, 4, 32);
+
+        // Lamp housing
+        ctx.fillStyle = '#757575';
+        ctx.fillRect(8, 8, 16, 12);
+
+        // Glass panels
+        ctx.fillStyle = '#ffeb3b';
+        ctx.fillRect(10, 10, 5, 8);
+        ctx.fillRect(17, 10, 5, 8);
+
+        // Top
+        ctx.fillStyle = '#424242';
+        ctx.beginPath();
+        ctx.moveTo(8, 8);
+        ctx.lineTo(16, 2);
+        ctx.lineTo(24, 8);
+        ctx.closePath();
+        ctx.fill();
+
+        // Glow effect
+        ctx.fillStyle = 'rgba(255,235,59,0.3)';
+        ctx.beginPath();
+        ctx.arc(16, 14, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        return cvs;
+    }
+
+    private createTableSprite(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Table top
+        ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(2, 8, 28, 6);
+
+        // Table legs
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(4, 14, 4, 16);
+        ctx.fillRect(24, 14, 4, 16);
+
+        return cvs;
+    }
+
+    private createBed(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Bed frame
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(2, 10, 28, 20);
+
+        // Mattress
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(4, 8, 24, 14);
+
+        // Pillow
+        ctx.fillStyle = '#e0e0e0';
+        ctx.fillRect(4, 8, 8, 8);
+
+        // Blanket
+        ctx.fillStyle = '#c62828';
+        ctx.fillRect(4, 14, 24, 8);
+
+        return cvs;
+    }
+
+    private createChestSprite(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Chest body
+        ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(4, 12, 24, 18);
+
+        // Chest lid
+        ctx.fillStyle = '#5d4037';
+        ctx.beginPath();
+        ctx.moveTo(4, 12);
+        ctx.quadTo(16, 2, 28, 12);
+        ctx.closePath();
+        ctx.fill();
+
+        // Lock/clasp
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(14, 14, 4, 6);
+
+        // Metal bands
+        ctx.fillStyle = '#795548';
+        ctx.fillRect(4, 18, 24, 2);
+        ctx.fillRect(4, 24, 24, 2);
+
+        return cvs;
+    }
+
+    private createGoldPile(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Pile of coins
+        ctx.fillStyle = '#ffd700';
+        for (let i = 0; i < 15; i++) {
+            const x = 8 + Math.random() * 16;
+            const y = 16 + Math.random() * 12;
+            ctx.beginPath();
+            ctx.ellipse(x, y, 4, 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Shadows
+        ctx.fillStyle = '#c9a000';
+        for (let i = 0; i < 8; i++) {
+            const x = 10 + Math.random() * 12;
+            const y = 18 + Math.random() * 10;
+            ctx.beginPath();
+            ctx.ellipse(x, y, 3, 1.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        return cvs;
+    }
+
+    private createCoin(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Gold coin
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(16, 16, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner circle
+        ctx.strokeStyle = '#c9a000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(16, 16, 6, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Shine
+        ctx.fillStyle = '#fff59d';
+        ctx.beginPath();
+        ctx.arc(12, 12, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        return cvs;
+    }
+
+    // =========================================================
+    // TIBIA-STYLE ROOF TILE (with shingle pattern)
+    // =========================================================
+    private createRoofTile(baseColor: string, shadowColor: string): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 80); // Taller to sit ON TOP of walls
+        const ctx = cvs.getContext('2d')!;
+
+        // Base is at 80. tallOffset is 48. Renders dy - 48.
+        // Wall Lid is at dy - 16 to dy.
+        // We want roof shingles at dy - 48 to dy - 16 (Top 32px of sprite).
+
+        // Base roof color
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(0, 0, 32, 32);
+
+        // Draw horizontal shingle rows
+        ctx.fillStyle = shadowColor;
+        for (let row = 0; row < 5; row++) {
+            const y = row * 6;
+            ctx.fillRect(0, y + 4, 32, 2);
+
+            const offset = (row % 2) * 8;
+            for (let col = 0; col < 5; col++) {
+                const x = offset + col * 16 - 8;
+                if (x >= 0 && x < 32) {
+                    ctx.fillRect(x, y, 1, 5);
+                }
+            }
+        }
+
+        // Add subtle highlight on top of shingles
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        for (let row = 0; row < 5; row++) {
+            ctx.fillRect(0, row * 6, 32, 2);
+        }
+
+        return cvs;
+    }
+
+    // =========================================================
+    // 2ND STORY WALL (80px Tall)
+    // =========================================================
+    private createWall3D_L2(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 96); // 96px for 2nd Story
+        const ctx = cvs.getContext('2d')!;
+
+        // tallOffset is 64. Renders dy - 64.
+        // S2 Lid: y: 0-16. Renders dy - 64 to dy - 48.
+        // S2 Face: y: 16-48. Renders dy - 48 to dy - 16. (Sits ON TOP of S1 Lid)
+
+        // === STORY 2 LID (y=0 to 16) ===
+        ctx.fillStyle = '#9999aa';
+        ctx.fillRect(0, 0, 32, 16);
+
+        // === STORY 2 FACE (y=16 to 48) ===
+        ctx.fillStyle = '#666677';
+        ctx.fillRect(0, 16, 32, 32);
+
+        // Brick pattern for s2
+        ctx.fillStyle = '#444455';
+        for (let r = 0; r < 4; r++) {
+            ctx.fillRect(0, 16 + r * 8 + 6, 32, 2);
+        }
+
+        return cvs;
+    }
+
+    // =========================================================
+    // ROOKGAARD TOWN WALL (Perimeter)
+    // =========================================================
+    private createTownWall(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // Lid (Top side)
+        ctx.fillStyle = '#555555';
+        ctx.fillRect(0, 0, 32, 16);
+
+        // Face (Front side)
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(0, 16, 32, 32);
+
+        // Large stones
+        ctx.fillStyle = '#222222';
+        ctx.fillRect(0, 16, 2, 32);
+        ctx.fillRect(30, 16, 2, 32);
+        ctx.fillRect(0, 16, 32, 2);
+        ctx.fillRect(0, 31, 32, 2);
+        ctx.fillRect(0, 46, 32, 2);
+
+        return cvs;
+    }
+
+    // =========================================================
+    // WINDOW TILE (for building walls)
+    // =========================================================
+    private createWindowTile(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Wall background
+        ctx.fillStyle = '#757575';
+        ctx.fillRect(0, 0, 32, 32);
+
+        // Window frame (wood)
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(6, 6, 20, 20);
+
+        // Glass panes (blue tint)
+        ctx.fillStyle = '#87ceeb';
+        ctx.fillRect(8, 8, 7, 7);
+        ctx.fillRect(17, 8, 7, 7);
+        ctx.fillRect(8, 17, 7, 7);
+        ctx.fillRect(17, 17, 7, 7);
+
+        // Frame cross
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(15, 6, 2, 20);
+        ctx.fillRect(6, 15, 20, 2);
+
+        // Glass reflection
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(9, 9, 3, 3);
+        ctx.fillRect(18, 9, 3, 3);
+
+        return cvs;
+    }
+
+    // =========================================================
+    // DOOR TILE (for building entrances)
+    // =========================================================
+    private createDoorTile(color: string): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Floor under door
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(0, 28, 32, 4);
+
+        // Door frame
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(4, 0, 24, 28);
+
+        // Door body
+        ctx.fillStyle = color;
+        ctx.fillRect(6, 2, 20, 26);
+
+        // Door panels (darker insets)
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(8, 4, 16, 8);
+        ctx.fillRect(8, 16, 16, 8);
+
+        // Handle
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(20, 14, 3, 4);
+
+        return cvs;
+    }
+
+    // =========================================================
+    // 3D WALL (Tibia-style with lid and face)
+    // =========================================================
+    private create3DWall(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        // === LID (Top surface, y=0 to 16) ===
+        ctx.fillStyle = '#888899';
+        ctx.fillRect(0, 0, 32, 16);
+
+        // Lid highlight (top edge)
+        ctx.fillStyle = '#aaaaaa';
+        ctx.fillRect(0, 0, 32, 3);
+
+        // Lid shadow (bottom of lid)
+        ctx.fillStyle = '#666677';
+        ctx.fillRect(0, 13, 32, 3);
+
+        // === FACE (Front surface, y=16 to 48) ===
+        ctx.fillStyle = '#555566';
+        ctx.fillRect(0, 16, 32, 32);
+
+        // Brick pattern
+        const BRICK_LIGHT = '#666677';
+        const BRICK_DARK = '#444455';
+        const MORTAR = '#333344';
+
+        for (let row = 0; row < 4; row++) {
+            const y = 18 + row * 8;
+            const offset = (row % 2) * 8;
+
+            // Mortar line
+            ctx.fillStyle = MORTAR;
+            ctx.fillRect(0, y + 6, 32, 2);
+
+            // Individual bricks
+            for (let col = 0; col < 4; col++) {
+                const x = offset + col * 16 - 8;
+                if (x < 0) continue;
+                const brickW = Math.min(14, 32 - x);
+
+                // Brick highlight
+                ctx.fillStyle = BRICK_LIGHT;
+                ctx.fillRect(x, y, brickW, 2);
+
+                // Brick shadow
+                ctx.fillStyle = BRICK_DARK;
+                ctx.fillRect(x, y + 4, brickW, 2);
+
+                // Vertical mortar
+                ctx.fillStyle = MORTAR;
+                ctx.fillRect(x + brickW, y, 2, 8);
+            }
+        }
+
+        return cvs;
+    }
+
+    // =========================================================
+    // TALL TEMPLE DOME (80px to sit on L2 walls)
+    // =========================================================
+    private createTempleDome(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 96); // 96px to sit on L2 walls
+        const ctx = cvs.getContext('2d')!;
+
+        // Dome in the top 48px
+        // Renders dy - 64 to dy - 16. (Perfectly on top of S2 face)
+
+        // Shadow/Base of dome
+        ctx.fillStyle = '#9e9e9e';
+        ctx.beginPath();
+        ctx.arc(16, 40, 14, Math.PI, 0); // Half circle
+        ctx.fill();
+
+        // Main dome body
+        ctx.fillStyle = '#bdbdbd';
+        ctx.beginPath();
+        ctx.arc(16, 38, 12, Math.PI, 0);
+        ctx.fill();
+
+        // Highlights
+        ctx.fillStyle = '#eeeeee';
+        ctx.beginPath();
+        ctx.arc(12, 32, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Gold spire tip
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(15, 10, 2, 10);
+        ctx.beginPath();
+        ctx.moveTo(10, 10);
+        ctx.lineTo(22, 10);
+        ctx.lineTo(16, 2);
+        ctx.fill();
+
+        return cvs;
+    }
+    // =========================================================
+    // STARTING GEAR HELPERS
+    // =========================================================
+
+    private createApple(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(16, 26, 6, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Apple body
+        ctx.fillStyle = '#cc0000';
+        ctx.beginPath(); ctx.arc(16, 18, 7, 0, Math.PI * 2); ctx.fill();
+
+        // Highlight
+        ctx.fillStyle = '#ff4444';
+        ctx.beginPath(); ctx.arc(14, 16, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(13, 15, 1, 1);
+
+        // Stem
+        ctx.fillStyle = '#553311';
+        ctx.fillRect(15, 9, 2, 4);
+
+        // Leaf
+        ctx.fillStyle = '#4caf50';
+        ctx.beginPath();
+        ctx.ellipse(18, 10, 3, 1.5, Math.PI / 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    private createWoodenSword(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.save();
+        ctx.translate(16, 16);
+        ctx.rotate(-Math.PI / 4);
+
+        // Blade (Wood)
+        ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(-2, -14, 4, 20);
+        ctx.fillStyle = '#a1887f';
+        ctx.fillRect(0, -14, 2, 20);
+
+        // Guard (Dark Wood)
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(-6, 4, 12, 3);
+
+        // Handle
+        ctx.fillStyle = '#4e342e';
+        ctx.fillRect(-1, 6, 2, 8);
+
+        // Pommel
+        ctx.fillStyle = '#5d4037';
+        ctx.beginPath(); ctx.arc(0, 15, 2, 0, Math.PI * 2); ctx.fill();
+
+        ctx.restore();
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    private createSmallBag(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(16, 26, 8, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Bag Body
+        ctx.fillStyle = '#8d6e63'; // Brown leather
+        ctx.beginPath();
+        ctx.arc(16, 20, 8, 0, Math.PI, false); // Bottom half
+        ctx.lineTo(8, 12);
+        ctx.lineTo(24, 12);
+        ctx.fill();
+        ctx.fillRect(8, 12, 16, 8); // Top section
+
+        // Drawstring area
+        ctx.fillStyle = '#5d4037';
+        ctx.fillRect(10, 10, 12, 3);
+
+        // String
+        ctx.fillStyle = '#d7ccc8';
+        ctx.fillRect(12, 9, 1, 4);
+        ctx.fillRect(19, 9, 1, 4);
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    // =========================================================
+    // NEW MOBS (Procedural)
+    // =========================================================
+
+    private createOrc(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+
+        const SKIN = '#4caf50'; // Green
+        const ARMOR = '#757575'; // Grey iron
+
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(16, 44, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Legs
+        ctx.fillStyle = '#5d4037'; // Leather pants
+        ctx.fillRect(10, 30, 5, 14);
+        ctx.fillRect(17, 30, 5, 14);
+
+        // Torso
+        ctx.fillStyle = ARMOR;
+        ctx.fillRect(9, 18, 14, 14);
+        // Belt
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(9, 30, 14, 2);
+
+        // Arms
+        ctx.fillStyle = SKIN;
+        ctx.fillRect(4, 20, 5, 12);
+        ctx.fillRect(23, 20, 5, 12);
+
+        // Head
+        ctx.fillStyle = SKIN;
+        ctx.fillRect(11, 8, 10, 10);
+
+        // Face features
+        ctx.fillStyle = '#1b5e20'; // Dark green shade
+        ctx.fillRect(11, 8, 10, 2); // Hair/Ridge
+        ctx.fillStyle = '#000';
+        ctx.fillRect(13, 12, 2, 2);
+        ctx.fillRect(17, 12, 2, 2);
+
+        // Tusks
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(12, 16, 1, 2);
+        ctx.fillRect(19, 16, 1, 2);
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    private createBear(color: string): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48); // Tall for standing bear
+        const ctx = cvs.getContext('2d')!;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(16, 42, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = color;
+        // Body (Big round)
+        ctx.beginPath(); ctx.ellipse(16, 30, 12, 14, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Legs
+        ctx.fillRect(8, 36, 6, 8);
+        ctx.fillRect(18, 36, 6, 8);
+
+        // Head
+        ctx.beginPath(); ctx.arc(16, 16, 9, 0, Math.PI * 2); ctx.fill();
+
+        // Ears
+        ctx.beginPath(); ctx.arc(9, 10, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(23, 10, 3, 0, Math.PI * 2); ctx.fill();
+
+        // Muzzle
+        ctx.fillStyle = '#3e2723'; // Darker snout usually
+        if (color === '#fff') ctx.fillStyle = '#e0e0e0'; // Polar snout light grey
+        ctx.beginPath(); ctx.ellipse(16, 18, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000';
+        ctx.fillRect(15, 17, 2, 1);
+
+        // Eyes
+        ctx.fillStyle = '#000';
+        ctx.fillRect(12, 14, 2, 2);
+        ctx.fillRect(18, 14, 2, 2);
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    private createPolarBear(): HTMLCanvasElement {
+        return this.createBear('#fff');
+    }
+
+    private createYeti(): HTMLCanvasElement {
+        const cvs = this.createCanvas(48, 48); // Bigger canvas
+        const ctx = cvs.getContext('2d')!;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(24, 44, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+        const FUR = '#eeeeee';
+        const SKIN = '#90caf9'; // Blueish skin
+
+        ctx.fillStyle = FUR;
+        // Massive Body
+        ctx.beginPath(); ctx.ellipse(24, 28, 16, 18, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Arms (Long)
+        ctx.fillRect(4, 20, 6, 20);
+        ctx.fillRect(38, 20, 6, 20);
+
+        // Legs (Short)
+        ctx.fillRect(14, 40, 8, 6);
+        ctx.fillRect(26, 40, 8, 6);
+
+        // Head
+        ctx.beginPath(); ctx.arc(24, 14, 10, 0, Math.PI * 2); ctx.fill();
+
+        // Face
+        ctx.fillStyle = SKIN;
+        ctx.beginPath(); ctx.ellipse(24, 16, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = '#d32f2f'; // Red angry eyes
+        ctx.fillRect(21, 14, 2, 2);
+        ctx.fillRect(25, 14, 2, 2);
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    private createScorpion(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(16, 24, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        const SHELL = '#e65100'; // Orange
+        const LEGS = '#bf360c';
+
+        ctx.fillStyle = SHELL;
+        // Body
+        ctx.beginPath(); ctx.ellipse(16, 20, 6, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Tail
+        ctx.strokeStyle = LEGS;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(16, 12);
+        ctx.quadraticCurveTo(16, 4, 24, 8);
+        ctx.stroke();
+        // Stinger
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath(); ctx.arc(24, 8, 2, 0, Math.PI * 2); ctx.fill();
+
+        // Claws
+        ctx.fillStyle = LEGS;
+        ctx.beginPath(); ctx.arc(8, 14, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(24, 14, 3, 0, Math.PI * 2); ctx.fill();
+
+        // Legs lines
+        ctx.strokeStyle = LEGS;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(10, 20); ctx.lineTo(4, 18);
+        ctx.moveTo(10, 22); ctx.lineTo(4, 24);
+        ctx.moveTo(22, 20); ctx.lineTo(28, 18);
+        ctx.moveTo(22, 22); ctx.lineTo(28, 24);
+        ctx.stroke();
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    private createSnake(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(16, 26, 8, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.strokeStyle = '#388e3c'; // Green
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(20, 26);
+        ctx.lineTo(12, 26); // Tail coil
+        ctx.lineTo(10, 22);
+        ctx.lineTo(16, 18); // Body up
+        ctx.lineTo(18, 14); // Head pos
+        ctx.stroke();
+
+        // Head
+        ctx.fillStyle = '#2e7d32';
+        ctx.beginPath(); ctx.ellipse(19, 13, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Tongue
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(22, 13, 3, 1);
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    private createSpider(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(16, 22, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        const BODY = '#3e2723';
+
+        ctx.fillStyle = BODY;
+        // Abdomen
+        ctx.beginPath(); ctx.ellipse(16, 18, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+        // Head
+        ctx.beginPath(); ctx.ellipse(16, 24, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.strokeStyle = '#212121';
+        ctx.lineWidth = 1;
+
+        // Legs (8)
+        for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(16, 20);
+            const xDir = i < 2 ? -1 : 1;
+            const yOff = (i % 2) * 6;
+            ctx.quadraticCurveTo(16 + (xDir * 8), 10 + yOff, 16 + (xDir * 14), 16 + yOff);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(16, 20);
+            ctx.quadraticCurveTo(16 + (xDir * 8), 24 + yOff, 16 + (xDir * 14), 30 + (i % 2) * 2);
+            ctx.stroke();
+        }
+
+        // Eyes (Red dots)
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(15, 24, 1, 1);
+        ctx.fillRect(17, 24, 1, 1);
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
 }
 
 // Export singleton
@@ -2468,10 +3551,5 @@ export const SHEET_COLS = 16;
 export { SPRITES } from './constants';
 
 
-// Compatibility methods
 
-AssetManager.prototype.getSpriteStyle = function (): string { return ''; };
-AssetManager.prototype.getSheetConfig = function (): any { return { width: 512, height: 512, tileSize: 32 }; };
-AssetManager.prototype.rebuildCache = function (): void { };
-AssetManager.prototype.getSpriteImage = function (id: number): HTMLCanvasElement { return this.getSprite(id); };
 

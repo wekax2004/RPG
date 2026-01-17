@@ -35,10 +35,7 @@ export class PixelRenderer {
         return this.scale;
     }
 
-    // RENDERABLE SORTING STRUCTURE
-    // We collect all items, entities, and player into this list
-    // then sort by Y coordinate before drawing.
-    private renderList: Array<{ y: number, draw: () => void }> = [];
+
 
     draw(map: WorldMap, player: Player, visibleEntities: any[] = [], world: any = null) {
         const screenWidth = this.canvas.width;
@@ -46,6 +43,15 @@ export class PixelRenderer {
         // TIBIA GREEN BACKGROUND: Masks gaps in "jagged" grass tiles
         this.ctx.fillStyle = '#426829'; // Tibia Grass Green
         this.ctx.fillRect(0, 0, screenWidth, screenHeight);
+
+        // DEBUG: Log map state once
+        if (!this.hasLogged) {
+            console.log('[Renderer] Map Dimensions:', map?.width, 'x', map?.height);
+            console.log('[Renderer] Tiles Array Length:', map?.tiles?.length);
+            console.log('[Renderer] Sample Tile [0]:', map?.tiles?.[0]);
+            console.log('[Renderer] Sample Tile [0].items:', map?.tiles?.[0]?.items);
+            this.hasLogged = true;
+        }
 
         // PIXEL ART MODE: Disable Smoothing (Fixes "Blurry" sprites)
         this.ctx.imageSmoothingEnabled = false;
@@ -124,13 +130,18 @@ export class PixelRenderer {
                 draw: () => {
                     const tint = ent.tint;
                     const sprite = assetManager.getSpriteSource(ent.spriteIndex);
+
                     if (sprite && sprite.image) {
-                        // 2.5D Projection using sprite source
-                        const ratio = sprite.sh / sprite.sw;
-                        const dstW = TILE_SIZE;
-                        const dstH = Math.round(TILE_SIZE * ratio);
+                        const dstW = sprite.sw;
+                        const dstH = sprite.sh;
+
+                        // Horizontal Offset (Center over 32px tile)
+                        const horizontalOffset = Math.floor((dstW - TILE_SIZE) / 2);
+                        const renderX = baseX - horizontalOffset;
+
+                        // Vertical Offset (Bottom align to 32px tile)
                         const verticalOffset = dstH - TILE_SIZE;
-                        const drawY = baseY - verticalOffset;
+                        const renderY = baseY - verticalOffset;
 
                         let renderSource: CanvasImageSource = sprite.image;
                         let sx = sprite.sx;
@@ -158,7 +169,7 @@ export class PixelRenderer {
                         this.ctx.drawImage(
                             renderSource,
                             sx, sy, sw, sh,
-                            baseX, drawY,
+                            renderX, renderY,
                             dstW, dstH
                         );
 
@@ -171,16 +182,20 @@ export class PixelRenderer {
                                 if (itemSpriteId) {
                                     const iSprite = assetManager.getSpriteSource(itemSpriteId);
                                     if (iSprite && iSprite.image) {
-                                        const iDstW = TILE_SIZE;
-                                        const iDstH = Math.round(TILE_SIZE * (iSprite.sh / iSprite.sw));
+                                        const iDstW = iSprite.sw;
+                                        const iDstH = iSprite.sh;
+
+                                        // Center horizontally
+                                        const iHorizontalOffset = Math.floor((iDstW - TILE_SIZE) / 2);
+                                        const iRenderX = baseX - iHorizontalOffset;
 
                                         // Align Bottoms to match 2.5D Entity
-                                        const iDrawY = (drawY + dstH) - iDstH;
+                                        const iRenderY = (renderY + dstH) - iDstH;
 
                                         this.ctx.drawImage(
                                             iSprite.image,
                                             iSprite.sx, iSprite.sy, iSprite.sw, iSprite.sh,
-                                            baseX, iDrawY,
+                                            iRenderX, iRenderY,
                                             iDstW, iDstH
                                         );
                                     }
@@ -193,7 +208,7 @@ export class PixelRenderer {
                             this.ctx.font = '10px monospace';
                             this.ctx.textAlign = 'center';
                             const cx = baseX + 16;
-                            const cy = drawY - 12;
+                            const cy = renderY - 12;
 
                             // Name
                             this.ctx.fillStyle = '#000';
@@ -220,6 +235,30 @@ export class PixelRenderer {
                                 this.ctx.fillRect(bx + 1, by + 1, (barW - 2) * pct, barH - 2);
                             }
                         }
+
+                        // --- TARGET INDICATOR (Pulsing Red Box) ---
+                        // if ((ent as any).isTarget) {
+                        //     const pulse = (Math.sin(Date.now() / 200) * 2) + 2; // Pulsing padding 0-4px
+
+                        //     this.ctx.strokeStyle = '#ff0000';
+                        //     this.ctx.lineWidth = 2;
+
+                        //     // Draw Pulsing Rect around the entity
+                        //     // this.ctx.strokeRect(
+                        //     //     renderX - pulse,
+                        //     //     renderY - pulse,
+                        //     //     dstW + (pulse * 2),
+                        //     //     dstH + (pulse * 2)
+                        //     // );
+
+                        //     // Also a pulsing small triangle marker above head
+                        //     // this.ctx.fillStyle = '#ff0000';
+                        //     // this.ctx.beginPath();
+                        //     // this.ctx.moveTo(baseX + 16, renderY - 6 - pulse);
+                        //     // this.ctx.lineTo(baseX + 10, renderY - 14 - pulse);
+                        //     // this.ctx.lineTo(baseX + 22, renderY - 14 - pulse);
+                        //     // this.ctx.fill();
+                        // }
                     } else {
                         // DEBUG: Log first few failures
                         if (Math.random() < 0.01) console.warn(`[Renderer] Missing Sprite Image for Entity ID ${ent.spriteIndex}. Obj:`, sprite);
@@ -227,19 +266,6 @@ export class PixelRenderer {
                         this.ctx.fillRect(baseX, baseY, 32, 32);
                     }
 
-                    // --- TARGET INDICATOR ---
-                    if ((ent as any).isTarget) {
-                        this.ctx.strokeStyle = '#ff0000';
-                        this.ctx.lineWidth = 1;
-                        this.ctx.strokeRect(baseX - 1, drawY, 32 + 2, Math.round(TILE_SIZE * (sprite ? sprite.sh / sprite.sw : 1)));
-                        // Also a small marker above head?
-                        this.ctx.fillStyle = '#ff0000';
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(baseX + 16, drawY - 4);
-                        this.ctx.lineTo(baseX + 12, drawY - 10);
-                        this.ctx.lineTo(baseX + 20, drawY - 10);
-                        this.ctx.fill();
-                    }
                 },
                 debugId: "ENTITY"
             });
@@ -288,32 +314,21 @@ export class PixelRenderer {
         const sprite = assetManager.getSpriteSource(id);
 
         if (sprite) {
-            // 2.5D PROJECTION FIX:
-            // For 32x64 sprites (walls), we must:
-            // 1. Use the ACTUAL sprite height (not force 32x32)
-            // 2. Apply vertical offset so sprite "stands" on the tile
+            const dstW = sprite.sw;
+            const dstH = sprite.sh;
 
-            // Calculate destination size from source sprite
-            // For procedural 32x64 walls: sw=32, sh=64
-            // We want dstW=32, dstH=64 (1:1 pixel ratio for our procedural sprites)
-            const dstW = TILE_SIZE; // Always 32px wide
+            // Horizontal Centering over the 32px tile base
+            const horizontalOffset = Math.floor((dstW - TILE_SIZE) / 2);
+            const renderX = drawX - horizontalOffset;
 
-            // Calculate height: Use sprite aspect ratio
-            // For 32x64 source: ratio = 64/32 = 2.0, so dstH = 32 * 2 = 64
-            const ratio = sprite.sh / sprite.sw;
-            const dstH = Math.round(TILE_SIZE * ratio);
-
-            // THE VERTICAL OFFSET (The Key to 2.5D):
-            // Formula: drawY = baseY - (spriteHeight - 32)
-            // This makes tall sprites "stand" on the tile, projecting upward
+            // Vertical Offset (Bottom Aligned to 32px tile base)
             const verticalOffset = dstH - TILE_SIZE;
-            const drawY = baseY - verticalOffset;
-
+            const renderY = baseY - verticalOffset;
 
             this.ctx.drawImage(
                 sprite.image,
                 sprite.sx, sprite.sy, sprite.sw, sprite.sh,
-                drawX, drawY,
+                renderX, renderY,
                 dstW, dstH
             );
         } else {
@@ -328,35 +343,43 @@ export class PixelRenderer {
     public renderPlayer(ctx: CanvasRenderingContext2D, player: Player, screenX: number, screenY: number) {
         ctx.globalAlpha = 1.0; // Reset Alpha
 
-        // Force Override Checking
-        if (player.spriteId !== 199) {
-            console.warn(`[Renderer] Player Sprite ID was ${player.spriteId}, FORCING 199`);
-            player.spriteId = 199;
-        }
-
         // Get player sprite using unified system
         const sprite = assetManager.getSpriteSource(player.spriteId);
 
         if (!sprite || !sprite.image) return;
 
         // 2.5D PROJECTION FIX for Player:
-        // Player sprites are 32x64, same as walls
-        const TILE_SIZE = 32;
-        const ratio = sprite.sh / sprite.sw;  // For 32x64: ratio = 2.0
-        const dstW = TILE_SIZE;  // Always 32px wide
-        const dstH = Math.round(TILE_SIZE * ratio);  // 64px for tall player
+        const dstW = sprite.sw;
+        const dstH = sprite.sh;
 
-        // Vertical Offset: Player "stands" on the tile, head projects up
-        // Formula: drawY = screenY - (dstH - TILE_SIZE)
+        // Centering & Vertical Projecting
+        const horizontalOffset = Math.floor((dstW - TILE_SIZE) / 2);
         const verticalOffset = dstH - TILE_SIZE;
-        const drawY = screenY - verticalOffset;
 
-        ctx.drawImage(
-            sprite.image,
-            sprite.sx, sprite.sy, sprite.sw, sprite.sh,
-            screenX, drawY,
-            dstW, dstH
-        );
+        const renderX = screenX - horizontalOffset;
+        const renderY = screenY - verticalOffset;
+
+        ctx.save();
+
+        // Handle Horizontal Flip
+        if ((player as any).flipX) {
+            ctx.scale(-1, 1);
+            ctx.drawImage(
+                sprite.image,
+                sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+                -renderX - dstW, renderY,
+                dstW, dstH
+            );
+        } else {
+            ctx.drawImage(
+                sprite.image,
+                sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+                renderX, renderY,
+                dstW, dstH
+            );
+        }
+
+        ctx.restore();
     }
     private hasLoggedPlayer = false;
 
@@ -374,17 +397,19 @@ export class PixelRenderer {
             const sprite = assetManager.getSpriteSource(ent.spriteIndex);
 
             if (sprite && sprite.image) {
-                // 2.5D Projection for entities
-                const ratio = sprite.sh / sprite.sw;
-                const dstW = TILE_SIZE;
-                const dstH = Math.round(TILE_SIZE * ratio);
+                const dstW = sprite.sw;
+                const dstH = sprite.sh;
+
+                const horizontalOffset = Math.floor((dstW - TILE_SIZE) / 2);
                 const verticalOffset = dstH - TILE_SIZE;
-                const drawY = baseY - verticalOffset;
+
+                const renderX = baseX - horizontalOffset;
+                const renderY = baseY - verticalOffset;
 
                 this.ctx.drawImage(
                     sprite.image,
                     sprite.sx, sprite.sy, sprite.sw, sprite.sh,
-                    baseX, drawY,
+                    renderX, renderY,
                     dstW, dstH
                 );
             } else {
@@ -422,5 +447,9 @@ export class PixelRenderer {
             }
         }
         return null;
+    }
+
+    public getBufferContext(): CanvasRenderingContext2D {
+        return this.ctx;
     }
 }

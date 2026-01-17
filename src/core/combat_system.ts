@@ -1,10 +1,11 @@
 
 import {
-    Position, Player, Health, Stats, CombatState, Target, Sprite, Name, Experience, Skills, Lootable, Tint, Corpse
+    Position, Player, Health, Stats, CombatState, Target, Sprite, Name, Experience, Skills, Lootable, Tint, Corpse, Interactable, CorpseDefinition
 } from '../components';
 import { Item } from './types';
 import { SPRITES } from '../constants'; // Moved to top
 import { damageTextManager } from '../client/damage_text';
+import { gameEvents, EVENTS } from './events';
 
 export const combatSystem = (world: any) => {
     const now = performance.now();
@@ -69,6 +70,12 @@ export const combatSystem = (world: any) => {
                 damageTextManager.addText(pos.x, pos.y - 32, "Skill Up!", "#ffff00");
             }
 
+            // UI UPDATE: If attacker is player, update skill bars
+            const gameObj = (window as any).game;
+            if (gameObj && gameObj.player && attackerId === gameObj.player.id) {
+                gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+            }
+
             // 2. Damage Calculation
             let rawDmg = (skillLevel * weaponAtk * 0.05);
             // Variance
@@ -93,6 +100,11 @@ export const combatSystem = (world: any) => {
 
             // Apply Damage
             tHealth.current = Math.max(0, tHealth.current - damage);
+
+            // UI UPDATE: If target is player, update HP
+            if (gameObj && gameObj.player && targetId === gameObj.player.id) {
+                gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+            }
 
             // 5. Visual Feedback
             if (damage <= 0) {
@@ -125,22 +137,28 @@ function handleDeath(world: any, victimId: number) {
         const corpseId = world.createEntity();
         world.addComponent(corpseId, new Position(pos.x, pos.y));
 
-        // Corpse Sprite
-        // Use SPRITES.CORPSE for now (Generic Skeleton/Bones)
-        // In Phase 3 Polish, we map MobType -> CorpseType (e.g. Orc -> Orc Corpse)
-        // For now, SPRITES.CORPSE (299)
+        // Corpse Sprite Logic
+        let corpseSpriteId = SPRITES.CORPSE || 299;
 
-        const cSprite = new Sprite(SPRITES.CORPSE || 299, 32); // Use Constant
-        cSprite.tint = new Tint('#aaaaaa'); // Grey tint
+        // Use CorpseDefinition if available
+        const corpseDef = world.getComponent(victimId, CorpseDefinition);
+        if (corpseDef && corpseDef.spriteId) {
+            corpseSpriteId = corpseDef.spriteId;
+        }
+
+        const cSprite = new Sprite(corpseSpriteId, 32);
+        cSprite.tint = new Tint('#ffffffff'); // No tint (white)
         world.addComponent(corpseId, cSprite);
 
         // Add Lootable Component
         const lootItems: Item[] = [];
         if (loot && loot.items) {
             for (const item of loot.items) {
-                if (Math.random() < 0.5) { // 50% drop base chance
+                // DROP RATE BOOST: 100% chance (User complained "no loot")
+                // Was 50%.
+                if (Math.random() < 1.0) {
                     lootItems.push(item);
-                    console.log(`[Loot] ${name?.value || 'Entity'} dropped ${item.name} into corpse.`);
+                    console.log(`[Loot] Dropped ${item.name}`);
                 }
             }
         }
@@ -148,6 +166,9 @@ function handleDeath(world: any, victimId: number) {
 
         // Decay (5 mins)
         world.addComponent(corpseId, new Corpse(300));
+
+        // Fix: Add Interactable so we can click it!
+        world.addComponent(corpseId, new Interactable("Loot Corpse"));
 
     }
 
