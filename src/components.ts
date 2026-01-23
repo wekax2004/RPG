@@ -3,7 +3,7 @@ export { NPC } from './components/npc';
 
 
 export class Position {
-    constructor(public x: number, public y: number) { }
+    constructor(public x: number, public y: number, public z: number = 7) { }
 }
 
 export class Destination {
@@ -62,8 +62,11 @@ export class Tile {
     }
 }
 
+import { WorldMap3D, GROUND_FLOOR } from './core/world_map_3d';
+
 export class TileMap {
     public tiles: Tile[];
+    public map3D: WorldMap3D | null = null;
 
     constructor(
         public width: number,
@@ -73,7 +76,10 @@ export class TileMap {
         this.tiles = Array(width * height).fill(null).map(() => new Tile());
     }
 
-    getTile(x: number, y: number): Tile | null {
+    getTile(x: number, y: number, z: number = GROUND_FLOOR): Tile | null {
+        if (this.map3D) {
+            return this.map3D.getTile(x, y, z) as any;
+        }
         if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
             return null;
         }
@@ -102,8 +108,15 @@ export class AI {
     public cooldownTimer: number = 0;
     public currentState: AIState = AIState.IDLE;
     public wanderTimer: number = 0;        // Time until next wander direction
+    public lastWanderTime: number = 0;     // Timestamp of last movement
     public wanderTargetX: number = 0;      // Random wander destination X
     public wanderTargetY: number = 0;      // Random wander destination Y
+
+    // Path caching for A* pathfinding
+    public cachedPath: { x: number; y: number }[] = [];
+    public pathTargetX: number = 0;
+    public pathTargetY: number = 0;
+    public pathComputeTime: number = 0;
 
     constructor(
         public speed: number = 30,
@@ -186,12 +199,14 @@ export class Item {
         // slotType: Where it fits (head, body, etc)
         public slotType: string,
         public uIndex: number = 0,
-        public damage: number = 0,
+        public attack: number = 0, // Previously damage, merged
         public price: number = 10,
         public description: string = "",
         public weaponType: string = "none",
         public rarity: ItemRarity = 'common',
         public defense: number = 0,
+        public armor: number = 0, // Added armor
+        public speed: number = 0, // Added speed
         public bonusHp: number = 0,
         public bonusMana: number = 0,
         // If this item IS a container (e.g. Backpack), it might need unique ID or just be treated as a container type
@@ -202,7 +217,8 @@ export class Item {
         public glowRadius: number = 0,
         public frame: number = 0,
         public direction: 0 | 1 | 2 | 3 = 0, // 0=Down, 1=Up, 2=Left, 3=Right
-        public id: number = 0 // Registry ID moved to end for compatibility
+        public id: number = 0, // Registry ID moved to end for compatibility
+        public icon: string = "" // Added icon path
     ) { }
 }
 
@@ -245,6 +261,10 @@ export class Container {
             }
         }
         return false;
+    }
+
+    addItemInstance(instance: ItemInstance): boolean {
+        return this.addItem(instance);
     }
 }
 
@@ -323,13 +343,17 @@ export class Inventory {
 
     // Add item to backpack (or first empty slot logic later)
     addItem(item: Item, count: number = 1): boolean {
+        return this.addItemInstance(new ItemInstance(item, count));
+    }
+
+    addItemInstance(instance: ItemInstance): boolean {
         const bag = this.equipment.get('backpack');
         // If no backpack, fail or add to "storage" (deprecated)?
         // For Phase 3: Must have backpack.
         if (!bag) {
             // Check if we can equip it directly? (e.g. it IS a backpack)
-            if (item.name === 'Backpack') {
-                this.equip('backpack', new ItemInstance(item, count));
+            if (instance.item.name === 'Backpack') {
+                this.equip('backpack', instance);
                 return true;
             }
             return false; // No space
@@ -337,15 +361,15 @@ export class Inventory {
 
         // Add to bag contents
         // Check stackability
-        const stackMatch = bag.contents.find(i => i.item.name === item.name);
+        const stackMatch = bag.contents.find(i => i.item.name === instance.item.name);
         if (stackMatch) {
-            stackMatch.count += count;
+            stackMatch.count += instance.count;
             return true;
         }
 
         // Add new
         if (bag.contents.length < 20) {
-            bag.contents.push(new ItemInstance(item, count));
+            bag.contents.push(instance);
             return true;
         }
 
@@ -389,10 +413,11 @@ export interface Quest {
     id: string;
     name: string;
     description: string;
-    type: 'kill' | 'fetch';
-    target: string; // Enemy type name or item name
-    required: number;
+    type: 'KILL' | 'FETCH' | 'EXPLORE' | 'USE';
+    targetId: string; // Enemy Name, Item Name, or Zone ID
+    targetCount: number;
     current: number;
+    prereq?: string; // Quest ID or Item requirement
     reward: { gold: number; xp: number; items?: string[] };
     completed: boolean;
     turnedIn: boolean;
@@ -402,6 +427,8 @@ export class QuestLog {
     public quests: Quest[] = [];
     public completedQuestIds: string[] = [];
 }
+
+
 
 export class MainQuest {
     public fire: boolean = false;
@@ -423,7 +450,7 @@ export class Facing {
 
 export class Projectile {
     constructor(
-        public damage: number,
+        public attack: number,
         public life: number,
         public ownerType: string,
         public vx: number = 0,
@@ -529,7 +556,7 @@ export class NetworkItem {
 }
 
 export class Decay { constructor(public life: number) { } }
-export class Lootable { constructor(public items: Item[] = []) { } }
+export class Lootable { constructor(public items: ItemInstance[] = []) { } }
 export class CorpseDefinition { constructor(public spriteId: number) { } }
 
 export class Consumable {
@@ -613,7 +640,8 @@ export class FreezeEffect {
 export class DungeonEntrance {
     constructor(
         public dungeonType: string,
-        public label: string = "Enter Dungeon"
+        public label: string = "Enter Dungeon",
+        public destination: { x: number, y: number } | null = null
     ) { }
 }
 
@@ -644,7 +672,8 @@ export class Stats {
         public attack: number = 10,
         public defense: number = 0,
         public attackSpeed: number = 1.0, // Attacks per second
-        public range: number = 48         // Attack Range (px)
+        public range: number = 48,        // Attack Range (px)
+        public capacity: number = 400     // Added capacity
     ) { }
 }
 

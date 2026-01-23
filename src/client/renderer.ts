@@ -2,8 +2,8 @@ import { WorldMap } from '../core/map';
 import { TILE_SIZE } from '../core/types';
 import { Player } from '../core/player';
 import { assetManager } from '../assets';
-import { damageTextManager } from './damage_text';
-import { Tint } from '../components';
+import { renderEffects } from '../effects';
+import { Tint, Target, Position, Health } from '../components';
 
 // Define RenderItem type based on its usage in the original code
 type RenderItem = { y: number, draw: () => void, debugId?: string };
@@ -50,6 +50,9 @@ export class PixelRenderer {
             console.log('[Renderer] Tiles Array Length:', map?.tiles?.length);
             console.log('[Renderer] Sample Tile [0]:', map?.tiles?.[0]);
             console.log('[Renderer] Sample Tile [0].items:', map?.tiles?.[0]?.items);
+            console.log('[Renderer] map3D available:', !!(map as any).map3D);
+            console.log('[Renderer] map.getTile exists:', typeof (map as any).getTile);
+            console.log('[Renderer] player.z:', player?.z);
             this.hasLogged = true;
         }
 
@@ -66,6 +69,9 @@ export class PixelRenderer {
         const startRow = Math.max(0, Math.floor(camY / TILE_SIZE));
         const endRow = Math.min(map.height, Math.ceil((camY + screenHeight) / TILE_SIZE) + 1);
 
+        // Get player Z for 3D floor rendering
+        const playerZ = player.z !== undefined ? player.z : 7;
+
         // STEP 1: Draw Floor (Always Bottom)
         // STEP 1: Draw Floor (Always Bottom)
         // Check sprite existence and size to decide if we skip (Tall objects draw later)
@@ -73,8 +79,8 @@ export class PixelRenderer {
         for (let r = startRow; r < endRow; r++) {
             for (let c = startCol; c < endCol; c++) {
                 if (c >= 0 && c < map.width && r >= 0 && r < map.height) {
-                    const idx = r * map.width + c;
-                    const tile = map.tiles[idx];
+                    // Use getTile for 3D support
+                    const tile = (map as any).map3D ? (map as any).map3D.getTile(c, r, playerZ) : (map.getTile ? map.getTile(c, r) : map.tiles[r * map.width + c]);
                     if (tile && tile.items.length > 0) {
                         const itemId = tile.items[0].id;
                         // Check Height
@@ -97,8 +103,8 @@ export class PixelRenderer {
         for (let r = startRow; r < endRow; r++) {
             for (let c = startCol; c < endCol; c++) {
                 if (c >= 0 && c < map.width && r >= 0 && r < map.height) {
-                    const idx = r * map.width + c;
-                    const tile = map.tiles[idx];
+                    // Use getTile for 3D support
+                    const tile = (map as any).map3D ? (map as any).map3D.getTile(c, r, playerZ) : (map.getTile ? map.getTile(c, r) : map.tiles[r * map.width + c]);
                     if (tile && tile.items.length > 0) {
                         // Check ALL items
                         for (let i = 0; i < tile.items.length; i++) {
@@ -122,6 +128,9 @@ export class PixelRenderer {
 
         // B. Entities (Mobs)
         visibleEntities.forEach(ent => {
+            // Filter by Floor (Simple Z Check)
+            if (ent.z !== undefined && ent.z !== playerZ) return;
+
             const baseX = Math.round(ent.x - camX);
             const baseY = Math.round(ent.y - camY);
             // Sort Key: Entity Y + Height (approx 32)
@@ -132,8 +141,13 @@ export class PixelRenderer {
                     const sprite = assetManager.getSpriteSource(ent.spriteIndex);
 
                     if (sprite && sprite.image) {
-                        const dstW = sprite.sw;
-                        const dstH = sprite.sh;
+                        // SCALING FIX: Use Entity Size if available (default 32), else Source Size
+                        // This handles High-Res (512px) sprites by scaling them to World Size (32px)
+                        const targetSize = (ent as any).size || 32;
+                        const aspectRatio = sprite.sh / sprite.sw; // e.g. 1.0 or 2.0 (Tall)
+
+                        const dstW = targetSize;
+                        const dstH = targetSize * aspectRatio;
 
                         // Horizontal Offset (Center over 32px tile)
                         const horizontalOffset = Math.floor((dstW - TILE_SIZE) / 2);
@@ -142,6 +156,18 @@ export class PixelRenderer {
                         // Vertical Offset (Bottom align to 32px tile)
                         const verticalOffset = dstH - TILE_SIZE;
                         const renderY = baseY - verticalOffset;
+
+                        // === SHADOW ELLIPSE for Entities ===
+                        if (dstH > 32) {
+                            this.ctx.globalAlpha = 0.3;
+                            this.ctx.fillStyle = '#000000';
+                            this.ctx.beginPath();
+                            const shadowCenterX = baseX + 16;
+                            const shadowCenterY = baseY + 28;
+                            this.ctx.ellipse(shadowCenterX, shadowCenterY, 10, 4, 0, 0, Math.PI * 2);
+                            this.ctx.fill();
+                            this.ctx.globalAlpha = 1.0;
+                        }
 
                         let renderSource: CanvasImageSource = sprite.image;
                         let sx = sprite.sx;
@@ -237,28 +263,28 @@ export class PixelRenderer {
                         }
 
                         // --- TARGET INDICATOR (Pulsing Red Box) ---
-                        // if ((ent as any).isTarget) {
-                        //     const pulse = (Math.sin(Date.now() / 200) * 2) + 2; // Pulsing padding 0-4px
+                        if ((ent as any).isTarget) {
+                            const pulse = (Math.sin(Date.now() / 200) * 2) + 2; // Pulsing padding 0-4px
 
-                        //     this.ctx.strokeStyle = '#ff0000';
-                        //     this.ctx.lineWidth = 2;
+                            this.ctx.strokeStyle = '#ff0000';
+                            this.ctx.lineWidth = 2;
 
-                        //     // Draw Pulsing Rect around the entity
-                        //     // this.ctx.strokeRect(
-                        //     //     renderX - pulse,
-                        //     //     renderY - pulse,
-                        //     //     dstW + (pulse * 2),
-                        //     //     dstH + (pulse * 2)
-                        //     // );
+                            // Draw Pulsing Rect around the entity
+                            this.ctx.strokeRect(
+                                renderX - pulse,
+                                renderY - pulse,
+                                dstW + (pulse * 2),
+                                dstH + (pulse * 2)
+                            );
 
-                        //     // Also a pulsing small triangle marker above head
-                        //     // this.ctx.fillStyle = '#ff0000';
-                        //     // this.ctx.beginPath();
-                        //     // this.ctx.moveTo(baseX + 16, renderY - 6 - pulse);
-                        //     // this.ctx.lineTo(baseX + 10, renderY - 14 - pulse);
-                        //     // this.ctx.lineTo(baseX + 22, renderY - 14 - pulse);
-                        //     // this.ctx.fill();
-                        // }
+                            // Also a pulsing small triangle marker above head
+                            this.ctx.fillStyle = '#ff0000';
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(baseX + 16, renderY - 6 - pulse);
+                            this.ctx.lineTo(baseX + 10, renderY - 14 - pulse);
+                            this.ctx.lineTo(baseX + 22, renderY - 14 - pulse);
+                            this.ctx.fill();
+                        }
                     } else {
                         // DEBUG: Log first few failures
                         if (Math.random() < 0.01) console.warn(`[Renderer] Missing Sprite Image for Entity ID ${ent.spriteIndex}. Obj:`, sprite);
@@ -294,8 +320,32 @@ export class PixelRenderer {
 
         this.renderList.forEach(item => item.draw());
 
-        // STEP 4: Render Floating Text (Always Top)
-        damageTextManager.render(this.ctx, camX, camY);
+        // STEP 4: Render World Effects (Blood & Floating Text)
+        renderEffects(this.ctx, camX, camY, playerZ);
+
+        // STEP 5: Target Highlight (Red Box)
+        if (player.targetId !== null) {
+            const targetPos = world.getComponent(player.targetId, Position);
+            const targetHealth = world.getComponent(player.targetId, Health);
+            if (targetPos) {
+                const tx = Math.floor(targetPos.x - camX);
+                const ty = Math.floor(targetPos.y - camY);
+
+                this.ctx.strokeStyle = '#ff0000';
+                this.ctx.lineWidth = 2;
+                // Pulse effect
+                const pulse = (Math.sin(Date.now() / 150) * 2) + 2;
+                this.ctx.strokeRect(tx - pulse, ty - pulse, 32 + pulse * 2, 32 + pulse * 2);
+
+                // Small red triangle above head
+                this.ctx.fillStyle = '#ff0000';
+                this.ctx.beginPath();
+                this.ctx.moveTo(tx + 16, ty - 8 - pulse);
+                this.ctx.lineTo(tx + 10, ty - 16 - pulse);
+                this.ctx.lineTo(tx + 22, ty - 16 - pulse);
+                this.ctx.fill();
+            }
+        }
     }
 
     // Deprecated renderLayer (Kept empty or removed, replaced by loop above)
@@ -311,7 +361,22 @@ export class PixelRenderer {
         const drawX = Math.round(tx * TILE_SIZE - camX);
         const baseY = Math.round(ty * TILE_SIZE - camY);
 
-        const sprite = assetManager.getSpriteSource(id);
+        // === GRASS VARIATION ===
+        // Use pseudo-random based on tile coordinates to break up grid pattern
+        // This creates stable "random" variations that don't flicker
+        let spriteId = id;
+        const GRASS_ID = 1;  // SPRITES.GRASS
+        const GRASS_VARIANT_COUNT = 3;
+
+        if (id === GRASS_ID) {
+            // Pseudo-random variant based on position (stable, no flicker)
+            const variant = Math.abs((tx * 7 + ty * 13)) % GRASS_VARIANT_COUNT;
+            // Variant 0 = base grass (no offset)
+            // For now, we apply color tinting variation instead of multiple textures
+            // This creates visual variety without needing multiple grass sprites
+        }
+
+        const sprite = assetManager.getSpriteSource(spriteId);
 
         if (sprite) {
             const dstW = sprite.sw;
@@ -325,12 +390,43 @@ export class PixelRenderer {
             const verticalOffset = dstH - TILE_SIZE;
             const renderY = baseY - verticalOffset;
 
+            // === SHADOW ELLIPSE for Tall Objects ===
+            // Creates Tibia-style 3D depth illusion
+            if (dstH > 32) {
+                this.ctx.globalAlpha = 0.3;
+                this.ctx.fillStyle = '#000000';
+                this.ctx.beginPath();
+                // Shadow at feet position (bottom of sprite)
+                const shadowCenterX = drawX + 16;
+                const shadowCenterY = baseY + 28; // Slightly below tile center
+                const shadowRadiusX = Math.min(14, dstW / 2);
+                const shadowRadiusY = 5;
+                this.ctx.ellipse(shadowCenterX, shadowCenterY, shadowRadiusX, shadowRadiusY, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.globalAlpha = 1.0;
+            }
+
+            // === GRASS BRIGHTNESS VARIATION ===
+            // Apply subtle brightness variation to grass tiles
+            if (id === GRASS_ID) {
+                const variant = Math.abs((tx * 7 + ty * 13)) % 3;
+                // 0 = normal, 1 = slightly darker, 2 = slightly brighter
+                if (variant === 1) {
+                    this.ctx.filter = 'brightness(0.92)';
+                } else if (variant === 2) {
+                    this.ctx.filter = 'brightness(1.08)';
+                }
+            }
+
             this.ctx.drawImage(
                 sprite.image,
                 sprite.sx, sprite.sy, sprite.sw, sprite.sh,
                 renderX, renderY,
                 dstW, dstH
             );
+
+            // Reset filter
+            this.ctx.filter = 'none';
         } else {
             // Fallback Debug Box
             if (id !== 0) {
@@ -348,6 +444,19 @@ export class PixelRenderer {
 
         if (!sprite || !sprite.image) return;
 
+        // === WALKING ANIMATION ===
+        // Calculate animation frame based on time and walking state
+        let frameIndex = 0;
+        const FRAME_WIDTH = sprite.sw; // Each frame width (32px typical)
+
+        if (player.isMoving) {
+            // Walking cycle: 0 -> 1 -> 0 -> 2 (idle, left leg, idle, right leg)
+            const WALK_CYCLE = [0, 1, 0, 2];
+            const FRAME_DURATION = 200; // ms per frame change
+            const cycleIndex = Math.floor(Date.now() / FRAME_DURATION) % 4;
+            frameIndex = WALK_CYCLE[cycleIndex];
+        }
+
         // 2.5D PROJECTION FIX for Player:
         const dstW = sprite.sw;
         const dstH = sprite.sh;
@@ -359,21 +468,35 @@ export class PixelRenderer {
         const renderX = screenX - horizontalOffset;
         const renderY = screenY - verticalOffset;
 
+        // === PLAYER SHADOW (Grounds character to world) ===
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        const shadowCenterX = screenX + 16;
+        const shadowCenterY = screenY + 28;
+        ctx.ellipse(shadowCenterX, shadowCenterY, 10, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+
         ctx.save();
+
+        // Source coordinates (for sprite sheet animation)
+        const srcX = sprite.sx + (frameIndex * FRAME_WIDTH);
+        const srcY = sprite.sy;
 
         // Handle Horizontal Flip
         if ((player as any).flipX) {
             ctx.scale(-1, 1);
             ctx.drawImage(
                 sprite.image,
-                sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+                srcX, srcY, sprite.sw, sprite.sh,
                 -renderX - dstW, renderY,
                 dstW, dstH
             );
         } else {
             ctx.drawImage(
                 sprite.image,
-                sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+                srcX, srcY, sprite.sw, sprite.sh,
                 renderX, renderY,
                 dstW, dstH
             );

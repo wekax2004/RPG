@@ -91,10 +91,31 @@ export class InputHandler {
     getDirection(): { x: number, y: number } {
         let dx = 0;
         let dy = 0;
+
+        // Standard movement (WASD / Arrow Keys)
         if (this.keys.has('ArrowUp') || this.keys.has('KeyW')) dy = -1;
         if (this.keys.has('ArrowDown') || this.keys.has('KeyS')) dy = 1;
         if (this.keys.has('ArrowLeft') || this.keys.has('KeyA')) dx = -1;
         if (this.keys.has('ArrowRight') || this.keys.has('KeyD')) dx = 1;
+
+        // Diagonal movement keys (Tibia numpad style)
+        // Q = Up-Left (NW), E = Up-Right (NE)
+        // Z = Down-Left (SW), C = Down-Right (SE)
+        if (this.keys.has('KeyQ')) { dx = -1; dy = -1; }
+        if (this.keys.has('KeyE')) { dx = 1; dy = -1; }
+        if (this.keys.has('KeyZ')) { dx = -1; dy = 1; }
+        if (this.keys.has('KeyC')) { dx = 1; dy = 1; }
+
+        // Numpad support (for full Tibia experience)
+        if (this.keys.has('Numpad7')) { dx = -1; dy = -1; }
+        if (this.keys.has('Numpad9')) { dx = 1; dy = -1; }
+        if (this.keys.has('Numpad1')) { dx = -1; dy = 1; }
+        if (this.keys.has('Numpad3')) { dx = 1; dy = 1; }
+        if (this.keys.has('Numpad8')) { dx = 0; dy = -1; }
+        if (this.keys.has('Numpad2')) { dx = 0; dy = 1; }
+        if (this.keys.has('Numpad4')) { dx = -1; dy = 0; }
+        if (this.keys.has('Numpad6')) { dx = 1; dy = 0; }
+
         return { x: dx, y: dy };
     }
 

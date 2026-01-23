@@ -1,6 +1,6 @@
 import { WorldMap } from './map';
 import { World } from '../engine';
-import { Position, Health, Mana, Experience, Inventory, Skills, Sprite, Target } from '../components';
+import { Position, Health, Mana, Experience, Inventory, Skills, Sprite, Target, Stats, ItemInstance } from '../components';
 import { SPRITES } from '../constants';
 import { PHYSICS } from '../physics';
 import { TILE_SIZE } from './types';
@@ -16,6 +16,20 @@ export class Player {
     constructor(public world: World, public id: number) { }
 
     // --- PROXIES TO ECS (Single Source of Truth) ---
+    get equipment(): Map<string, ItemInstance> {
+        const inv = this.world.getComponent(this.id, Inventory);
+        return inv ? inv.equipment : new Map();
+    }
+
+    get stats(): Stats {
+        let stats = this.world.getComponent(this.id, Stats);
+        if (!stats) {
+            stats = new Stats();
+            this.world.addComponent(this.id, stats);
+        }
+        return stats;
+    }
+
     get spriteId(): number {
         const spr = this.world.getComponent(this.id, Sprite);
         return (spr && spr.uIndex !== 0) ? spr.uIndex : SPRITES.PLAYER;
@@ -100,7 +114,20 @@ export class Player {
     get nextXp(): number { return this.world.getComponent(this.id, Experience)?.next || 100; }
 
     get gold(): number { return this.world.getComponent(this.id, Inventory)?.gold || 0; }
-    get capacity(): number { return this.world.getComponent(this.id, Inventory)?.cap || 400; }
+    get capacity(): number { return this.world.getComponent(this.id, Stats)?.capacity || 400; }
+
+    // Z-Level tracking (Floor)
+    get z(): number {
+        const pos = this.world.getComponent(this.id, Position);
+        return pos ? pos.z : 7;
+    }
+    set z(val: number) {
+        const pos = this.world.getComponent(this.id, Position);
+        if (pos) {
+            // Clamp between 0-15 (Tibia floor range)
+            pos.z = Math.max(0, Math.min(15, val));
+        }
+    }
 
     get isMoving(): boolean {
         return this.queuedDx !== 0 || this.queuedDy !== 0;
@@ -124,18 +151,58 @@ export class Player {
 
         const tile = map.getTile(targetX, targetY);
 
-        // 1. Check Bounds
+        // 1. Check Bounds (Don't walk off the map)
         if (!tile) return false;
 
-        // 2. Check Collision (Stack-based)
-        // ✅ FIXED: Using PHYSICS module instead of hardcoded ID 17
+        // 2. Check Collision (Stack-based blocking items)
         const isBlocked = tile.items.some(item => PHYSICS.isSolid(item.id));
-
         if (isBlocked) {
             return false;
         }
 
-        // 3. Move (Triggers ECS Update via Setters)
+        // 3. Check for Ramps (Auto Z-Change)
+        for (const item of tile.items) {
+            const rampCheck = PHYSICS.isRamp(item.id);
+            if (rampCheck.isRamp && rampCheck.direction) {
+                // Going UP: Walk onto ramp -> go up one floor
+                console.log(`[Player] Ramp detected (${rampCheck.direction}) - Going UP to Z=${this.z - 1}`);
+                this.z -= 1; // Go up (lower Z = higher in Tibia)
+
+                // Push player forward one more tile in ramp direction
+                switch (rampCheck.direction) {
+                    case 'north': targetY--; break;
+                    case 'south': targetY++; break;
+                    case 'east': targetX++; break;
+                    case 'west': targetX--; break;
+                }
+                break;
+            }
+        }
+
+        // 4. Check for Holes (Auto fall down)
+        for (const item of tile.items) {
+            if (PHYSICS.isHole(item.id)) {
+                console.log(`[Player] Hole detected - Falling to Z=${this.z + 1}`);
+                this.z += 1; // Fall down (higher Z = lower in Tibia)
+                break;
+            }
+        }
+
+        // 5. Check for Stairs
+        for (const item of tile.items) {
+            if (PHYSICS.isStairsDown(item.id)) {
+                console.log(`[Player] Stairs down detected - Going to Z=${this.z + 1}`);
+                this.z += 1;
+                break;
+            }
+            if (PHYSICS.isStairsUp(item.id)) {
+                console.log(`[Player] Stairs up detected - Going to Z=${this.z - 1}`);
+                this.z -= 1;
+                break;
+            }
+        }
+
+        // 6. Move (Triggers ECS Update via Setters)
         this.x = targetX;
         this.y = targetY;
         this.nextMoveTime = Date.now() + 200; // 200ms Step Delay (Grid Lock)

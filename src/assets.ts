@@ -1,5 +1,5 @@
 ﻿import { SPRITE_MAP } from './data/sprites_map';
-import { SPRITES as IMG } from './constants';
+import { SPRITES as IMG, EDRON_ASSETS } from './constants';
 
 export class AssetManager {
     images: Record<number, HTMLCanvasElement> = {};
@@ -24,7 +24,39 @@ export class AssetManager {
 
         this.images[310] = this.createSandstone();   // ID 310: Town Ground
         this.images[311] = this.createTempleFloor(); // ID 311: Temple Floor
+        this.images[IMG.MEAT] = this.createMeat();   // ID 148: Meat
         this.images[312] = this.createSewerGrate();  // ID 312: Rat Sewer
+        this.images[1050] = this.createStonePillar(); // ID 1050: Wall Pillar
+
+        // Edron Castle Assets
+        this.images[IMG.COBBLE] = this.createCobble();
+        this.images[IMG.PAVEMENT_LIGHT] = this.createPavementLight();
+        this.images[IMG.WHITE_WALL_VERTICAL] = this.createWhiteWall('V');
+        this.images[IMG.WHITE_WALL_HORIZONTAL] = this.createWhiteWall('H');
+        this.images[IMG.WHITE_WALL_CORNER_TL] = this.createWhiteWall('TL');
+        this.images[IMG.WHITE_WALL_CORNER_TR] = this.createWhiteWall('TR');
+        this.images[IMG.WHITE_WALL_CORNER_BL] = this.createWhiteWall('BL');
+        this.images[IMG.WHITE_WALL_CORNER_BR] = this.createWhiteWall('BR');
+        this.images[IMG.FOUNTAIN] = this.createFountain();
+        this.images[IMG.MAGIC_FIELD_BLUE] = this.createMagicFieldBlue();
+
+        // Additional Edron Assets
+        this.images[EDRON_ASSETS.FLOORS.CHECKERED] = this.createFloorCheckered();
+        this.images[EDRON_ASSETS.FLOORS.STONE_FLOOR] = this.createFloorStone();
+        this.images[EDRON_ASSETS.FLOORS.WOOD_FLOOR] = this.createFloorWood();
+        this.images[EDRON_ASSETS.DECOR.STREET_LAMP] = this.createStreetLamp();
+        this.images[EDRON_ASSETS.DECOR.KNIGHT_STATUE] = this.createKnightStatue();
+        this.images[EDRON_ASSETS.DECOR.TRASH_CAN] = this.createTrashCan();
+        this.images[EDRON_ASSETS.DECOR.POTTED_FLOWER] = this.createPottedFlower();
+        this.images[EDRON_ASSETS.FURNITURE.LOCKER] = this.createLocker();
+        this.images[EDRON_ASSETS.FURNITURE.BANK_SAFE] = this.createBankSafe();
+        this.images[EDRON_ASSETS.FURNITURE.BOOKS] = this.createBooks();
+        this.images[EDRON_ASSETS.FURNITURE.BLACKBOARD] = this.createBlackboard();
+        this.images[EDRON_ASSETS.DOORS.ARCHWAY] = this.createArchway();
+        // Updated to use renamed Edron door function
+        this.images[EDRON_ASSETS.DOORS.LOCKED_H] = this.createDoorEdron(true, 'H');
+        this.images[EDRON_ASSETS.DOORS.OPEN_H] = this.createDoorEdron(false, 'H');
+
         // 1. Initial procedural setup
         this.init();
 
@@ -37,9 +69,225 @@ export class AssetManager {
         console.log(`[AssetManager] All assets loaded. Procedural + AI + Sheet Mapped.`);
     }
 
-    // Check if pixel should be dithered based on position and threshold
+    // Dither Matrix
     private shouldDither(x: number, y: number, threshold: number): boolean {
         return this.ditherMatrix[y % 4][x % 4] < threshold;
+    }
+
+    // Updated signature to accept isTile
+    public async registerCustomSprite(id: number, url: string, postProcess?: string, isTile: boolean = false): Promise<boolean> {
+        try {
+            console.log(`[AssetManager] Loading custom sprite for ID ${id} from ${url}`);
+            const rawCanvas = await this.loadExternalImage(url);
+
+            const flags = (postProcess || '').split('|');
+            console.error(`!!! DEBUG ASSET LOAD: ID=${id} Flags=${flags.join('|')} Raw=${rawCanvas.width}x${rawCanvas.height}`);
+
+            // SPECIFIC DEBUG for Wolf (201) and Rat (200)
+            if (id === 200 || id === 201) {
+                console.error(`!!!!! WOLF/RAT SPRITE LOADED: ID=${id} URL=${url} Flags=${flags.join('|')} RawSize=${rawCanvas.width}x${rawCanvas.height}`);
+            }
+
+            // Determine Target Size and Region
+            let targetW = 32;
+            let targetH = 32;
+            let srcX = 0;
+            let srcY = 0;
+            let srcW = rawCanvas.width;
+            let srcH = rawCanvas.height;
+
+            // Parse crop_center:W,H (optional X,Y offset)
+            const centerFlag = flags.find(f => f.startsWith('crop_center:'));
+            const rectFlag = flags.find(f => f.startsWith('crop_rect:'));
+
+            if (rectFlag) {
+                // crop_rect:X,Y,W,H
+                const parts = rectFlag.split(':')[1].split(',').map(Number);
+                if (parts.length === 4) {
+                    srcX = parts[0];
+                    srcY = parts[1];
+                    srcW = parts[2];
+                    srcH = parts[3];
+                    targetW = srcW;
+                    targetH = srcH;
+                }
+            } else if (centerFlag) {
+                // crop_center:W,H
+                const parts = centerFlag.split(':')[1].split(',').map(Number);
+                if (parts.length >= 2) {
+                    const w = parts[0];
+                    const h = parts[1];
+                    targetW = w;
+                    targetH = h;
+
+                    // Calculate center crop
+                    srcX = Math.floor((rawCanvas.width - w) / 2);
+                    srcY = Math.floor((rawCanvas.height - h) / 2);
+                    srcW = w;
+                    srcH = h;
+                }
+            } else if (flags.includes('crop_tall')) {
+                // Legacy crop_tall (implies 32x64 centered, or strictly handled here?)
+                // The previous code handled 'crop_tall' by targeting 32x64 and cropping from center.
+                // Let's preserve that logic explicitly if no other specific crop is given.
+                targetW = 32;
+                targetH = 64;
+                srcW = Math.min(32, rawCanvas.width);
+                srcH = Math.min(64, rawCanvas.height);
+                srcX = Math.floor((rawCanvas.width - srcW) / 2);
+                srcY = Math.floor((rawCanvas.height - srcH) / 2);
+            } else if (flags.includes('tile_center')) {
+                // Special tile_center logic (existing) handled during draw below
+                // We keep targetW/H as 32.
+                targetW = 32;
+                targetH = 32;
+            } else {
+                // Default Logic:
+                // If the image is LARGE (e.g. 1024x1024 AI generation), we should SCALE it down.
+                // If the image is SMALL (e.g. 32x32), we should Center it.
+                if (rawCanvas.width > 64 || rawCanvas.height > 64) {
+                    // Large Asset -> Scale to Fit
+                    // Check aspect ratio for tall sprites
+                    if (rawCanvas.height >= rawCanvas.width * 1.5) {
+                        targetW = 32;
+                        targetH = 64;
+                    } else {
+                        targetW = 32;
+                        targetH = 32;
+                    }
+
+                    // Use Full Source
+                    srcX = 0;
+                    srcY = 0;
+                    srcW = rawCanvas.width;
+                    srcH = rawCanvas.height;
+                } else {
+                    // Small Asset -> Center Crop (Legacy/Safe)
+                    targetW = 32;
+                    targetH = 32;
+                    srcW = Math.min(32, rawCanvas.width);
+                    srcH = Math.min(32, rawCanvas.height);
+                    srcX = Math.floor((rawCanvas.width - srcW) / 2);
+                    srcY = Math.floor((rawCanvas.height - srcH) / 2);
+                }
+            }
+
+            // Create final canvas
+            const resized = document.createElement('canvas');
+            resized.width = targetW;
+            resized.height = targetH;
+            const ctx = resized.getContext('2d')!;
+
+            // CRITICAL: Clear canvas to ensure transparency (prevents black/gray boxes)
+            ctx.clearRect(0, 0, targetW, targetH);
+
+            if (flags.includes('tile_center')) {
+                const cx = Math.floor(rawCanvas.width / 2) - 8;
+                const cy = Math.floor(rawCanvas.height / 2) - 8;
+                ctx.drawImage(rawCanvas, cx, cy, 16, 16, 0, 0, 16, 16);
+                ctx.drawImage(rawCanvas, cx, cy, 16, 16, 16, 0, 16, 16);
+                ctx.drawImage(rawCanvas, cx, cy, 16, 16, 0, 16, 16, 16);
+                ctx.drawImage(rawCanvas, cx, cy, 16, 16, 16, 16, 16, 16);
+            } else {
+                // Heuristic: If downscaling significantly (e.g. 1024 -> 32), use smoothing
+                if (srcW > targetW * 2) {
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                } else {
+                    ctx.imageSmoothingEnabled = false;
+                }
+                ctx.drawImage(rawCanvas, srcX, srcY, srcW, srcH, 0, 0, targetW, targetH);
+            }
+
+            // [NEW] Aggressive Black Removal (for noisy assets like lamps)
+            if (flags.includes('remove_black')) {
+                const imageData = ctx.getImageData(0, 0, targetW, targetH);
+                const data = imageData.data;
+                let removedCount = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    // If dark (near black), make transparent. Threshold 60.
+                    if (r < 60 && g < 60 && b < 60) {
+                        data[i + 3] = 0;
+                        removedCount++;
+                    }
+                }
+                ctx.putImageData(imageData, 0, 0);
+                console.log(`[AssetManager] Post-processing remove_black applied to ID ${id}. Removed ${removedCount} pixels.`);
+            }
+
+            // [NEW] Remove gray/tan background pixels (fixes Wolf/Rat gray box issue)
+            if (flags.includes('remove_gray_bg') || flags.includes('skip_transparency')) {
+                // SPECIFIC DEBUG: Log when this block is entered for Wolf/Rat
+                if (id === 200 || id === 201) {
+                    console.error(`!!!!! WOLF/RAT POST-PROCESS ENTER: ID=${id} targetSize=${targetW}x${targetH}`);
+                }
+                const imageData = ctx.getImageData(0, 0, targetW, targetH);
+                const data = imageData.data;
+                let removedCount = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const a = data[i + 3];
+
+                    // Skip already transparent pixels
+                    if (a === 0) continue;
+
+                    // Check if it's a grayish/neutral color (R, G, B are similar)
+                    const maxDiff = Math.max(Math.abs(r - g), Math.abs(g - b), Math.abs(r - b));
+
+                    // CASE 1: Semi-transparent grayish pixels (anti-aliasing halos)
+                    if (a < 250 && maxDiff < 60) {
+                        data[i + 3] = 0;
+                        removedCount++;
+                        continue;
+                    }
+
+                    // CASE 2: OPAQUE gray/tan background pixels (the actual gray boxes)
+                    // Target range: grayish (R≈G≈B, 100-220) or tan/beige (R>G>B, warm tones)
+                    if (a >= 250) {
+                        const avg = (r + g + b) / 3;
+
+                        // Pure gray: all channels similar, mid-range brightness (90-220)
+                        const isPureGray = maxDiff < 40 && avg > 90 && avg < 220;
+
+                        // Tan/beige: R>G>B pattern, warm grayish tone (common AI bg)
+                        const isTanBg = r > 100 && r < 230 && g > 80 && g < 210 && b > 60 && b < 200 &&
+                            r >= g && g >= b && (r - b) < 80 && maxDiff < 70;
+
+                        if (isPureGray || isTanBg) {
+                            data[i + 3] = 0;
+                            removedCount++;
+                        }
+                    }
+                }
+                ctx.putImageData(imageData, 0, 0);
+                if (removedCount > 0) {
+                    console.log(`[AssetManager] Post-processing remove_gray_bg applied to ID ${id}. Removed ${removedCount} gray/tan background pixels.`);
+                } else if (id === 200 || id === 201) {
+                    console.error(`!!!!! WOLF/RAT POST-PROCESS: ID=${id} removed 0 pixels!`);
+                }
+            }
+
+            // Apply Transparency ONLY if not a tile AND not explicitly skipped
+            if (!isTile && !flags.includes('skip_transparency')) {
+                console.log(`[AssetManager] Applying Transparency for ID ${id} (isTile=false)`);
+                this.applyTransparency(ctx, targetW, targetH);
+            } else {
+                console.log(`[AssetManager] SKIPPING Transparency for ID ${id} (isTile=${isTile}, skipFlag=${flags.includes('skip_transparency')})`);
+            }
+
+            this.images[id] = resized;
+            console.log(`[AssetManager] Custom sprite ${id} loaded and resized to ${targetW}x${targetH}!`);
+            return true;
+        } catch (e) {
+            console.error(`[AssetManager] Failed to load custom sprite ${url}:`, e);
+            // Fallback (use red placeholder?)
+            return false;
+        }
     }
 
     // Load external image and convert to canvas
@@ -52,7 +300,8 @@ export class AssetManager {
                 cvs.height = img.height;
                 const ctx = cvs.getContext('2d')!;
                 ctx.drawImage(img, 0, 0);
-                this.applyTransparency(ctx, img.width, img.height);
+                // NOTE: applyTransparency REMOVED here - now handled by registerCustomSprite
+                // which has access to the skip_transparency flag
                 resolve(cvs);
             };
             img.onerror = () => {
@@ -79,10 +328,23 @@ export class AssetManager {
 
         const processSeed = (startIdx: number) => {
             if (visited[startIdx]) return;
+            // Reverted alpha check to ensure flood fill runs on potentially messy alpha
+
             const startColor = getRGB(startIdx);
+
+            // Skip processing if corner is dark (likely part of the sprite, not background)
+            // Dark pixels should not trigger flood-fill as they're often part of the art
+            if (startColor.r < 50 && startColor.g < 50 && startColor.b < 50) return;
+
+            // Skip processing if corner is green (nature sprites like trees, grass)
+            if (startColor.g > 50 && startColor.g > startColor.r && startColor.g > startColor.b) return;
+
+            // Skip processing if corner is brown/tan (wolf, bandit, and other creature sprites)
+            if (startColor.r > 80 && startColor.g > 40 && startColor.b < 80) return;
+
             const localQueue = [startIdx];
             visited[startIdx] = 1;
-            const TOL = 40;
+            const TOL = 25; // Reduced tolerance for more precise transparency
 
             while (localQueue.length > 0) {
                 const idx = localQueue.pop()!;
@@ -111,12 +373,8 @@ export class AssetManager {
         };
 
         for (const idx of corners) {
-            const c = getRGB(idx);
-            // Relaxed Checks
-            const isWhite = (c.r > 230 && c.g > 230 && c.b > 230);
-            const isMagenta = (c.r > 240 && c.g < 50 && c.b > 240);
-            const isGray = (c.r > 150 && Math.abs(c.r - c.g) < 20 && Math.abs(c.r - c.b) < 20);
-            if (isWhite || isMagenta || isGray) processSeed(idx);
+            // Process ALL corners. If it's a solid background (White, Black, Magenta), it gets removed.
+            processSeed(idx);
         }
 
         /* OLD LOOP: for (const idx of corners) {
@@ -312,7 +570,9 @@ export class AssetManager {
 
         // ===== ARCHITECTURE (2.5D Tall) =====
         this.images[21] = this.createWall();     // Stone Wall
+        this.images[23] = this.createWallVertical(); // Vertical Wall (No Lid)
         this.images[17] = this.createWall();     // Stone Wall (alias)
+        this.images[311] = this.createSand();    // Sand (Biome)
 
         // ===== NATURE =====
         this.images[50] = this.createTree();     // Tree Pine (Fallback)
@@ -391,6 +651,8 @@ export class AssetManager {
         this.images[133] = this.createAxe('battle'); // War Axe
 
         // ===== STARTING GEAR (Rookgaard) =====
+        this.images[IMG.STAIRS_DOWN] = this.createStairs(false);
+        this.images[IMG.STAIRS_UP] = this.createStairs(true);
         this.images[IMG.WOODEN_SWORD] = this.createWoodenSword();
         this.images[IMG.WOODEN_SHIELD] = this.images[46]; // Reuse existing Wooden Shield
         this.images[IMG.LEATHER_ARMOR] = this.createArmorPlate('#8d6e63', '#5d4037');
@@ -537,28 +799,8 @@ export class AssetManager {
     private async loadExternalSprites() {
         console.log("[AssetManager] Loading external Tibia sprites...");
         try {
-            // 1. Load Legacy Individual Sprites
-            try {
-                const grass1 = await this.loadExternalImage('/grass1.png');
-                const grass2 = await this.loadExternalImage('/grass2.png');
-                const grass3 = await this.loadExternalImage('/grass3.png');
-                const rock = await this.loadExternalImage('/rock.png');
-                this.images[10] = grass1;
-                this.images[16] = grass2;
-                this.images[161] = grass3;
-
-                // Scale Rock (ID 6) to 32x32 to prevent giant rendering
-                const rockCvs = this.createCanvas(32, 32);
-                const rockCtx = rockCvs.getContext('2d')!;
-                rockCtx.imageSmoothingEnabled = false;
-                // Scale FULL image to 32x32
-                rockCtx.drawImage(rock, 0, 0, rock.width, rock.height, 0, 0, 32, 32);
-
-                // Fix: Apply Transparency (User reported black corners / solid box)
-                this.applyTransparency(rockCtx, 32, 32);
-
-                this.images[6] = rockCvs;
-            } catch (ignore) { /* Optional */ }
+            // 1. Legacy Individual Sprites (REMOVED to prevent overwriting procedural assets)
+            // Procedural assets are now the source of truth until a full Sprite Pack is loaded via SPRITE_MAP.
 
             // 2. Load Mapped Sprites from Sheets
             // Dynamic Import to avoid cycle if necessary, or just top-level
@@ -584,9 +826,31 @@ export class AssetManager {
                     // Slice Sprites & Chroma Key
                     for (const id of ids) {
                         const def = SPRITE_MAP[id];
-                        const spriteCvs = this.createCanvas(def.width, def.height);
+                        if (id === 263) console.log(`[AssetDebug] Banker(263) Def:`, def);
+
+                        // Determine target canvas size
+                        // For new AI sprites (5000+), we scale to game size (32x32 or 32x64)
+                        let canvasWidth = def.width;
+                        let canvasHeight = def.height;
+
+                        if (id >= 5000 && id < 8000) {
+                            // Tall sprites (walls, lamps) -> 32x64
+                            // Ground tiles -> 32x32
+                            const isTall = def.height > def.width * 1.5;
+                            canvasWidth = isTall ? 32 : 32;
+                            canvasHeight = isTall ? 64 : 32;
+                        } else if (id >= 8000) {
+                            // Item sprites (8000+) -> Always downscale to 32x32
+                            canvasWidth = 32;
+                            canvasHeight = 32;
+                        }
+
+                        const spriteCvs = this.createCanvas(canvasWidth, canvasHeight);
                         const ctx = spriteCvs.getContext('2d')!;
-                        ctx.imageSmoothingEnabled = false; // Disable smoothing for pixel art
+
+                        // Disable smoothing for atlas sprites (6000+) to preserve magenta for chroma-key
+                        // Enable smoothing for AI sprites (5000-5999) and item sprites (8000+) for downscaling
+                        ctx.imageSmoothingEnabled = (id >= 5000 && id < 6000) || id >= 8000;
 
                         // Auto-Scale Handler for AI Generated Images (1024x1024)
                         let sx = def.x;
@@ -594,10 +858,19 @@ export class AssetManager {
                         let sw = def.width;
                         let sh = def.height;
 
+                        // FIX: Downscale High-Res NPCs to 32x32 at load time
+                        if (id >= 263 && id <= 270) {
+                            sw = img.width; // Read full source
+                            sh = img.height;
+                            canvasWidth = 32; // Target 32x32
+                            canvasHeight = 32;
+                            ctx.imageSmoothingEnabled = true; // High quality scale
+                        }
+
                         // ONLY apply to Custom Assets (ID >= 300) OR Legacy Nature (Tree=50/51, Rock=6). 
                         // OTSP Assets separate from these.
                         const isLegacyNature = (id === 50 || id === 51 || id === 6);
-                        if ((id >= 300 || isLegacyNature) && def.x === 0 && def.y === 0 && img.width >= 128 && img.height >= 128) {
+                        if ((id >= 300 && id < 8000 || isLegacyNature) && def.x === 0 && def.y === 0 && img.width >= 128 && img.height >= 128) {
                             sx = 0;
                             sy = 0;
                             sw = img.width;
@@ -609,14 +882,55 @@ export class AssetManager {
                             // console.log(`[AssetManager] Auto-scaling large asset ${id} (${img.width}x${img.height}) -> 32x32`);
                         }
 
-                        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, def.width, def.height);
+                        // Draw: source(sx,sy,sw,sh) -> dest(0,0,canvasWidth,canvasHeight)
+                        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvasWidth, canvasHeight);
 
+                        // Apply magenta chroma-key for atlas sprites (6000+)
+                        if (id >= 6000) {
+                            const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+                            const data = imageData.data;
+                            let removed = 0;
+                            for (let i = 0; i < data.length; i += 4) {
+                                const r = data[i];
+                                const g = data[i + 1];
+                                const b = data[i + 2];
+                                // Remove magenta (FF00FF) - broader tolerance for AI-generated magenta
+                                if (r > 180 && g < 80 && b > 180) {
+                                    data[i + 3] = 0; // Set alpha to 0 (transparent)
+                                    removed++;
+                                }
+                            }
+                            ctx.putImageData(imageData, 0, 0);
+                            console.log(`[AssetManager] Atlas sprite ${id}: ${canvasWidth}x${canvasHeight}, removed ${removed} magenta pixels`);
+                        }
 
-
-                        this.applyTransparency(ctx, def.width, def.height);
-
+                        // Skip flood-fill transparency for item sprites (8000+) - they have colored backgrounds
+                        // that should NOT be flood-filled since it removes the items themselves
+                        if (id < 8000) {
+                            this.applyTransparency(ctx, canvasWidth, canvasHeight);
+                        } else {
+                            // For 8000+ item sprites, remove background pixels (black or white)
+                            const imgData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+                            const data = imgData.data;
+                            const isArmorSheet = id >= 8020 && id <= 8031; // Armor has white background
+                            for (let i = 0; i < data.length; i += 4) {
+                                const r = data[i], g = data[i + 1], b = data[i + 2];
+                                // Remove near-black pixels (threshold of 30 for AI artifacts)
+                                if (r < 30 && g < 30 && b < 30) {
+                                    data[i + 3] = 0; // Make transparent
+                                }
+                                // Also remove near-white pixels for armor sheet
+                                if (isArmorSheet && r > 240 && g > 240 && b > 240) {
+                                    data[i + 3] = 0; // Make transparent
+                                }
+                            }
+                            ctx.putImageData(imgData, 0, 0);
+                        }
                         this.images[id] = spriteCvs;
-                        // console.log(`[AssetManager] Loaded Sprite ${id} from ${file}`);
+
+                        if (id === 10) { // GRASS Debug
+                            console.log(`[AssetDebug] Loaded GRASS (10) from ${file} at ${def.x},${def.y}`);
+                        }
                     }
                 } catch (e) {
                     console.error(`[AssetManager] FAILED to process sprite ${file} for IDs: ${ids}`, e);
@@ -720,10 +1034,14 @@ export class AssetManager {
                 const ctx = cvs.getContext('2d')!;
                 ctx.imageSmoothingEnabled = false;
 
+                // CRITICAL: Clear canvas to ensure transparency (prevents black/gray boxes)
+                ctx.clearRect(0, 0, w, h);
+
                 // Draw image filling entire canvas (will stretch but keeps proportions relative to tile)
                 ctx.drawImage(img, 0, 0, w, h);
 
-                this.applyTransparency(ctx, w, h);
+                // NOTE: applyTransparency REMOVED - these sprites already have proper alpha transparency
+                // The flood-fill was incorrectly detecting transparent corners and destroying the sprites
 
                 this.images[id] = cvs;
                 console.log(`[AssetManager] Loaded AI sprite ${id} (${w}x${h})`);
@@ -791,37 +1109,118 @@ export class AssetManager {
     }
 
     // =========================================================
-    // TIBIA-QUALITY GRASS (Ordered Dithering)
+    // TIBIA-QUALITY GRASS (Noise Textured - Seamless Style)
     // =========================================================
     private createGrass(variant: number): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
         const ctx = cvs.getContext('2d')!;
 
-        // Base Green
-        const BASE = variant === 0 ? '#4caf50' : '#43a047';
+        // Tibia Green Base (slightly muted, not too bright)
+        const BASE = '#3a7a3a';
         ctx.fillStyle = BASE;
         ctx.fillRect(0, 0, 32, 32);
 
-        // Subtle Noise (No pattern)
-        for (let i = 0; i < 128; i++) {
-            const x = Math.random() * 32;
-            const y = Math.random() * 32;
-            ctx.fillStyle = Math.random() > 0.5 ? '#66bb6a' : '#2e7d32'; // Lighter or Darker
+        // === NOISE TEXTURE LAYER ===
+        // Add random green variation specs (low contrast)
+        const seed = variant * 1234;
+        for (let y = 0; y < 32; y++) {
+            for (let x = 0; x < 32; x++) {
+                const hash = ((x * 7 + y * 13 + seed) * 16807) % 2147483647;
+                const r = (hash / 2147483647);
+
+                if (r < 0.15) {
+                    // Dark specs (dirt/shadow)
+                    ctx.fillStyle = '#2a5a2a';
+                    ctx.fillRect(x, y, 1, 1);
+                } else if (r < 0.30) {
+                    // Slightly darker green
+                    ctx.fillStyle = '#306030';
+                    ctx.fillRect(x, y, 1, 1);
+                } else if (r > 0.85) {
+                    // Light green highlight
+                    ctx.fillStyle = '#4a9a4a';
+                    ctx.fillRect(x, y, 1, 1);
+                } else if (r > 0.92) {
+                    // Bright grass blade tip
+                    ctx.fillStyle = '#5aaa5a';
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+
+        // === DIRT SPECS (Brown spots) ===
+        for (let i = 0; i < 8; i++) {
+            const hash = ((i * 17 + seed) * 48271) % 2147483647;
+            const x = (hash % 30) + 1;
+            const y = ((hash >> 8) % 30) + 1;
+            ctx.fillStyle = '#4a3a2a';
             ctx.fillRect(x, y, 1, 1);
         }
 
-        // Grass Tufts (keeping the V shape but lighter)
-        ctx.strokeStyle = '#81c784';
+        // === GRASS BLADE TUFTS (Subtle) ===
+        ctx.strokeStyle = '#2a5a2a';
         ctx.lineWidth = 1;
-        for (let i = 0; i < 8; i++) {
-            const x = (variant * 7 + i * 5) % 28 + 2;
-            const y = (variant * 3 + i * 7) % 26 + 4;
+        for (let i = 0; i < 6; i++) {
+            const hash = ((i * 23 + variant * 7) * 16807) % 2147483647;
+            const x = (hash % 28) + 2;
+            const y = ((hash >> 10) % 24) + 6;
             ctx.beginPath();
             ctx.moveTo(x, y);
             ctx.lineTo(x - 1, y - 2);
             ctx.moveTo(x, y);
             ctx.lineTo(x + 1, y - 2);
             ctx.stroke();
+        }
+
+        return cvs;
+    }
+
+    // =========================================================
+    // TIBIA-QUALITY SAND (Noise Textured - Beach Style)
+    // =========================================================
+    private createSand(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Tibia Sand Base (warmer, less saturated)
+        const BASE = '#c4a060';
+        ctx.fillStyle = BASE;
+        ctx.fillRect(0, 0, 32, 32);
+
+        // === NOISE TEXTURE LAYER ===
+        const seed = 5678;
+        for (let y = 0; y < 32; y++) {
+            for (let x = 0; x < 32; x++) {
+                const hash = ((x * 11 + y * 17 + seed) * 48271) % 2147483647;
+                const r = (hash / 2147483647);
+
+                if (r < 0.12) {
+                    // Dark specs (wet sand/stones)
+                    ctx.fillStyle = '#9a8050';
+                    ctx.fillRect(x, y, 1, 1);
+                } else if (r < 0.25) {
+                    // Slightly darker sand
+                    ctx.fillStyle = '#b49058';
+                    ctx.fillRect(x, y, 1, 1);
+                } else if (r > 0.85) {
+                    // Light sand highlight
+                    ctx.fillStyle = '#d4b070';
+                    ctx.fillRect(x, y, 1, 1);
+                } else if (r > 0.92) {
+                    // Very light (sun bleached)
+                    ctx.fillStyle = '#e4c080';
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+
+        // === SMALL STONES/PEBBLES ===
+        for (let i = 0; i < 5; i++) {
+            const hash = ((i * 31 + seed) * 16807) % 2147483647;
+            const x = (hash % 28) + 2;
+            const y = ((hash >> 8) % 28) + 2;
+            ctx.fillStyle = '#8a7040';
+            ctx.fillRect(x, y, 2, 1);
         }
 
         return cvs;
@@ -972,6 +1371,51 @@ export class AssetManager {
     }
 
     // =========================================================
+    // VERTICAL WALL (No Lid, for seamless stacking)
+    // =========================================================
+    private createWallVertical(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 64);
+        const ctx = cvs.getContext('2d')!;
+
+        const FACE_BASE = '#555566';
+        const BRICK_LIGHT = '#666677';
+        const BRICK_DARK = '#444455';
+        const MORTAR = '#333344';
+
+        ctx.fillStyle = FACE_BASE;
+        ctx.fillRect(0, 0, 32, 64);
+
+        for (let row = 0; row < 8; row++) {
+            const y = row * 8;
+            const offset = (row % 2) * 8;
+
+            for (let col = 0; col < 3; col++) {
+                const x = offset + col * 16 - 8;
+                if (x < 0 || x >= 32) continue;
+                const brickW = Math.min(14, 32 - x);
+
+                ctx.fillStyle = FACE_BASE;
+                ctx.fillRect(x, y, brickW, 6);
+                ctx.fillStyle = BRICK_LIGHT;
+                ctx.fillRect(x, y, brickW, 1);
+                ctx.fillRect(x, y, 1, 6);
+                ctx.fillStyle = BRICK_DARK;
+                ctx.fillRect(x, y + 5, brickW, 1);
+                if (x + brickW < 32) {
+                    ctx.fillRect(x + brickW - 1, y, 1, 6);
+                }
+            }
+            ctx.fillStyle = MORTAR;
+            ctx.fillRect(0, y + 6, 32, 2);
+        }
+        ctx.fillStyle = '#111122';
+        ctx.fillRect(0, 0, 1, 64);
+        ctx.fillRect(31, 0, 1, 64);
+
+        return cvs;
+    }
+
+    // =========================================================
     // TIBIA-QUALITY PLAYER (Red Knight with outline)
     // =========================================================
     private createPlayer(): HTMLCanvasElement {
@@ -1089,10 +1533,10 @@ export class AssetManager {
     }
 
     // =========================================================
-    // TIBIA-QUALITY TREE (64x64 with layered canopy)
+    // TIBIA-QUALITY TREE (64x96 TALL with visible trunk - Oblique Style)
     // =========================================================
     private createTree(): HTMLCanvasElement {
-        const cvs = this.createCanvas(64, 64);
+        const cvs = this.createCanvas(64, 96); // Taller for 3D effect
         const ctx = cvs.getContext('2d')!;
 
         const TRUNK_DARK = '#2a1a10';
@@ -1102,53 +1546,61 @@ export class AssetManager {
         const LEAF_MID = '#2a5a25';
         const LEAF_LIGHT = '#4a8a45';
 
-        // Ground shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath();
-        ctx.ellipse(32, 60, 14, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
+        // === TRUNK (Visible, prominent) ===
+        const trunkX = 26;
+        const trunkW = 12;
+        const trunkTop = 40;   // Where trunk meets canopy
+        const trunkBottom = 92; // Near bottom
 
-        // === TRUNK ===
-        const trunkX = 27;
-        const trunkW = 10;
+        // Main trunk body
         ctx.fillStyle = TRUNK_MID;
-        ctx.fillRect(trunkX, 38, trunkW, 24);
+        ctx.fillRect(trunkX, trunkTop, trunkW, trunkBottom - trunkTop);
 
-        // Trunk highlight
+        // Trunk left highlight (light source from top-left)
         ctx.fillStyle = TRUNK_LIGHT;
-        ctx.fillRect(trunkX, 38, 3, 24);
+        ctx.fillRect(trunkX, trunkTop, 4, trunkBottom - trunkTop);
 
-        // Trunk shadow
+        // Trunk right shadow
         ctx.fillStyle = TRUNK_DARK;
-        ctx.fillRect(trunkX + trunkW - 3, 38, 3, 24);
+        ctx.fillRect(trunkX + trunkW - 4, trunkTop, 4, trunkBottom - trunkTop);
 
-        // Bark lines
+        // Bark texture lines
         ctx.strokeStyle = TRUNK_DARK;
         ctx.lineWidth = 1;
-        for (let y = 42; y < 60; y += 5) {
+        for (let y = trunkTop + 4; y < trunkBottom - 2; y += 6) {
             ctx.beginPath();
-            ctx.moveTo(trunkX, y + 0.5);
-            ctx.lineTo(trunkX + trunkW, y + 0.5);
+            ctx.moveTo(trunkX + 2, y + 0.5);
+            ctx.lineTo(trunkX + trunkW - 2, y + 0.5);
             ctx.stroke();
         }
 
-        // === CANOPY (Layered ellipses) ===
-        const cx = 32, cy = 24;
+        // Trunk root flare at bottom
+        ctx.fillStyle = TRUNK_MID;
+        ctx.beginPath();
+        ctx.moveTo(trunkX - 3, trunkBottom);
+        ctx.lineTo(trunkX, trunkTop + 45);
+        ctx.lineTo(trunkX + trunkW, trunkTop + 45);
+        ctx.lineTo(trunkX + trunkW + 3, trunkBottom);
+        ctx.fill();
 
-        // Base layer (dark)
+        // === CANOPY (Large, layered) ===
+        const cx = 32;
+        const cy = 30; // Higher up on the sprite
+
+        // Base dark layer
         ctx.fillStyle = LEAF_DARK;
         ctx.beginPath();
-        ctx.ellipse(cx, cy, 26, 20, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, 28, 24, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Mid layer with dithering
-        for (let y = cy - 18; y < cy + 16; y++) {
-            for (let x = cx - 24; x < cx + 24; x++) {
-                const dx = (x - cx) / 26;
-                const dy = (y - cy) / 20;
+        for (let y = cy - 22; y < cy + 20; y++) {
+            for (let x = cx - 26; x < cx + 26; x++) {
+                const dx = (x - cx) / 28;
+                const dy = (y - cy) / 24;
                 if (dx * dx + dy * dy > 0.9) continue;
 
-                if (this.shouldDither(x, y, 8)) {
+                if (this.shouldDither(x, y, 7)) {
                     ctx.fillStyle = LEAF_MID;
                     ctx.fillRect(x, y, 1, 1);
                 }
@@ -1156,13 +1608,13 @@ export class AssetManager {
         }
 
         // Light layer (top-left highlight)
-        for (let y = cy - 18; y < cy + 5; y++) {
-            for (let x = cx - 24; x < cx + 5; x++) {
-                const dx = (x - cx) / 26;
-                const dy = (y - cy) / 20;
-                if (dx * dx + dy * dy > 0.8) continue;
+        for (let y = cy - 22; y < cy + 6; y++) {
+            for (let x = cx - 26; x < cx + 6; x++) {
+                const dx = (x - cx) / 28;
+                const dy = (y - cy) / 24;
+                if (dx * dx + dy * dy > 0.75) continue;
 
-                if (this.shouldDither(x, y, 6)) {
+                if (this.shouldDither(x, y, 5)) {
                     ctx.fillStyle = LEAF_LIGHT;
                     ctx.fillRect(x, y, 1, 1);
                 }
@@ -1170,13 +1622,13 @@ export class AssetManager {
         }
 
         // Shadow layer (bottom-right)
-        for (let y = cy; y < cy + 16; y++) {
-            for (let x = cx; x < cx + 24; x++) {
-                const dx = (x - cx) / 26;
-                const dy = (y - cy) / 20;
-                if (dx * dx + dy * dy > 0.85) continue;
+        for (let y = cy; y < cy + 20; y++) {
+            for (let x = cx; x < cx + 26; x++) {
+                const dx = (x - cx) / 28;
+                const dy = (y - cy) / 24;
+                if (dx * dx + dy * dy > 0.8) continue;
 
-                if (this.shouldDither(x, y, 5)) {
+                if (this.shouldDither(x, y, 4)) {
                     ctx.fillStyle = '#0a2a0a';
                     ctx.fillRect(x, y, 1, 1);
                 }
@@ -1187,8 +1639,17 @@ export class AssetManager {
         ctx.strokeStyle = '#0a200a';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.ellipse(cx, cy, 26, 20, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, 28, 24, 0, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Lower foliage clusters (hide trunk join)
+        ctx.fillStyle = LEAF_DARK;
+        ctx.beginPath();
+        ctx.ellipse(cx - 10, cy + 18, 12, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(cx + 10, cy + 16, 10, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
 
         return cvs;
     }
@@ -2594,6 +3055,44 @@ export class AssetManager {
         return cvs;
     }
 
+    // =========================================================
+    // WEAPON: SHORT SWORD (Iron)
+    // =========================================================
+    // Duplicate createSword removed.
+    // Use the primary createSword at line 1880.
+
+    // =========================================================
+    // FOOD: APPLE (Red)
+    // =========================================================
+    private createApple(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // Apple Body (Red circle)
+        ctx.fillStyle = '#d32f2f'; // Red
+        ctx.beginPath();
+        ctx.arc(16, 18, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Highlight (White shine)
+        ctx.fillStyle = '#ffcdd2';
+        ctx.beginPath();
+        ctx.arc(12, 14, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Stem (Brown)
+        ctx.fillStyle = '#795548';
+        ctx.fillRect(15, 6, 2, 4);
+
+        // Leaf (Green)
+        ctx.fillStyle = '#4caf50';
+        ctx.beginPath();
+        ctx.ellipse(18, 8, 4, 2, Math.PI / 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        return cvs;
+    }
+
     private createTempleRoof(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48); // Taller for dome
         const ctx = cvs.getContext('2d')!;
@@ -3278,38 +3777,7 @@ export class AssetManager {
     // =========================================================
     // STARTING GEAR HELPERS
     // =========================================================
-
-    private createApple(): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
-
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath(); ctx.ellipse(16, 26, 6, 2, 0, 0, Math.PI * 2); ctx.fill();
-
-        // Apple body
-        ctx.fillStyle = '#cc0000';
-        ctx.beginPath(); ctx.arc(16, 18, 7, 0, Math.PI * 2); ctx.fill();
-
-        // Highlight
-        ctx.fillStyle = '#ff4444';
-        ctx.beginPath(); ctx.arc(14, 16, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(13, 15, 1, 1);
-
-        // Stem
-        ctx.fillStyle = '#553311';
-        ctx.fillRect(15, 9, 2, 4);
-
-        // Leaf
-        ctx.fillStyle = '#4caf50';
-        ctx.beginPath();
-        ctx.ellipse(18, 10, 3, 1.5, Math.PI / 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        this.addOutline(ctx, cvs);
-        return cvs;
-    }
+    // Duplicate createApple removed. Use the one at line ~2964.
 
     private createWoodenSword(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
@@ -3617,6 +4085,252 @@ export class AssetManager {
         ctx.fillRect(17, 24, 1, 1);
 
         this.addOutline(ctx, cvs);
+        return cvs;
+    }
+    createStonePillar(): HTMLCanvasElement {
+        const cvs = document.createElement('canvas');
+        cvs.width = 32; cvs.height = 32;
+        const ctx = cvs.getContext('2d')!;
+
+        // Base/Bottom
+        ctx.fillStyle = '#333';
+        ctx.fillRect(8, 20, 16, 8);
+
+        // Shaft
+        const grad = ctx.createLinearGradient(8, 0, 24, 0);
+        grad.addColorStop(0, '#555');
+        grad.addColorStop(0.5, '#888');
+        grad.addColorStop(1, '#555');
+        ctx.fillStyle = grad;
+        ctx.fillRect(10, 4, 12, 20);
+
+        // Top Capital
+        ctx.fillStyle = '#666';
+        ctx.fillRect(8, 2, 16, 4);
+
+        // Details
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(12, 6, 2, 14);
+        ctx.fillRect(18, 6, 2, 14);
+
+        return cvs;
+    }
+    createStairs(up: boolean): HTMLCanvasElement {
+        const cvs = document.createElement('canvas');
+        cvs.width = 32; cvs.height = 32;
+        const ctx = cvs.getContext('2d')!;
+
+        // Base Floor
+        ctx.fillStyle = '#795548'; // Brown earth
+        ctx.fillRect(0, 0, 32, 32);
+
+        // Steps
+        const count = 4;
+        const stepH = 32 / count;
+
+        ctx.fillStyle = '#a1887f'; // Lighter brown wood/stone steps
+
+        for (let i = 0; i < count; i++) {
+            const y = i * stepH;
+            // Shade
+            ctx.fillStyle = i % 2 === 0 ? '#8d6e63' : '#a1887f';
+            ctx.fillRect(4, y, 24, stepH);
+        }
+
+        // Direction Indicator
+        ctx.fillStyle = '#000';
+        ctx.font = '20px monospace';
+        ctx.fillText(up ? 'UP' : 'DN', 4, 24);
+
+        return cvs;
+    }
+
+    private createMeat(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#b71c1c'; // Dark red
+        ctx.beginPath(); ctx.ellipse(16, 16, 10, 6, 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; // Bone
+        ctx.fillRect(8, 14, 4, 4);
+        return cvs;
+    }
+
+    private createPavementLight(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#eee';
+        ctx.fillRect(0, 0, 32, 32);
+        ctx.strokeStyle = '#ccc';
+        ctx.strokeRect(2, 2, 28, 28);
+        return cvs;
+    }
+
+    private createWhiteWall(type: 'V' | 'H' | 'TL' | 'TR' | 'BL' | 'BR'): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        const BASE = '#f0f0f0';
+        const SHADE = '#cccccc';
+        const LINE = '#aaaaaa';
+
+        ctx.fillStyle = BASE;
+        if (type === 'V') {
+            ctx.fillRect(10, 0, 12, 32);
+            ctx.fillStyle = SHADE; ctx.fillRect(10, 0, 2, 32);
+            ctx.strokeStyle = LINE; ctx.strokeRect(10, 0, 12, 32);
+        } else if (type === 'H') {
+            ctx.fillRect(0, 10, 32, 12);
+            ctx.fillStyle = SHADE; ctx.fillRect(0, 10, 32, 2);
+            ctx.strokeStyle = LINE; ctx.strokeRect(0, 10, 32, 12);
+        } else {
+            // Corner logic
+            ctx.fillRect(10, 10, 22, 22);
+            if (type.includes('T')) ctx.fillRect(10, 0, 12, 10);
+            if (type.includes('B')) ctx.fillRect(10, 22, 12, 10);
+            if (type.includes('L')) ctx.fillRect(0, 10, 10, 12);
+            if (type.includes('R')) ctx.fillRect(22, 10, 10, 12);
+            ctx.strokeStyle = LINE;
+            ctx.stroke();
+        }
+        return cvs;
+    }
+
+    private createFountain(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#aaa';
+        ctx.beginPath(); ctx.arc(16, 16, 14, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#44f';
+        ctx.beginPath(); ctx.arc(16, 16, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(15, 15, 2, 2);
+        return cvs;
+    }
+
+    private createMagicFieldBlue(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        const grad = ctx.createRadialGradient(16, 16, 2, 16, 16, 14);
+        grad.addColorStop(0, 'rgba(0, 0, 255, 0.8)');
+        grad.addColorStop(1, 'rgba(0, 0, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 32, 32);
+        return cvs;
+    }
+
+    private createFloorCheckered(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 16, 16); ctx.fillRect(16, 16, 16, 16);
+        ctx.fillStyle = '#fff'; ctx.fillRect(16, 0, 16, 16); ctx.fillRect(0, 16, 16, 16);
+        return cvs;
+    }
+
+    private createFloorStone(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#888'; ctx.fillRect(0, 0, 32, 32);
+        ctx.strokeStyle = '#666'; ctx.strokeRect(1, 1, 30, 30);
+        return cvs;
+    }
+
+    private createFloorWood(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#5d4037'; ctx.fillRect(0, 0, 32, 32);
+        ctx.strokeStyle = '#3e2723';
+        for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * 8, 0); ctx.lineTo(i * 8, 32); ctx.stroke(); }
+        return cvs;
+    }
+
+    private createStreetLamp(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 64);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#333'; ctx.fillRect(14, 10, 4, 50); // Pole
+        ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(16, 15, 6, 0, Math.PI * 2); ctx.fill(); // Glow
+        ctx.strokeStyle = '#333'; ctx.strokeRect(10, 10, 12, 10); // Glass frame
+        return cvs;
+    }
+
+    private createKnightStatue(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 48);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#aaa'; ctx.fillRect(8, 32, 16, 16); // Plinth
+        ctx.fillStyle = '#ccc'; ctx.fillRect(10, 10, 12, 22); // Body
+        ctx.fillStyle = '#ddd'; ctx.beginPath(); ctx.arc(16, 8, 5, 0, Math.PI * 2); ctx.fill(); // Head
+        return cvs;
+    }
+
+    private createTrashCan(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#5d4037'; ctx.fillRect(8, 8, 16, 20);
+        ctx.strokeStyle = '#3e2723'; ctx.strokeRect(8, 8, 16, 20);
+        return cvs;
+    }
+
+    private createPottedFlower(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#a1887f'; ctx.fillRect(10, 20, 12, 10); // Pot
+        ctx.fillStyle = '#f00'; ctx.beginPath(); ctx.arc(16, 14, 4, 0, Math.PI * 2); ctx.fill(); // Flower
+        ctx.fillStyle = '#0a0'; ctx.fillRect(15, 18, 2, 4); // Stem
+        return cvs;
+    }
+
+    private createLocker(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#555'; ctx.fillRect(4, 4, 24, 24);
+        ctx.strokeStyle = '#333'; ctx.strokeRect(4, 4, 24, 24);
+        ctx.fillStyle = '#777'; ctx.fillRect(8, 8, 16, 4); // Slot
+        return cvs;
+    }
+
+    private createBankSafe(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#222'; ctx.fillRect(2, 2, 28, 28);
+        ctx.strokeStyle = '#ff0'; ctx.lineWidth = 2; ctx.strokeRect(2, 2, 28, 28);
+        ctx.beginPath(); ctx.arc(16, 16, 6, 0, Math.PI * 2); ctx.stroke(); // Dial
+        return cvs;
+    }
+
+    private createBooks(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        const colors = ['#f00', '#00f', '#0a0', '#ff0'];
+        for (let i = 0; i < 4; i++) {
+            ctx.fillStyle = colors[i]; ctx.fillRect(4 + i * 6, 10, 5, 20);
+        }
+        return cvs;
+    }
+
+    private createBlackboard(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#222'; ctx.fillRect(2, 6, 28, 20);
+        ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 2; ctx.strokeRect(2, 6, 28, 20);
+        ctx.fillStyle = '#fff'; ctx.font = '8px Arial'; ctx.fillText('E=mc^2', 6, 18);
+        return cvs;
+    }
+
+    private createArchway(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(0, 0, 32, 32);
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath(); ctx.arc(16, 24, 12, Math.PI, 0); ctx.lineTo(28, 32); ctx.lineTo(4, 32); ctx.closePath(); ctx.fill();
+        return cvs;
+    }
+
+    // Renamed to avoid overlap
+    private createDoorEdron(locked: boolean, orientation: 'H' | 'V'): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+        ctx.fillStyle = '#5d4037';
+        if (orientation === 'H') ctx.fillRect(0, 10, 32, 12);
+        else ctx.fillRect(10, 0, 12, 32);
+        if (locked) { ctx.fillStyle = '#ff0'; ctx.fillRect(14, 14, 4, 4); }
         return cvs;
     }
 }

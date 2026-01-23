@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            background: #222;
+            color: #fff;
+            font-family: sans-serif;
+        }
+
+        canvas {
+            border: 1px solid #555;
+            margin: 10px;
+            background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36zwjjgzjwqlWr/nMCecAE4QxkAgwAM4QOyxXWfyoAAAAASUVORK5CYII=');
+        }
+
+        .label {
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Sprite Debugger</h1>
+    <div>
+        <div class="label">Current Grass (x:32, y:64)</div>
+        <canvas id="c1" width="32" height="32"></canvas>
+    </div>
+    <div>
+        <div class="label">Alt Green (x:256, y:160)</div>
+        <canvas id="c2" width="32" height="32"></canvas>
+    </div>
+    <div>
+        <div class="label">Full Sheet (First 512x512)</div>
+        <canvas id="full" width="512" height="512"></canvas>
+    </div>
+
+    <script>
+        const img = new Image();
+        img.src = '/sprites/otsp_tiles_01.png';
+        img.onload = () => {
+            const ctx1 = document.getElementById('c1').getContext('2d');
+            ctx1.drawImage(img, 32, 64, 32, 32, 0, 0, 32, 32);
+
+            const ctx2 = document.getElementById('c2').getContext('2d');
+            ctx2.drawImage(img, 256, 160, 32, 32, 0, 0, 32, 32);
+
+            const ctxFull = document.getElementById('full').getContext('2d');
+            ctxFull.drawImage(img, 0, 0);
+
+            // Highlight Rects
+            ctxFull.strokeStyle = 'red';
+            ctxFull.lineWidth = 2;
+            ctxFull.strokeRect(32, 64, 32, 32); // Current
+
+            ctxFull.strokeStyle = 'lime';
+            ctxFull.strokeRect(256, 160, 32, 32); // Alt
+        };
+    </script>
+</body>
+
+</html>

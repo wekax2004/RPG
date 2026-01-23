@@ -2,32 +2,51 @@ export namespace SPRITES {
     export const GRASS = 10;
     export const GRASS_FLOWERS = 16;
     export const DIRT = 11;
-    export const COBBLE = 12;
+    export const COBBLE = 446;
+    export const PAVEMENT_LIGHT = 450;
     export const WATER = 13;
     export const FLOOR_WOOD = 14;
     export const FLOOR_STONE = 15;
 
     export const WALL = 21;
+    export const WALL_VERTICAL = 23;
     export const STONE_WALL = 17;
+    export const STONE_PILLAR = 1050; // New Pillar Sprite
+
+    // Edron White Stone Walls
+    export const WHITE_WALL_VERTICAL = 1054;
+    export const WHITE_WALL_HORIZONTAL = 1052;
+    export const WHITE_WALL_CORNER_TL = 1056;
+    export const WHITE_WALL_CORNER_TR = 1055;
+    export const WHITE_WALL_CORNER_BL = 1058;
+    export const WHITE_WALL_CORNER_BR = 1057;
+    export const WHITE_STONE_PILLAR = 1050; // Edron Pillar
+    export const EDRON_LAMP = 1060;         // Edron Lamp Post
+    export const EDRON_STATUE = 1061;       // Edron Hero Statue
+    export const EDRON_FLOOR_ORNATE = 1065; // Edron Interior Floor
+    export const EDRON_FLOOR_WOOD = 1066;   // Clean Wood Floor
+    export const EDRON_SHOP_COUNTER = 1075; // Shop Counter
 
     export const BARREL = 30;
     export const CRATE = 31;
     export const TORCH = 32;
-    export const BACKPACK = 22;
-    export const SMALL_BAG = 142;
+    export const BACKPACK = 8043;
+    export const SMALL_BAG = 8042;
     export const ZOMBIE = 300;
     export const GHOST = 301;
 
-    export const GOLD = 40;
-    export const POTION = 41;
-    export const APPLE = 147;
-    export const MANA_POTION = 86; // New Sprite ID for Mana Potion? Check assets. Assuming 86 or similar.
-    export const SHOVEL = 124;
-    export const ROPE = 65;
+    export const GOLD = 8008;
+    export const POTION = 8006;
+    export const APPLE = 8040;
+    export const MEAT = 8041;
+    export const MANA_POTION = 8007;
+    export const SHOVEL = 8053;
+    export const ROPE = 8052;
     export const MACHETE = 43;
-    export const PICKAXE = 66;
+    export const PICKAXE = 8054;
     export const HOLE = 125; // Sprite for open hole
     export const ROPE_SPOT = 126; // Sprite for rope spot/ceiling hole
+    export const CORPSE = 299;
 
     // UI Sprites
     export const SWORD = 42;
@@ -79,8 +98,12 @@ export namespace SPRITES {
     export const FLOOR_DIRT = 11;    // Procedural Dirt (Keep)
     export const FLOOR_GRASS_VAR = 16; // Procedural Grass Var
 
+    // Rookgaard
+    export const SANDSTONE = 310;
+    export const TEMPLE_FLOOR = 311;
+    export const SEWER_GRATE = 312;
+
     // --- CUSTOM GENERATED ASSETS ---
-    export const CUSTOM_GRASS_FLOWERS = 300;
     export const CUSTOM_SAND = 301;
     export const CUSTOM_WOOD_FENCE = 302;
     export const CUSTOM_DRAGON_HATCHLING = 303;
@@ -112,11 +135,16 @@ export namespace SPRITES {
     export const DWARF_GEOMANCER = 255; // Mage
 
     // TOWN NPCS
-    export const NPC_MERCHANT = 260;
-    export const NPC_HEALER = 261;
-    export const NPC_GUIDE = 262;
-    export const NPC = 262; // Generic NPC
-    export const CORPSE = 299; // Generic Corpse Sprite (Skull/Skeleton)
+    export const NPC_MERCHANT = 260; // Generic
+    export const NPC_HEALER = 261;   // Generic
+    export const NPC_GUIDE = 262;    // Generic
+
+    // SPECIFIC NPCS
+    export const NPC_BANKER = 263;
+    export const NPC_WIZARD = 264;
+    export const NPC_BLACKSMITH = 265;
+    export const NPC_PRIEST = 266;
+    export const NPC_BEGGAR = 267;
 
     // --- MISSING PLACEHOLDERS ---
     export const MAGE = 265;
@@ -130,6 +158,10 @@ export namespace SPRITES {
     export const ICE_BOW = 275;
     export const CRAB = 276;
     export const SIREN = 277;
+
+    // NEW MOBS
+    export const BANDIT = 212;
+    export const CYCLOPS = 7003;
     // HYDRA moved to BOSSES section (ID 332)
     export const GOLEM = 279;
     export const BASILISK = 280;
@@ -161,7 +193,7 @@ export namespace SPRITES {
     export const SAND = 311;
     export const SWAMP_MUD = 312;
     export const ICE = 313;
-    export const SANDSTONE = 314;
+    // export const SANDSTONE = 314; // Duplicate, using 310
     export const JUNGLE_GRASS = 315;
 
     // --- NATURE ---
@@ -169,6 +201,7 @@ export namespace SPRITES {
     export const CACTUS = 53;    // New ID needed? Using placeholder
     export const DROWNED_TREE = 54;
     export const STAIRS_DOWN = 283; // Reuse stairs
+    export const STAIRS_UP = 284;
 
     // --- BIOME MOBS ---
     export const POLAR_BEAR = 320;
@@ -185,51 +218,51 @@ export namespace SPRITES {
     export const ORC_WARLORD = 333;
 
     // --- WEAPONS: SWORDS ---
-    export const RAPIER = 400;
-    export const SABRE = 401;
-    export const BROADSWORD = 402;
-    export const SPIKE_SWORD = 403;
+    export const RAPIER = 8000;
+    export const SABRE = 8001;
+    export const BROADSWORD = 8002;
+    export const SPIKE_SWORD = 8055;
     export const BRIGHT_SWORD = 404;
-    export const ICE_RAPIER = 405; // Glass cannon
+    export const ICE_RAPIER = 8058; // Glass cannon
     export const GIANT_SWORD = 406; // Two-handed
-    export const MAGIC_SWORD = 407; // End game
+    export const MAGIC_SWORD = 8056; // End game
 
     // --- WEAPONS: AXES ---
-    export const HAND_AXE = 410;
-    export const HATCHET = 411;
+    export const HAND_AXE = 8029;
+    export const HATCHET = 8060;
     export const ORC_AXE = 412; // Barbarian Axe
-    export const BATTLE_AXE = 413;
-    export const DOUBLE_AXE = 414;
-    export const GREAT_AXE = 415; // Two-handed
+    export const BATTLE_AXE = 8030;
+    export const DOUBLE_AXE = 8050; // Using silver double axe from misc
+    export const GREAT_AXE = 8031; // Two-handed
     export const STONE_CUTTER_AXE = 416; // End game
 
     // --- WEAPONS: CLUBS ---
-    export const STUDDED_CLUB = 420;
-    export const MACE = 421;
-    export const MORNING_STAR = 422;
+    export const STUDDED_CLUB = 8048;
+    export const MACE = 8049;
+    export const MORNING_STAR = 8051;
     export const WAR_HAMMER = 423; // Two-handed
     export const SKULL_STAFF = 424; // Necro staff
     export const THUNDER_HAMMER = 425; // End game
 
     // --- ARMOR SETS ---
     // Leather (Basic)
-    export const LEATHER_HELMET = 430;
-    export const LEATHER_ARMOR = 431;
+    export const LEATHER_HELMET = 8020;
+    export const LEATHER_ARMOR = 8009;
     export const LEATHER_LEGS = 432;
     export const LEATHER_BOOTS = 433;
 
     // Chain/Brass (Mid)
-    export const CHAIN_HELMET = 434;
-    export const CHAIN_ARMOR = 435;
+    export const CHAIN_HELMET = 8021;
+    export const CHAIN_ARMOR = 8010;
     export const CHAIN_LEGS = 436;
 
     // Plate (High-Mid)
-    export const PLATE_HELMET = 437; // Distinct from Iron Helm
+    export const PLATE_HELMET = 8022; // Using Knight Helm for now as high-mid
     // Note: PLATE_ARMOR/LEGS exist (ID 2, 4). We can alias or replace.
 
     // Knight (High)
-    export const KNIGHT_HELMET = 440;
-    export const KNIGHT_ARMOR = 441;
+    export const KNIGHT_HELMET = 8022;
+    export const KNIGHT_ARMOR = 8011;
     export const KNIGHT_LEGS = 442;
     export const STEEL_BOOTS = 444; // 443 reserved?
 
@@ -239,23 +272,23 @@ export namespace SPRITES {
 
     // --- MISC ITEMS / LOOT ---
 
-    export const WOLF_PELT = 160;
+    export const WOLF_PELT = 8041;
     export const BEAR_FUR = 161;
     export const VENOM_DAGGER = 157;
 
     // --- MISSING EQUIPMENT ---
-    export const BONE_SWORD = 153; // Legacy ID or new range? Keeping legacy for now.
-    export const SKULL_HELMET = 163;
-    export const DRAGON_SHIELD = 166;
+    export const BONE_SWORD = 8057; // Using void sword as bone/dark sword
+    export const SKULL_HELMET = 8023;
+    export const DRAGON_SHIELD = 8028;
     export const DRAGON_SCALE_ARMOR = 162; // Placeholder
 
     // --- ELEMENTAL WEAPONS ---
     // Fire
-    export const FIRE_SWORD = 500;
+    export const FIRE_SWORD = 8003;
     export const FIRE_AXE = 501;
     export const INFERNO_BLADE = 502;
     // Ice
-    export const FROST_BLADE = 510;
+    export const FROST_BLADE = 8059;
     export const GLACIAL_AXE = 511;
     export const FROZEN_MACE = 512;
     // Lightning
@@ -270,7 +303,7 @@ export namespace SPRITES {
     // --- ELEMENTAL ARMOR ---
     // Fire
     export const FLAME_ARMOR = 540;
-    export const FLAME_HELMET = 541;
+    export const FLAME_HELMET = 8025;
     export const FLAME_LEGS = 542;
     export const FLAME_BOOTS = 543;
     // Ice
@@ -303,7 +336,7 @@ export namespace SPRITES {
     export const DOOR_WOOD = 589;         // Wooden door
     export const DOOR_METAL = 590;        // Metal door
     export const WELL = 591;              // Town well
-    export const FOUNTAIN = 592;          // Fountain
+    export const FOUNTAIN = 1373;
     export const SIGNPOST = 593;          // Signpost
     export const LAMPPOST = 594;          // Street lamp
     export const TABLE = 595;             // Table
@@ -314,4 +347,196 @@ export namespace SPRITES {
     export const WALL_3D = 600;           // 3D-looking wall (thick/deep)
     export const WALL_L2 = 601;           // 2nd story wall (tall)
     export const TOWN_WALL = 602;         // Rookgaard perimeter wall
+
+    // ============================================================
+    // AUTO-BORDER SPRITES (Tibia 8.60 Bitmasking System)
+    // ============================================================
+
+    // Grass Borders (Overlay tiles - placed on top of ground)
+    export const GRASS_BORDER_N = 4542;   // North edge
+    export const GRASS_BORDER_E = 4543;   // East edge
+    export const GRASS_BORDER_S = 4544;   // South edge
+    export const GRASS_BORDER_W = 4545;   // West edge
+    export const GRASS_INNER_NE = 4546;   // Inner corner NE
+    export const GRASS_INNER_SE = 4547;   // Inner corner SE
+    export const GRASS_INNER_SW = 4548;   // Inner corner SW
+    export const GRASS_INNER_NW = 4549;   // Inner corner NW
+    export const GRASS_OUTER_NW = 4550;   // Outer corner NW
+    export const GRASS_OUTER_NE = 4551;   // Outer corner NE
+    export const GRASS_OUTER_SE = 4552;   // Outer corner SE
+    export const GRASS_OUTER_SW = 4553;   // Outer corner SW
+
+    // Sand Borders
+    export const SAND_BORDER_N = 4554;
+    export const SAND_BORDER_E = 4555;
+    export const SAND_BORDER_S = 4556;
+    export const SAND_BORDER_W = 4557;
+    export const SAND_INNER_NE = 4558;
+    export const SAND_INNER_SE = 4559;
+    export const SAND_INNER_SW = 4560;
+    export const SAND_INNER_NW = 4561;
+
+    // Mountain Walls (Blocking - Tibia 8.60)
+    export const MOUNTAIN_N = 4468;       // North wall
+    export const MOUNTAIN_W = 4469;       // West wall
+    export const MOUNTAIN_S = 4470;       // South wall
+    export const MOUNTAIN_E = 4471;       // East wall
+    export const MOUNTAIN_INNER_NE = 4472; // Inner corner NE
+    export const MOUNTAIN_INNER_SE = 4473; // Inner corner SE
+    export const MOUNTAIN_INNER_SW = 4474; // Inner corner SW
+    export const MOUNTAIN_INNER_NW = 4475; // Inner corner NW
+    export const MOUNTAIN_OUTER_NE = 4476; // Outer corner NE
+    export const MOUNTAIN_OUTER_SE = 4477; // Outer corner SE
+    export const MOUNTAIN_OUTER_SW = 4478; // Outer corner SW
+    export const MOUNTAIN_OUTER_NW = 4479; // Outer corner NW
+    export const MOUNTAIN_TOP = 4480;      // Mountain top ground
+
+    export const MOUNTAIN_ASSETS = {
+        // STRAIGHT WALLS
+        NORTH: 4469,  // Top edge
+        EAST: 4472,   // Right edge
+        SOUTH: 4475,  // Bottom edge
+        WEST: 4471,   // Left edge
+
+        // OUTER CORNERS (The "tips" of the mountain)
+        CORNER_NW: 4468, // Top-Left
+        CORNER_NE: 4470, // Top-Right
+        CORNER_SW: 4474, // Bottom-Left
+        CORNER_SE: 4473, // Bottom-Right
+
+        // INNER CORNERS (The "coves" or inside turns)
+        INNER_NW: 4476,
+        INNER_NE: 4477,
+        INNER_SW: 4479,
+        INNER_SE: 4478
+    };
+
+    // Ramps (Auto Z-change when walked on)
+    export const RAMP_N = 1950;           // North ramp (walk up)
+    export const RAMP_E = 1951;           // East ramp
+    export const RAMP_S = 1952;           // South ramp
+    export const RAMP_W = 1953;           // West ramp
+
+    // Vertical Navigation (Ladders/Holes)
+    export const HOLE_DOWN = 594;         // Hole to fall through
+    export const ROPE_SPOT_FLOOR = 384;   // Floor under hole (rope usable)
+    export const LADDER_UP = 1386;        // Ladder (click to climb)
+    export const STAIRS_STONE_DOWN = 1390; // Stone stairs down
+    export const STAIRS_STONE_UP = 1391;   // Stone stairs up
+
+    export const MAGIC_FIELD_BLUE = 1492;
 }
+
+export const EDRON_ASSETS = {
+    // 1. STRUCTURE (White Stone Architecture)
+    WALLS: {
+        PILLAR: 1050,      // The "Joint" column
+        HORIZONTAL: 1052,
+        VERTICAL: 1054,
+        CORNER_TL: 1056,
+        CORNER_TR: 1055,
+        CORNER_BL: 1058,
+        CORNER_BR: 1057,
+        WINDOW_H: 1051,    // Wall with Window (South)
+        WINDOW_V: 1053     // Wall with Window (East)
+    },
+
+    // 2. FLOORING
+    FLOORS: {
+        COBBLESTONE: 446,      // The main streets
+        PAVEMENT_LIGHT: 450,   // Town square / Plaza center
+        CHECKERED: 406,        // Depot/Bank floors (Black/White tiles)
+        STONE_FLOOR: 405,      // Inside houses
+        WOOD_FLOOR: 401        // Inside shops/taverns
+    },
+
+    // 3. DOORS (Castle Style)
+    DOORS: {
+        LOCKED_H: 1634,    // Horizontal Closed
+        LOCKED_V: 1637,
+        OPEN_H: 1635,
+        OPEN_V: 1638,
+        ARCHWAY: 1642      // Open stone arch (No door)
+    },
+
+    // 4. DECORATION (The "Vibe")
+    DECOR: {
+        STREET_LAMP: 1442,     // The tall iron lamp
+        WALL_TORCH: 1481,      // Torch for inside dungeons/towers
+        KNIGHT_STATUE: 1446,   // Edron has many statues
+        FOUNTAIN_WATER: 1373,  // Centerpiece for the plaza
+        POTTED_FLOWER: 2983,   // Red flowers in pots (Rich look)
+        TRASH_CAN: 1728        // Wooden trash barrel (essential for towns)
+    },
+
+    // 5. SHOPS & FURNITURE
+    FURNITURE: {
+        COUNTER_WOOD_H: 1616,  // Shop counter
+        COUNTER_WOOD_V: 1615,
+        LOCKER: 2589,          // Depot Locker
+        BANK_SAFE: 1716,       // Bank Vault
+        BOOKS: 1735,           // Library decoration
+        BLACKBOARD: 1738       // Magic Academy decoration
+    },
+
+    STAIR_ASSETS: {
+        // Stone Ramps (Go UP)
+        RAMP_NORTH: 1950, // Walk North into this -> Go Up + North
+        RAMP_EAST: 1951,  // Walk East into this -> Go Up + East
+        RAMP_SOUTH: 1952, // Walk South into this -> Go Up + South
+        RAMP_WEST: 1953,  // Walk West into this -> Go Up + West
+
+        // Stairs Down (Go DOWN)
+        STAIRS_DOWN: 438, // Generic stone hole/stairs down
+    },
+
+    // NEW AI-GENERATED ASSETS (Phase 31)
+    NEW_ASSETS: {
+        // City Walls (2x2 grid, each 256x256 in source -> 64x64 in game)
+        WALL_VERTICAL: 5000,      // North-South wall segment
+        WALL_HORIZONTAL: 5001,    // West-East wall segment
+        WALL_PILLAR: 5002,        // Corner pillar
+        WALL_ARCHWAY: 5003,       // Arched doorway
+
+        // Mountain Cliffs
+        CLIFF_NORTH: 5010,        // Rocky face (north edge)
+        CLIFF_SOUTH: 5011,        // Grass-topped edge (south)
+        CLIFF_EAST: 5012,         // East border
+        CLIFF_WEST: 5013,         // West border
+        CLIFF_RAMP: 5014,         // Stone ramp/stairs
+
+        // Ground Tiles (seamless 32x32)
+        COBBLESTONE_NEW: 5020,    // Grey city road
+        FLAGSTONE: 5021,          // Light plaza pavement
+        GRASS_NEW: 5022,          // Dark green with texture
+        DIRT_PATH: 5023,          // Brown dirt
+
+        // City Props
+        LAMP_LIT: 5030,           // Iron street lamp (lit)
+        LAMP_UNLIT: 5031,         // Iron street lamp (unlit)
+        CRATES_BARRELS: 5032,     // Stacked crates & barrels
+        BARREL_SINGLE: 5033,      // Single barrel
+        FLOWER_POT: 5034,         // Red flowers
+        SHOP_COUNTER: 5035,       // Wooden counter
+        SEWER_GRATE_NEW: 5036,    // Round sewer grate
+    }
+};
+
+// Tibia Standard IDs (Aliases for existing SPRITES)
+export const CORPSE_IDS = {
+    HUMAN: SPRITES.HUMAN_CORPSE,   // 298
+    GOBLIN: SPRITES.ORC_DEAD,      // 297 (Using Orc dead for goblin)
+    DRAGON: SPRITES.ZOMBIE_DEAD,   // 22 (Placeholder)
+    RAT: SPRITES.RAT_DEAD,         // 293
+    DEFAULT: SPRITES.CORPSE        // 299
+};
+
+export const ITEM_IDS = {
+    GOLD_COIN: 40,                // ItemRegistry key for Gold Coin (uIndex 8008)
+    APPLE: SPRITES.APPLE,         // 8040
+    MEAT: 170,                    // ItemRegistry key for Wolf Meat (uIndex 8041)
+    DAGGER: 42,                   // ItemRegistry key for Short Sword
+    LEATHER_LEGS: SPRITES.LEATHER_LEGS,   // 432
+    LONG_SWORD: 152,              // ItemRegistry key for Iron Sword
+    DRAGON_HAMMER: 142            // ItemRegistry key for Warhammer
+};

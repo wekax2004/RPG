@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Tibia Sprite Cutter</title>
+    <style>
+        body {
+            background: #333;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #canvas-container {
+            position: relative;
+            border: 2px solid #555;
+            margin-top: 10px;
+            overflow: auto;
+            max-width: 90vw;
+            max-height: 70vh;
+        }
+
+        canvas {
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M0 0h16v16H0zm16 16h16v16H16z" fill="%23444"/></svg>');
+        }
+
+        #output {
+            background: #111;
+            padding: 10px;
+            width: 80%;
+            font-family: monospace;
+            border: 1px solid #666;
+            margin-top: 10px;
+        }
+
+        .controls {
+            margin: 10px;
+            background: #222;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        input[type="file"] {
+            color: yellow;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>⚔️ Sprite Cutter Tool</h1>
+    <div class="controls">
+        1. Upload Image: <input type="file" id="fileInput" accept="image/*"><br>
+        2. Drag a box around the sprite you want.<br>
+        3. Copy the code below.
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <h3>Output Code (Paste into src/data/sprites_map.ts)</h3>
+    <textarea id="output" rows="3">Select a sprite...</textarea>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const fileInput = document.getElementById('fileInput');
+        const output = document.getElementById('output');
+        let img = new Image();
+        let startX, startY, isDragging = false;
+        let rect = { x: 0, y: 0, w: 0, h: 0 };
+        let imageName = "walls"; // Default
+        let spriteId = 5000; // Starting ID
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            // Guess name from filename
+            if (file.name.toLowerCase().includes("wall")) { imageName = "walls"; spriteId = 5000; }
+            else if (file.name.toLowerCase().includes("floor")) { imageName = "floors"; spriteId = 5020; }
+            else if (file.name.toLowerCase().includes("decor")) { imageName = "decor"; spriteId = 5030; }
+            else if (file.name.toLowerCase().includes("mountain")) { imageName = "mountains"; spriteId = 5010; }
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    draw();
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        });
+
+        canvas.addEventListener('mousedown', e => {
+            const b = canvas.getBoundingClientRect();
+            startX = e.clientX - b.left;
+            startY = e.clientY - b.top;
+            isDragging = true;
+        });
+
+        canvas.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            const b = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - b.left;
+            const mouseY = e.clientY - b.top;
+            rect.w = mouseX - startX;
+            rect.h = mouseY - startY;
+            draw();
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            // Snap to nearest integer
+            const x = Math.floor(startX);
+            const y = Math.floor(startY);
+            const w = Math.floor(rect.w);
+            const h = Math.floor(rect.h);
+
+            // Generate Code for sprites_map.ts format
+            const code = `${spriteId}: { file: '/sprites/${imageName}.png', x: ${x}, y: ${y}, width: ${w}, height: ${h} }, // ${imageName.toUpperCase()} - ${w}x${h}`;
+            output.value = code;
+            output.select();
+            try { document.execCommand("copy"); } catch (e) { }
+
+            // Increment sprite ID for next selection
+            spriteId++;
+        });
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            if (isDragging || rect.w > 0) {
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(startX, startY, rect.w, rect.h);
+
+                ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+                ctx.fillRect(startX, startY, rect.w, rect.h);
+
+                // Show dimensions
+                ctx.fillStyle = "white";
+                ctx.font = "14px monospace";
+                ctx.fillText(`${Math.floor(rect.w)} x ${Math.floor(rect.h)}`, startX + 5, startY + 18);
+            }
+        }
+    </script>
+</body>
+
+</html>

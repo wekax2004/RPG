@@ -2,6 +2,36 @@ import { SPRITES } from './constants';
 import { RNG } from './rng';
 import { Tile } from './components';
 
+// --- WALL BITMASKING (4-Bit Adjacency) ---
+// North=1, East=2, South=4, West=8
+export const WALL_TABLE: Record<number, number> = {
+    0: SPRITES.STONE_PILLAR || 1050, // Isolated
+    1: SPRITES.WALL_STONE_V,        // N
+    2: SPRITES.WALL_STONE_H,        // E
+    3: SPRITES.WALL_STONE_NE,       // N + E
+    4: SPRITES.WALL_STONE_V,        // S
+    5: SPRITES.WALL_STONE_V,        // N + S (Vertical)
+    6: SPRITES.WALL_STONE_SE,       // S + E
+    7: SPRITES.STONE_PILLAR || 1050, // N + S + E (T-Junction)
+    8: SPRITES.WALL_STONE_H,        // W
+    9: SPRITES.WALL_STONE_NW,       // N + W
+    10: SPRITES.WALL_STONE_H,       // E + W (Horizontal)
+    11: SPRITES.STONE_PILLAR || 1050, // N + E + W (T-Junction)
+    12: SPRITES.WALL_STONE_SW,      // S + W
+    13: SPRITES.STONE_PILLAR || 1050, // N + S + W (T-Junction)
+    14: SPRITES.STONE_PILLAR || 1050, // S + E + W (T-Junction)
+    15: SPRITES.STONE_PILLAR || 1050  // N + S + E + W (Cross)
+};
+
+export function calculateWallMask(x: number, y: number, width: number, height: number, wallIndices: Set<number>): number {
+    let mask = 0;
+    if (y > 0 && wallIndices.has((y - 1) * width + x)) mask |= 1;      // North
+    if (x < width - 1 && wallIndices.has(y * width + (x + 1))) mask |= 2; // East
+    if (y < height - 1 && wallIndices.has((y + 1) * width + x)) mask |= 4; // South
+    if (x > 0 && wallIndices.has(y * width + (x - 1))) mask |= 8;     // West
+    return mask;
+}
+
 export function generateOverworld(width: number, height: number, seed: number): { width: number, height: number, tileSize: number, tiles: Tile[], entities: any[] } {
     const rng = new RNG(seed);
     const tiles = Array(width * height).fill(null).map(() => new Tile());
@@ -10,6 +40,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
     // IDs
     const GRASS = SPRITES.GRASS_FLOWERS; // 16
     const WALL = SPRITES.STONE_WALL; // 17
+    const stoneWallIndices = new Set<number>();
 
     // --- NEW: TOWN SETTINGS ---
     const centerX = Math.floor(width / 2);
@@ -23,7 +54,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
 
             // Edges of the world are always walls
             if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
-                tiles[index].add(WALL);
+                stoneWallIndices.add(index);
                 continue;
             }
 
@@ -91,7 +122,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
                 y === centerY - townRadius || y === centerY + townRadius;
 
             if (isBorder) {
-                if (!tiles[index].has(WALL)) tiles[index].add(WALL);
+                stoneWallIndices.add(index);
             } else {
                 while (tiles[index].has(WALL)) tiles[index].pop();
                 // Clear natural obstacles inside town
@@ -311,7 +342,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
                 const idx = y * width + x;
                 tiles[idx].items = []; // Clear trees/grass
                 tiles[idx].add(SPRITES.COBBLE); // Floor under wall
-                tiles[idx].add(SPRITES.TOWN_WALL || 602);
+                stoneWallIndices.add(idx);
             }
         }
     }
@@ -358,7 +389,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
 
             if (mx > 0 && mx < width && my > 0 && my < height) {
                 const idx = my * width + mx;
-                if (!tiles[idx].has(WALL) && !tiles[idx].has(SPRITES.WATER)) {
+                if (!stoneWallIndices.has(idx) && !tiles[idx].has(SPRITES.WATER)) {
                     entities.push({ type: 'enemy', x: mx * 32, y: my * 32, enemyType: type });
                 }
             }
@@ -383,10 +414,9 @@ export function generateOverworld(width: number, height: number, seed: number): 
                     tiles[fIdx].items = []; // Clear
                     tiles[fIdx].add(SPRITES.DIRT); // Mud floor
 
-                    // Walls
                     if (Math.abs(fx - ox) > fortSize / 2 - 1 || Math.abs(fy - oy) > fortSize / 2 - 1) {
                         if (fx !== ox && fy !== oy + Math.floor(fortSize / 2)) { // Entrance
-                            tiles[fIdx].add(SPRITES.WALL_STONE_V); // Wooden palisade? reusing stone for now
+                            stoneWallIndices.add(fIdx);
                         }
                     }
                 }
@@ -462,7 +492,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
 
             if (isCorrectBiome) {
                 const idx = by * width + bx;
-                if (!tiles[idx].has(WALL)) {
+                if (!stoneWallIndices.has(idx)) {
                     // Safe to spawn
                     const ent: any = {
                         type: 'dungeon_entrance',
@@ -512,7 +542,16 @@ export function generateOverworld(width: number, height: number, seed: number): 
     tiles[waterIdx].items = [];
     tiles[waterIdx].add(SPRITES.WATER);
 
-    console.log("[MapGen] Town and Walls Generated (Stack Mode).");
+    // --- FINAL PASS: BITMASKED WALLS ---
+    for (const idx of stoneWallIndices) {
+        const wx = idx % width;
+        const wy = Math.floor(idx / width);
+        const mask = calculateWallMask(wx, wy, width, height, stoneWallIndices);
+        const spriteId = WALL_TABLE[mask] || SPRITES.STONE_WALL;
+        tiles[idx].add(spriteId);
+    }
+
+    console.log("[MapGen] Town and Walls Generated (Bitmask Mode).");
     return { width, height, tileSize: 32, tiles, entities };
 }
 
@@ -524,6 +563,7 @@ export function generateDungeon(width: number, height: number, seed: number, typ
     // IDs
     const WALL_STONE = SPRITES.STONE_WALL;
     const FLOOR_STONE = SPRITES.FLOOR_STONE;
+    const stoneWallIndices = new Set<number>();
 
     // Biome Overrides
     let WALL_CAVE = SPRITES.STONE_WALL;
@@ -550,7 +590,7 @@ export function generateDungeon(width: number, height: number, seed: number, typ
                 const idx = y * width + x;
                 tiles[idx].add(FLOOR);
                 if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
-                    tiles[idx].add(WALL);
+                    stoneWallIndices.add(idx);
                 }
             }
         }
@@ -591,7 +631,7 @@ export function generateDungeon(width: number, height: number, seed: number, typ
                 tiles[idx].add(FLOOR);
                 if (map[idx] === 1 || x === 0 || x === width - 1 || y === 0 || y === height - 1) {
                     // Wall
-                    tiles[idx].add(WALL);
+                    stoneWallIndices.add(idx);
                 } else {
                     // Decor
                     if (rng.next() > 0.98) tiles[idx].add(SPRITES.ROCK);
@@ -611,7 +651,7 @@ export function generateDungeon(width: number, height: number, seed: number, typ
         if (x > 1 && x < width - 1 && y > 1 && y < height - 1) {
             // Check if Not Wall
             // In Stack: Check items
-            const hasWall = tiles[idx].items.some(i => i.id === WALL || i.id === WALL_CAVE);
+            const hasWall = stoneWallIndices.has(idx);
             if (!hasWall) {
                 tiles[idx].add(SPRITES.ROPE_SPOT);
                 entities.push({ type: 'dungeon_exit', x: x * 32, y: y * 32 });
@@ -633,7 +673,7 @@ export function generateDungeon(width: number, height: number, seed: number, typ
             const idx = my * width + mx;
 
             // Check solid
-            const hasWall = tiles[idx].items.some(i => i.id === WALL || i.id === WALL_CAVE);
+            const hasWall = stoneWallIndices.has(idx);
             if (!hasWall) {
                 let mobType = 'rat';
                 const roll = rng.next();
@@ -675,7 +715,7 @@ export function generateDungeon(width: number, height: number, seed: number, typ
         bossAttempts++;
         const idx = by * width + bx;
 
-        const hasWall = tiles[idx].items.some(i => i.id === WALL || i.id === WALL_CAVE);
+        const hasWall = stoneWallIndices.has(idx);
         if (!hasWall) {
             let bossType = '';
             if (biome === 'snow') bossType = 'frost_giant';
@@ -697,6 +737,20 @@ export function generateDungeon(width: number, height: number, seed: number, typ
         }
     }
 
-    console.log(`[MapGen] Generated ${type} map.`);
+    // --- FINAL PASS: BITMASKED WALLS ---
+    for (const idx of stoneWallIndices) {
+        const wx = idx % width;
+        const wy = Math.floor(idx / width);
+        const mask = calculateWallMask(wx, wy, width, height, stoneWallIndices);
+
+        // If it's a dungeon, we use the STONE_WALL set. 
+        // If it's a cave, we might want to use the cave wall id, 
+        // but the user requested bitmasking for "walls" generally.
+        // For now, we'll use WALL_TABLE for dungeons/caves to ensure they connect.
+        const spriteId = WALL_TABLE[mask] || WALL;
+        tiles[idx].add(spriteId);
+    }
+
+    console.log(`[MapGen] Generated ${type} map (Bitmask Mode).`);
     return { width, height, tileSize: 32, tiles, entities };
 }

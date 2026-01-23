@@ -1,4 +1,4 @@
-/* RETRO GAME CLIENT STYLE */
+/* RETRO GAME CLIENT STYLE - Classic Tibia/Windows 95 Theme */
 body,
 html {
     margin: 0;
@@ -7,6 +7,7 @@ html {
     height: 100%;
     background-color: #0d0d0d;
     font-family: 'Verdana', sans-serif;
+    font-size: 11px;
     color: #c0c0c0;
     overflow: hidden;
 }
@@ -15,6 +16,10 @@ html {
     display: flex;
     width: 100vw;
     height: 100vh;
+    background-color: #d4d0c8;
+    /* Classic Windows Grey */
+    border: 2px outset #ffffff;
+    box-sizing: border-box;
 }
 
 /* LEFT COLUMN */
@@ -596,3 +601,7 @@ button:active {
 .skill-header span:nth-child(2) {
     justify-self: center;
 }
+/* NPC SHOP WINDOW */
+.draggable-window { background: #d4d0c8 !important; border: 2px outset #fff !important; color: #000 !important; }
+.window-header { background: #000080 !important; color: #fff !important; padding: 2px; }
+.shop-row:hover { background: #000080 !important; color: #fff !important; }

@@ -138,12 +138,14 @@ export function loadGame(world: World): boolean {
                         itemDef.name,
                         itemDef.slot || "none",
                         itemDef.uIndex || 0,
-                        itemDef.attack || 0, // damage
+                        itemDef.attack || 0, // attack
                         itemDef.price || 0, // price
                         itemDef.description || "",
                         itemDef.type === "weapon" ? "melee" : "none",
                         itemDef.rarity || "common",
                         itemDef.defense || 0,
+                        0, // armor
+                        0, // speed
                         0, // bonusHp
                         0, // bonusMana
                         itemDef.type === "container",
@@ -195,10 +197,16 @@ export function loadGame(world: World): boolean {
                     bagDef.type === "weapon" ? "melee" : "none",
                     bagDef.rarity || "common",
                     bagDef.defense || 0,
-                    0, 0,
+                    0, // armor
+                    0, // speed
+                    0, // bonusHp
+                    0, // bonusMana
                     true, // isContainer
                     bagDef.type === "container" ? 20 : 0, // containerSize assumption
-                    undefined, 0, 0, 0,
+                    undefined, // glowColor
+                    0, // glowRadius
+                    0, // frame
+                    0, // direction
                     bagDef.uIndex || 0
                 );
                 const bagInst = new ItemInstance(bagItem, 1);
@@ -216,10 +224,16 @@ export function loadGame(world: World): boolean {
                             iDef.type === "weapon" ? "melee" : "none",
                             iDef.rarity || "common",
                             iDef.defense || 0,
-                            0, 0,
+                            0, // armor
+                            0, // speed
+                            0, // bonusHp
+                            0, // bonusMana
                             iDef.type === "container",
                             0, // containerSize
-                            undefined, 0, 0, 0,
+                            undefined, // glowColor
+                            0, // glowRadius
+                            0, // frame
+                            0, // direction
                             iDef.uIndex || 0
                         );
                         bagInst.contents.push(new ItemInstance(item, b.count));

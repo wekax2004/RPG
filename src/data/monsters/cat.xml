@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<monster name="Cat" nameDescription="a cat" race="animal" experience="0" speed="100" manacost="255">
+    <health now="20" max="20"/>
+    <look type="302" corpse="5968"/>
+    <targetchange interval="4000" chance="10"/>
+    
+    <flags>
+        <flag illusionable="0"/>
+        <flag convinceable="0"/>
+        <flag pushable="1"/>
+        <flag canpushitems="0"/>
+        <flag canpushcreatures="0"/>
+        <flag targetdistance="1"/>
+        <flag staticattack="90"/>
+        <flag runonhealth="20"/>
+    </flags>
+    
+    <attacks>
+        <!-- Passive creature: No attacks -->
+    </attacks>
+    
+    <defenses armor="2" defense="2">
+        <defense name="speed" interval="1000" chance="60" speedchange="200" duration="1500"/>
+    </defenses>
+    
+    <elements>
+        <element physicalPercent="0"/>
+    </elements>
+    
+    <immunities>
+        <!-- No immunities -->
+    </immunities>
+    
+    <voices interval="5000" chance="10">
+        <voice sentence="Meow!" yell="0"/>
+        <voice sentence="Purrrr..." yell="0"/>
+    </voices>
+    
+    <loot>
+        <!-- Cats don't drop loot -->
+    </loot>
+    
+    <behavior>
+        <flee health="20"/>
+        <hostile value="false"/>
+    </behavior>
+</monster>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<monster name="Mechanical Tactician" nameDescription="a mechanical tactician" race="construct" experience="750" speed="105" manacost="0">
+    <health now="500" max="500"/>
+    <look type="396" corpse="7891"/>
+    <targetchange interval="2000" chance="25"/>
+    
+    <flags>
+        <flag summonable="0"/>
+        <flag attackable="1"/>
+        <flag hostile="1"/>
+        <flag illusionable="0"/>
+        <flag convinceable="0"/>
+        <flag pushable="0"/>
+        <flag canpushitems="1"/>
+        <flag canpushcreatures="1"/>
+        <flag targetdistance="5"/>
+        <flag staticattack="95"/>
+        <flag runonhealth="0"/>
+    </flags>
+    
+    <attacks>
+        <attack name="melee" interval="2000" skill="45" attack="35"/>
+        <attack name="physical" interval="1500" chance="45" range="7" min="-40" max="-70">
+            <attribute key="shootEffect" value="bolt"/>
+        </attack>
+        <attack name="physical" interval="2500" chance="30" range="7" radius="2" min="-50" max="-90">
+            <attribute key="shootEffect" value="arrow"/>
+            <attribute key="areaEffect" value="smoke"/>
+        </attack>
+        <attack name="energy" interval="3000" chance="20" range="6" min="-30" max="-55">
+            <attribute key="shootEffect" value="energy"/>
+            <attribute key="areaEffect" value="blueshimmer"/>
+        </attack>
+    </attacks>
+    
+    <defenses armor="30" defense="25">
+        <defense name="speed" interval="2000" chance="20" speedchange="150" duration="1500"/>
+    </defenses>
+    
+    <elements>
+        <element physicalPercent="30"/>
+        <element firePercent="-15"/>
+        <element energyPercent="30"/>
+        <element earthPercent="10"/>
+        <element icePercent="-20"/>
+        <element holyPercent="0"/>
+        <element deathPercent="100"/>
+    </elements>
+    
+    <immunities>
+        <immunity lifedrain="1"/>
+        <immunity paralyze="1"/>
+        <immunity invisible="1"/>
+    </immunities>
+    
+    <voices interval="5000" chance="10">
+        <voice sentence="*CLICK* Calculating trajectory..." yell="0"/>
+        <voice sentence="*WHIRR* Engaging tactical subroutines." yell="0"/>
+        <voice sentence="*PING* Hostile detected. Neutralize." yell="0"/>
+    </voices>
+    
+    <loot>
+        <item id="2148" countmax="60" chance="100000"/>  <!-- Gold Coin -->
+        <item id="5880" countmax="4" chance="50000"/>    <!-- Iron Ore -->
+        <item id="9366" countmax="3" chance="40000"/>    <!-- Gear Wheel -->
+        <item id="2149" countmax="1" chance="20000"/>    <!-- Platinum Coin -->
+        <item id="7365" countmax="10" chance="35000"/>   <!-- Bolts -->
+        <item id="2456" countmax="1" chance="5000"/>     <!-- Bow -->
+        <item id="8922" countmax="1" chance="2500"/>     <!-- Stealth Ring -->
+    </loot>
+    
+    <behavior>
+        <flee health="0"/>
+        <hostile value="true"/>
+    </behavior>
+</monster>

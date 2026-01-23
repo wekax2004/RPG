@@ -119,29 +119,29 @@
             <!-- Tibia-Style Equipment Doll (3x4 Grid) -->
             <div id="inventory-container" class="equip-doll">
                 <!-- Row 1: Head, Amulet, Backpack -->
-                <div class="equip-slot" id="slot-head" title="Head"></div>
-                <div class="equip-slot" id="slot-amulet" title="Amulet"></div>
-                <div class="equip-slot" id="slot-backpack" title="Backpack"></div>
+                <div class="equip-slot" id="slot-head" data-type="HEAD" title="Head"></div>
+                <div class="equip-slot" id="slot-amulet" data-type="AMULET" title="Amulet"></div>
+                <div class="equip-slot" id="slot-backpack" data-type="BACKPACK" title="Backpack"></div>
 
                 <!-- Row 2: Left Hand (Shield), Body, Right Hand (Weapon) -->
-                <div class="equip-slot" id="slot-lhand" title="Shield"></div>
-                <div class="equip-slot" id="slot-body" title="Armor"></div>
-                <div class="equip-slot" id="slot-rhand" title="Weapon"></div>
+                <div class="equip-slot" id="slot-lhand" data-type="HAND_L" title="Shield"></div>
+                <div class="equip-slot" id="slot-body" data-type="BODY" title="Armor"></div>
+                <div class="equip-slot" id="slot-rhand" data-type="HAND_R" title="Weapon"></div>
 
                 <!-- Row 3: Ring, Legs, Ammo -->
-                <div class="equip-slot" id="slot-ring" title="Ring"></div>
-                <div class="equip-slot" id="slot-legs" title="Legs"></div>
-                <div class="equip-slot" id="slot-ammo" title="Ammo"></div>
+                <div class="equip-slot" id="slot-ring" data-type="RING" title="Ring"></div>
+                <div class="equip-slot" id="slot-legs" data-type="LEGS" title="Legs"></div>
+                <div class="equip-slot" id="slot-ammo" data-type="AMMO" title="Ammo"></div>
 
                 <!-- Row 4: Empty, Boots, Empty -->
                 <div class="equip-slot empty"></div>
-                <div class="equip-slot" id="slot-boots" title="Boots"></div>
+                <div class="equip-slot" id="slot-boots" data-type="FEET" title="Boots"></div>
                 <div class="equip-slot empty"></div>
             </div>
 
             <!-- Backpack Contents (Inline below equipment in sidebar) -->
             <div id="backpack-panel" class="panel">
-                <div class="panel-header">Backpack</div>
+                <div class="panel-header">Inventory</div>
                 <div id="backpack-grid" class="inventory-grid"></div>
             </div>
 
@@ -156,13 +156,29 @@
             </div>
         </div>
 
-        <!-- Floating Panels (outside sidebar) -->
-        <div id="shop-panel" class="hidden">
-            <!-- Dynamic shop content -->
-            <div class="shop-header">Shop <span class="close-btn"
-                    onclick="document.getElementById('shop-panel').classList.add('hidden')">X</span></div>
-            <div id="shop-buy-list" class="shop-grid"></div>
-            <div id="shop-sell-list" class="shop-grid hidden"></div>
+        <!-- Shop Window (Tibia Style) -->
+        <div id="shop-window" class="draggable-window panel"
+            style="display: none; width: 300px; position: absolute; top: 100px; left: 100px; z-index: 1000;">
+            <div class="window-header panel-header">
+                <span id="shop-title">Trade with Donald</span>
+                <button id="shop-close-btn" class="close-btn"
+                    style="flex: 0; width: 20px; padding: 0; border: none; background: transparent;">x</button>
+            </div>
+
+            <div class="window-content" style="display: flex; gap: 5px; padding: 10px; background: #2a2a2a;">
+                <div id="shop-items-list"
+                    style="flex: 1; height: 200px; background: #1a1a1a; overflow-y: scroll; border: 2px inset #4a4a4a;">
+                </div>
+
+                <div style="width: 80px; display: flex; flex-direction: column; gap: 5px;">
+                    <button style="height: 30px; opacity: 0.5; cursor: not-allowed;"
+                        title="Click items in list to buy">Buy</button>
+                    <button style="height: 30px; opacity: 0.5; cursor: not-allowed;">Sell</button>
+                    <input type="number" id="trade-amount" value="1" min="1"
+                        style="width: 100%; height: 25px; background: #000; color: #fff; border: 1px inset #555;">
+                    <div id="total-price" style="font-size: 10px; text-align: center; color: #ffd700;">Total: 0</div>
+                </div>
+            </div>
         </div>
 
         <!-- Loot Panel (Dynamic) -->

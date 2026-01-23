@@ -2,11 +2,12 @@ import { Entity, World } from '../engine';
 import { SPRITES } from '../constants';
 import { Player } from '../core/player';
 import { WorldMap } from '../core/map';
-import { Health, Name, Position, Sprite, Target, Inventory, ItemInstance, Skills, PlayerControllable, Item } from '../components';
+import { Health, Name, Position, Sprite, Target, Inventory, ItemInstance, Skills, PlayerControllable, Item, RARITY_COLORS, Quest, QuestLog } from '../components';
 import { assetManager } from '../assets';
 import { ItemRegistry } from '../data/items';
 import { attemptCastSpell } from '../game';
 import { gameEvents, EVENTS } from '../core/events';
+import { makeItemDraggable } from '../ui';
 
 // Define what an Open Window looks like
 interface ContainerWindow {
@@ -37,7 +38,10 @@ export class UIManager {
     public bagPanel: HTMLElement = document.createElement('div'); // Stub for compatibility
     public currentMerchant: any = null;
     public activeMerchantId: any | null = null;
-    public console: any = { addSystemMessage: (msg: string) => this.log(msg) };
+    public console: any = {
+        addSystemMessage: (msg: string) => this.log(msg),
+        sendMessage: (msg: string) => this.log(msg)
+    };
     public world: World | undefined;
 
     public updateInventory(inv: any): void {
@@ -55,6 +59,8 @@ export class UIManager {
     public dialogPanel: HTMLElement;
     public dialogText: HTMLElement;
     public dialogNextBtn: HTMLElement;
+
+    public questPanel: HTMLElement; // Added
 
 
     private _lastBattleUpdate: number = 0;
@@ -157,7 +163,11 @@ export class UIManager {
         });
 
         gameEvents.on(EVENTS.SYSTEM_MESSAGE, (msg: string) => {
-            this.log(msg);
+            const text = typeof msg === 'string' ? msg : (msg as any).message || '';
+            if (text.startsWith("Quest") || text.startsWith("New Quest")) {
+                this.showToast(text);
+            }
+            this.log(text);
         });
 
         // 2. Initialize the Loot Panel
@@ -193,7 +203,39 @@ export class UIManager {
 
         document.getElementById('dialog-close')!.onclick = () => this.hideDialogue();
 
-        // Bind the close button properly if needed, or rely on inline onclick above
+        // 4. Initialize Quest Journal
+        this.questPanel = document.createElement('div');
+        this.questPanel.id = 'quest-journal';
+        this.questPanel.style.cssText = `
+            display: none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
+            width: 600px; height: 400px; background: #e8dcb5; border: 4px ridge #8b5a2b;
+            color: #3e2723; padding: 15px; font-family: 'Georgia', serif; box-shadow: 0 0 10px rgba(0,0,0,0.5); z-index: 1000;
+        `;
+        this.questPanel.innerHTML = `
+            <h2 style="text-align:center; margin-top:0; border-bottom: 2px solid #8b5a2b; padding-bottom:5px;">Quest Journal</h2>
+            <div style="display:flex; height: 320px; gap: 10px;">
+                <div id="quest-list" style="width: 40%; background: rgba(0,0,0,0.05); overflow-y: auto; padding: 5px; border: 1px inset #8b5a2b;"></div>
+                <div id="quest-details" style="width: 60%; padding: 10px; background: rgba(255,255,255,0.3); border: 1px inset #8b5a2b; overflow-y: auto;">
+                    <p style="text-align:center; font-style:italic; color:#666;">Select a quest to view details.</p>
+                </div>
+            </div>
+            <button style="position: absolute; top: 10px; right: 10px; background: #8b5a2b; color: #e8dcb5; border: 1px outset #5a3d2b; cursor: pointer; padding: 2px 8px;" onclick="document.getElementById('quest-journal').style.display='none'">X</button>
+        `;
+        document.body.appendChild(this.questPanel);
+
+        // 5. Initialize Toast Container
+        const toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.style.cssText = `position: fixed; top: 20%; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 2000; display: flex; flex-direction: column; gap: 10px; align-items: center;`;
+        document.body.appendChild(toastContainer);
+
+        // Global Keybind for 'J'
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'j' || e.key === 'J') {
+                if (document.activeElement === this.chatInput) return;
+                this.toggleQuestJournal();
+            }
+        });
         const closeBtn = this.lootPanel.querySelector('.close-btn') as HTMLElement;
         closeBtn.onclick = () => this.hideDialogue();
 
@@ -404,7 +446,7 @@ export class UIManager {
                     if (inv) {
                         // Add Bag (if not present)
                         if (!inv.getEquipped('backpack')) {
-                            const bagItem = new Item("Small Bag", "backpack", SPRITES.SMALL_BAG, 0, 30, "A small leather bag.", "none", "common", 0, 0, 0, true, 8);
+                            const bagItem = new Item("Small Bag", "backpack", SPRITES.SMALL_BAG, 0, 30, "A small leather bag.", "none", "common", 0, 0, 0, 0, 0, true, 8);
                             const bagInst = new ItemInstance(bagItem, 1);
 
                             // Content
@@ -457,6 +499,28 @@ export class UIManager {
                 this.log("World Entities: " + world?.entities.size, '#ffff00');
                 return;
             }
+
+            if (cmd === '!tp') {
+                if (parts.length < 4) {
+                    this.log("Usage: !tp x y z", '#ff5555');
+                    return;
+                }
+                const x = parseInt(parts[1]);
+                const y = parseInt(parts[2]);
+                const z = parseInt(parts[3]);
+
+                if (this.player && this.player.id !== undefined) {
+                    const world = (window as any).game?.world;
+                    const pos = world?.getComponent(this.player.id, Position);
+                    if (pos) {
+                        pos.x = x * 32;
+                        pos.y = y * 32;
+                        pos.z = z;
+                        this.log(`Teleported to ${x}, ${y}, ${z}`, '#00ff00');
+                    }
+                }
+                return;
+            }
         }
 
         // Normal chat
@@ -471,7 +535,7 @@ export class UIManager {
         this.player = player; // Still cache for Shop/Loot logic context
     }
 
-    private handleStatsUpdate(player: Player) {
+    public handleStatsUpdate(player: Player) {
         if (!player) return;
         const curHP = Math.floor(player.hp);
         const maxHP = player.maxHp;
@@ -635,16 +699,63 @@ export class UIManager {
             // For now, let's just use text or a colored block if no image source available
             // If you have an asset path: `src="assets/sprites/${item.spriteIndex}.png"`
 
-            // Simpler: Just styled div with text for now (or integrate your sprite sheet canvas later)
-            slot.innerText = item.name.substring(0, 2);
-            slot.title = item.name;
-            slot.style.color = item.color || '#fff';
+            // Render Item Name
+            let name = "??";
+            let color = '#fff';
+            let spriteId = 0;
+
+            // Handle ItemInstance vs Item (Safe check)
+            if (item.item && item.item.name) {
+                name = item.item.name;
+                color = item.item.glowColor || RARITY_COLORS[item.item.rarity as keyof typeof RARITY_COLORS] || '#fff';
+                spriteId = item.item.uIndex || 0;
+            } else if (item.name) {
+                name = item.name; // Fallback if somehow just Item
+                color = item.glowColor || RARITY_COLORS[item.rarity as keyof typeof RARITY_COLORS] || '#fff';
+                spriteId = item.uIndex || item.id || 0;
+            }
+
+            // Draw Sprite
+            if (spriteId > 0) {
+                const sprite = assetManager.getSpriteSource(spriteId);
+                if (sprite && sprite.image) {
+                    const cvs = document.createElement('canvas');
+                    cvs.width = 32;
+                    cvs.height = 32;
+                    const ctx = cvs.getContext('2d');
+                    if (ctx) {
+                        ctx.imageSmoothingEnabled = false;
+                        // Center 32x32 or draw full
+                        // If source is larger, scale down? Standard 32x32 assumed for icons.
+                        // But some items are 32x32 natively.
+                        const dw = Math.min(32, sprite.sw);
+                        const dh = Math.min(32, sprite.sh);
+                        const dx = (32 - dw) / 2;
+                        const dy = (32 - dh) / 2;
+
+                        ctx.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, dx, dy, dw, dh);
+                    }
+                    slot.appendChild(cvs);
+                } else {
+                    slot.innerText = name.substring(0, 2);
+                }
+            } else {
+                slot.innerText = name.substring(0, 2);
+            }
+
+            // slot.innerText = name.substring(0, 2); // Removed text-only fallback
+            slot.title = name;
+            slot.style.border = `1px solid ${color}`; // Add border color matching rarity
 
             // Add Click Handler (Take Item)
             slot.onclick = () => {
+                // Extract actual Item from ItemInstance if needed
+                const actualItem = item.item ? item.item : item;
+                const itemCount = item.count || 1;
+
                 // Try to add to player inventory
-                if (playerInv.addItem(item)) {
-                    this.log(`Looted: ${item.name}`);
+                if (playerInv.addItemInstance(item)) {
+                    this.log(`Looted: ${name}`); // FIX: Use resolved name
 
                     // Remove from Corpse
                     lootable.items.splice(index, 1);
@@ -653,7 +764,12 @@ export class UIManager {
                     this.renderLoot(lootable, playerInv);
 
                     // Update Player UI (Inventory/Stats)
-                    // Note: You might need to trigger inventory UI update here if it's open
+                    // if (this.equipmentUI) {
+                    //     // Refresh inventory if open (assuming we have access or trigger event)
+                    //     gameEvents.emit(EVENTS.INVENTORY_CHANGED, playerInv);
+                    // }
+                    // Always emit change
+                    gameEvents.emit(EVENTS.INVENTORY_CHANGED, playerInv);
                 } else {
                     this.log("Inventory full!", "#ff5555");
                 }
@@ -717,16 +833,189 @@ export class UIManager {
 
     // --- SHOP SYSTEM ---
     public toggleShop(merchantComp: any, merchantName: string) {
-        if (this.activeMerchantId === merchantComp) { // ID check? Actually merchantComp is the component instance?
-            // If toggle logic required, close it. 
-            // But usually opening same merchant just refreshes.
+        // DISABLED: Using src/ui/shop.ts instead
+        console.log("[UIManager] Legacy toggleShop called - ignoring.");
+
+        // Forward to new system if needed, but game.ts already calls it?
+        // If game.ts calls BOTH, we just return here.
+        return;
+    }
+
+    // renderShop duplicate removed
+
+    public renderBackpack(inventory: Inventory) {
+        const grid = document.getElementById('backpack-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        // Get backpack item from slot
+        const backpackInstance = inventory.equipment.get('backpack');
+
+        if (!backpackInstance) {
+            // Show duplicate "No Backpack" message? Or just empty grid?
+            // grid.innerText = "No Backpack"; 
+            // Better: Empty grid slots to look like empty bag
+            return;
         }
 
-        this.shopPanel.style.display = 'block';
-        const header = this.shopPanel.querySelector('.shop-header span') as HTMLElement;
-        if (header) header.innerText = `Shop: ${merchantName}`;
+        // Render Contents
+        backpackInstance.contents.forEach((item: ItemInstance, index: number) => {
+            const slot = document.createElement('div');
+            slot.className = 'loot-slot'; // Reusing loot style for now, or use 'equip-slot' style?
+            // 'loot-slot' is 32x32 usually.
 
-        this.renderShop(merchantComp);
+            // Render Item Sprite/Name
+            let name = item.item.name;
+            let color = item.item.glowColor || RARITY_COLORS[item.item.rarity] || '#fff';
+            let spriteId = item.item.uIndex;
+
+            if (spriteId > 0) {
+                const sprite = assetManager.getSpriteSource(spriteId);
+
+                if (sprite && sprite.image) {
+                    const cvs = document.createElement('canvas');
+                    cvs.width = 32; cvs.height = 32;
+                    const ctx = cvs.getContext('2d');
+                    if (ctx) {
+                        ctx.imageSmoothingEnabled = false;
+                        const dw = Math.min(32, sprite.sw);
+                        const dh = Math.min(32, sprite.sh);
+                        const dx = (32 - dw) / 2;
+                        const dy = (32 - dh) / 2;
+                        ctx.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, dx, dy, dw, dh);
+                    }
+                    slot.appendChild(cvs);
+                } else {
+                    slot.innerText = name.substring(0, 2);
+                }
+            } else {
+                slot.innerText = name.substring(0, 2);
+            }
+
+            slot.title = `${name} (x${item.count})`;
+            slot.style.border = `1px solid ${color}`;
+
+            // Count overlay
+            if (item.count > 1) {
+                const countSpan = document.createElement('span');
+                countSpan.style.cssText = "position:absolute; bottom:0; right:0; font-size:10px; color:#fff; background:rgba(0,0,0,0.5); padding:0 2px;";
+                countSpan.innerText = `${item.count}`;
+                slot.appendChild(countSpan);
+            }
+
+            // Make items draggable to equipment slots
+            makeItemDraggable(slot, item);
+
+            // Right-click to equip directly (or use if consumable)
+            slot.addEventListener('contextmenu', (e: Event) => {
+                e.preventDefault();
+                const itemDef = item.item;
+                const itemName = itemDef?.name || 'Unknown Item';
+
+                // Check if this is a gold coin - add to player's gold balance
+                if (itemName === 'Gold Coin' || itemName.includes('Gold Coin')) {
+                    // Emit collectGold action
+                    const event = new CustomEvent('playerAction', {
+                        detail: {
+                            action: 'collectGold',
+                            item: itemDef,
+                            index: index,
+                            count: item.count || 1,
+                            fromBag: true
+                        }
+                    });
+                    document.dispatchEvent(event);
+                    return;
+                }
+
+                // Check if this is a consumable (food/potion) - detect by name since Item class has no 'type' property
+                const isConsumable = itemName.includes('Potion') || itemName === 'Apple' || itemName.includes('Food') || itemName.includes('Meat');
+
+                // Check for Quest Items (Usable)
+                const isUsable = itemName === 'Dirty Note';
+
+                if (isConsumable) {
+                    // Emit consume action
+                    const event = new CustomEvent('playerAction', {
+                        detail: {
+                            action: 'consume',
+                            item: itemDef,
+                            index: index,
+                            fromBag: true
+                        }
+                    });
+                    document.dispatchEvent(event);
+                    return;
+                } else if (isUsable) {
+                    // Emit USE action
+                    const event = new CustomEvent('playerAction', {
+                        detail: {
+                            action: 'use',
+                            item: itemDef,
+                            index: index,
+                            fromBag: true
+                        }
+                    });
+                    document.dispatchEvent(event);
+                    return;
+                }
+
+                if (!itemDef?.slotType) {
+                    this.log(`${itemName} cannot be equipped.`, '#ff5555');
+                    return;
+                }
+
+                // Map item slotType to equipment slot name
+                const slotMap: Record<string, string> = {
+                    'HAND_R': 'rhand',
+                    'HAND_L': 'lhand',
+                    'rhand': 'rhand',
+                    'lhand': 'lhand',
+                    'body': 'body',
+                    'BODY': 'body',
+                    'head': 'head',
+                    'HEAD': 'head',
+                    'legs': 'legs',
+                    'LEGS': 'legs',
+                    'boots': 'boots',
+                    'FEET': 'boots',
+                    'amulet': 'amulet',
+                    'AMULET': 'amulet',
+                    'ring': 'ring',
+                    'RING': 'ring',
+                    'ammo': 'ammo',
+                    'AMMO': 'ammo',
+                    'backpack': 'backpack',
+                    'BACKPACK': 'backpack'
+                };
+
+                const targetSlot = slotMap[itemDef.slotType] || itemDef.slotType.toLowerCase();
+
+                // Emit moveItem action to equip
+                const event = new CustomEvent('playerAction', {
+                    detail: {
+                        action: 'moveItem',
+                        from: { type: 'container', index: index },
+                        to: { type: 'slot', slot: targetSlot }
+                    }
+                });
+                document.dispatchEvent(event);
+                this.log(`Equipped ${itemName}.`);
+            });
+
+            grid.appendChild(slot);
+        });
+
+        // Fill remaining slots to look like keys? 
+        // 20 slots total for standard backpack
+        const totalSlots = 20;
+        const used = backpackInstance.contents.length;
+        for (let i = used; i < totalSlots; i++) {
+            const empty = document.createElement('div');
+            empty.className = 'loot-slot empty';
+            empty.style.border = '1px solid #333';
+            grid.appendChild(empty);
+        }
     }
 
     public renderShop(merchant: any) {
@@ -1070,26 +1359,25 @@ export class UIManager {
         // We removed .equip-row from HTML to simplify grid area assignment.
         container.innerHTML = `
             <div class="equip-doll">
-                <div class="equip-slot" id="slot-amulet" data-slot="amulet"></div>
-                <div class="equip-slot" id="slot-head" data-slot="helmet"></div>
-                <div class="equip-slot" id="slot-backpack" data-slot="backpack"></div>
-                
-                <div class="equip-slot" id="slot-lhand" data-slot="lhand"></div>
-                <div class="equip-slot" id="slot-body" data-slot="body"></div>
-                <div class="equip-slot" id="slot-rhand" data-slot="rhand"></div>
+                <!-- Row 1: Head, Amulet, Backpack -->
+                <div class="equip-slot" id="slot-head" data-type="HEAD" title="Head"></div>
+                <div class="equip-slot" id="slot-amulet" data-type="AMULET" title="Amulet"></div>
+                <div class="equip-slot" id="slot-backpack" data-type="BACKPACK" title="Backpack"></div>
 
-                <div class="equip-slot" id="slot-ring" data-slot="ring"></div>
-                <div class="equip-slot" id="slot-legs" data-slot="legs"></div>
-                <div class="equip-slot" id="slot-ammo" data-slot="ammo"></div>
+                <!-- Row 2: Left Hand (Shield), Body, Right Hand (Weapon) -->
+                <div class="equip-slot" id="slot-lhand" data-type="HAND_L" title="Shield"></div>
+                <div class="equip-slot" id="slot-body" data-type="BODY" title="Armor"></div>
+                <div class="equip-slot" id="slot-rhand" data-type="HAND_R" title="Weapon"></div>
 
-                <div class="equip-slot" id="slot-soul" data-slot="soul">Soul:<br>100</div>
-                <div class="equip-slot" id="slot-boots" data-slot="boots"></div>
-                <div class="equip-slot" id="slot-cap" data-slot="cap">Cap:<br>400</div>
-            </div>
-            
-            <div id="inventory-panel" class="panel">
-                 <div class="panel-header">Backpack</div>
-                 <div class="inventory-grid" id="bag-grid"></div>
+                <!-- Row 3: Ring, Legs, Ammo -->
+                <div class="equip-slot" id="slot-ring" data-type="RING" title="Ring"></div>
+                <div class="equip-slot" id="slot-legs" data-type="LEGS" title="Legs"></div>
+                <div class="equip-slot" id="slot-ammo" data-type="AMMO" title="Ammo"></div>
+
+                <!-- Row 4: Empty, Boots, Empty -->
+                <div class="equip-slot empty"></div>
+                <div class="equip-slot" id="slot-boots" data-type="FEET" title="Boots"></div>
+                <div class="equip-slot empty"></div>
             </div>
         `;
 
@@ -1102,7 +1390,7 @@ export class UIManager {
             }
         });
 
-        this.bagPanel = document.getElementById('inventory-panel')!;
+        this.bagPanel = document.getElementById('backpack-panel')!;
     }
 
     // Shop
@@ -1176,6 +1464,16 @@ export class UIManager {
                         this.lookAtItem(def || { name: "Unknown Item", description: "You see something unfamiliar." });
                     }
                 };
+            } else {
+                // EMPTY SLOT: Still needs DROP TARGET handler!
+                el.onmousedown = null; // No drag from empty slot
+                el.onmouseup = (e) => {
+                    if (e.button === 0 && this.draggedItem) {
+                        e.stopPropagation();
+                        this.handleDrop({ type: 'slot', slot: slotName });
+                    }
+                };
+                el.oncontextmenu = null; // No right-click on empty
             }
         });
 
@@ -1203,6 +1501,9 @@ export class UIManager {
                         } else {
                             slot.innerText = inst.item.name.substring(0, 2);
                         }
+
+                        // HTML5 Drag & Drop Enable (from Phase 17 ui.ts)
+                        makeItemDraggable(slot, inst);
 
                         // Right Click -> Use With
                         slot.oncontextmenu = (e) => {
@@ -1270,6 +1571,119 @@ export class UIManager {
         this.draggingFrom = null;
     }
 
+
+    // --- QUEST SYSTEM UI ---
+    public toggleQuestJournal() {
+        if (this.questPanel.style.display === 'none') {
+            this.questPanel.style.display = 'block';
+            this.renderQuestJournal();
+        } else {
+            this.questPanel.style.display = 'none';
+        }
+    }
+
+    public renderQuestJournal() {
+        const listEl = document.getElementById('quest-list');
+        const detailsEl = document.getElementById('quest-details');
+        if (!listEl || !detailsEl) return;
+
+        listEl.innerHTML = '';
+
+        if (!this.world) return;
+
+        const qLogEnt = this.world.query([QuestLog])[0];
+        if (qLogEnt === undefined) {
+            listEl.innerHTML = '<div style="padding:5px;">No active quests.</div>';
+            return;
+        }
+
+        const qLog = this.world.getComponent(qLogEnt, QuestLog);
+        if (!qLog || qLog.quests.length === 0) {
+            listEl.innerHTML = '<div style="padding:5px;">No active quests.</div>';
+            return;
+        }
+
+        // Render List
+        qLog.quests.forEach((quest: Quest, index: number) => {
+            const item = document.createElement('div');
+            item.className = 'quest-item';
+            item.style.cssText = `padding: 8px; margin-bottom: 4px; cursor: pointer; background: rgba(0,0,0,0.1); border: 1px solid #c0a080; display: flex; justify-content: space-between; align-items: center;`;
+
+            const statusIcon = quest.completed
+                ? '<span style="color:green; font-weight:bold;">✓</span>'
+                : '<span style="color:#a00;">!</span>';
+
+            item.innerHTML = `<span>${statusIcon} ${quest.name}</span>`;
+
+            if (quest.completed && !quest.turnedIn) {
+                item.style.background = 'rgba(255, 215, 0, 0.2)';
+            }
+
+            item.onclick = () => {
+                // Render Details
+                detailsEl.innerHTML = `
+                    <h3 style="margin-top:0; color:#3e2723;">${quest.name}</h3>
+                    <p><em>${quest.type}</em></p>
+                    <p>${quest.description}</p>
+                    <hr style="border-color:#c0a080;">
+                    <p><strong>Goal:</strong> ${quest.targetId} (${quest.current}/${quest.targetCount})</p>
+                    <div style="background:#dccbba; height:20px; width:100%; border:1px solid #8b5a2b; margin: 10px 0;">
+                        <div style="height:100%; width:${Math.min(100, (quest.current / quest.targetCount) * 100)}%; background:#4CAF50;"></div>
+                    </div>
+                    <p><strong>Rewards:</strong></p>
+                    <ul>
+                        <li>${quest.reward.gold} Gold</li>
+                        <li>${quest.reward.xp} XP</li>
+                        ${quest.reward.items ? quest.reward.items.map(i => `<li>${i}</li>`).join('') : ''}
+                    </ul>
+                    <p style="text-align:right; font-size:0.9em; color:${quest.completed ? 'green' : '#888'};">
+                        ${quest.completed ? (quest.turnedIn ? 'COMPLETED & CLAIMED' : 'READY TO TURN IN') : 'IN PROGRESS'}
+                    </p>
+                `;
+            };
+
+            listEl.appendChild(item);
+        });
+    }
+
+    public showToast(title: string, msg: string = '') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            background: linear-gradient(to bottom, #ffd700, #ffb700);
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px #ffb300, 0 0 20px rgba(0,0,0,0.5);
+            color: #4a3b00;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-family: 'Georgia', serif;
+            text-align: center;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.5s ease;
+        `;
+        toast.innerHTML = `
+            <div style="font-size: 1.2em; font-weight: bold;">${title}</div>
+            <div style="font-size: 0.9em;">${msg}</div>
+        `;
+
+        container.appendChild(toast);
+
+        // Animate In
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        });
+
+        // Remove after delay
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-20px)';
+            setTimeout(() => toast.remove(), 500);
+        }, 4000);
+    }
 
     public setWorld(world: World) {
         this.world = world;

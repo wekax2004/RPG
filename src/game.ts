@@ -6,7 +6,7 @@ import { WorldMap } from './core/map';
 import { gameEvents, EVENTS } from './core/events';
 import { TILE_SIZE } from './core/types';
 import { AudioController } from './audio';
-import { ItemRegistry } from './data/items';
+import { ItemRegistry, createItemFromRegistry } from './data/items';
 
 // --- Components (Re-exported from separate file) ---
 export * from './components';
@@ -28,7 +28,10 @@ import {
     BossAI, MobResistance, SplitOnDeath
 } from './components';
 
+import { spawnFloatingText, spawnBloodEffect } from './effects';
+
 import { generateOverworld, generateDungeon } from './map_gen';
+import { TibiaMapGenerator, MapGenerator } from './core/tibia_map_generator';
 import { NetworkManager } from './network';
 import { AIState, getStateName } from './ai/states';
 import { SPELLS, findSpellByWords, SpellDefinition } from './data/spells';
@@ -36,6 +39,8 @@ import { MOB_REGISTRY } from './data/mobs';
 import { LOOT_TABLES } from './data/loot_tables';
 import { QUEST_REGISTRY } from './data/quests';
 import { BULK_SPRITES } from './data/bulk_constants';
+
+import { openShop } from './ui/shop';
 
 // Debug flag to visualize collision boxes
 export const DEBUG_COLLIDERS = true;
@@ -55,6 +60,8 @@ export class Dialogue {
 }
 
 // --- Systems ---
+import { updateEffects } from './effects';
+export { updateEffects };
 
 
 
@@ -86,8 +93,8 @@ export function attemptCastSpell(world: World, player: Entity, text: string, ui:
             const hp = world.getComponent(player, Health);
             if (hp) {
                 hp.current = Math.min(hp.max, hp.current + spell.power);
-                spawnFloatingText(world, pPos.x, pPos.y, `+${spell.power}`, "#5f5");
-                spawnParticle(world, pPos.x, pPos.y, SPRITES.SPARKLE, 0.5, 1.0, 0, -50);
+                spawnFloatingText(world, pPos.x, pPos.y, pPos.z, `+${spell.power}`, "#5f5");
+                spawnParticle(world, pPos.x, pPos.y, pPos.z, SPRITES.SPARKLE, 0.5, 1.0, 0, -50);
             }
             break;
         case 'haste':
@@ -96,7 +103,7 @@ export function attemptCastSpell(world: World, player: Entity, text: string, ui:
                 // Temporary Haste?
                 // We need a StatusEffect component.
                 world.addComponent(player, new StatusEffect('haste', 10.0, spell.power)); // 10s duration
-                spawnFloatingText(world, pPos.x, pPos.y, "Haste!", "#ff5");
+                spawnFloatingText(world, pPos.x, pPos.y, pPos.z, "Haste!", "#ff5");
             }
             break;
         case 'damage_aoe':
@@ -110,8 +117,8 @@ export function attemptCastSpell(world: World, player: Entity, text: string, ui:
                 if (dist < 50) { // AoE Range
                     const eHp = world.getComponent(eid, Health)!;
                     eHp.current -= spell.power;
-                    spawnFloatingText(world, ePos.x, ePos.y, `${spell.power}`, "#f55");
-                    spawnBloodEffect(world, ePos.x, ePos.y); // reuse
+                    spawnFloatingText(world, ePos.x, ePos.y, ePos.z, `${spell.power}`, "#f55");
+                    spawnBloodEffect(world, ePos.x, ePos.y, ePos.z); // reuse
                     hitCount++;
                     if (eHp.current <= 0) {
                         // Kill logic (reuse deathSystem or flag dead?)
@@ -209,8 +216,15 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager, input:
         return;
     }
 
+    // Z-Check
+    if (tPos.z !== pPos.z) {
+        targetComp.targetId = null;
+        if ((ui as any).console) (ui as any).console.addSystemMessage("Target lost (different floor).");
+        return;
+    }
+
     // Check Range (Melee = 40px)
-    const range = 50;
+    const range = 32;
     const dx = tPos.x - pPos.x;
     const dy = tPos.y - pPos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -232,128 +246,13 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager, input:
             vel.x = 0;
             vel.y = 0;
         }
-
-        // Cooldown Check (2.0s attack speed)
-        // Using Date.now() for simplicity
-        const now = Date.now();
-        if (now - lastAttackTime >= 2000) {
-            lastAttackTime = now;
-
-            // --- REFACTORED INVENTORY ACCESS ---
-
-            // Helper to get weapon damage
-            let weaponDmg = 0;
-            if (pInv) {
-                // Check hands
-                const rhand = pInv.getEquipped('rhand');
-                if (rhand && rhand.item.damage > 0) weaponDmg = rhand.item.damage;
-                else {
-                    const lhand = pInv.getEquipped('lhand');
-                    if (lhand && lhand.item.damage > 0) weaponDmg = lhand.item.damage;
-                }
-            }
-
-            // ... (Calculations remain same)
-
-
-            // Skill logic (simplified)
-            let skillVal = 10;
-            if (pStats) {
-                skillVal = pStats.sword.level; // Assume sword for now
-                // Gain XP (On Hit)
-                pStats.sword.xp += 1;
-                // Simple Level Up Formula: Level^2 * 10 or similar?
-                // Tibia: Constant factor 1.1x per level
-                const reqXp = Math.floor(10 * Math.pow(1.1, pStats.sword.level));
-                if (pStats.sword.xp >= reqXp) {
-                    pStats.sword.level++;
-                    pStats.sword.xp = 0;
-                    spawnFloatingText(world, pPos.x, pPos.y, "Skill Up!", "#ff0");
-                    if ((ui as any).console) (ui as any).console.addSystemMessage(`You advanced to Sword Fighting level ${pStats.sword.level}.`);
-                }
-            }
-
-            // Passives
-            let might = 0;
-            if (pPassives) might = pPassives.might * 2;
-
-            // Tibia-ish Formula:
-            // MaxDmg = 0.085 * factor * skill * weapon + (level / 5)
-            // Customized: (Weapon * 0.5) + (Skill * 1.0) + Might
-            const maxDmg = Math.floor((weaponDmg * 0.6) + (skillVal * 1.5) + might);
-            const minDmg = Math.floor(maxDmg * 0.2);
-
-            const damage = Math.floor(minDmg + Math.random() * (maxDmg - minDmg));
-
-            // Apply Damage
-            tHp.current -= damage;
-            if (tHp.current < 0) tHp.current = 0;
-
-            // Visuals
-            spawnBloodEffect(world, tPos.x, tPos.y);
-            spawnFloatingText(world, tPos.x, tPos.y, damage.toString(), "#a33"); // Dark Red for phys
-
-            if (damage > 0) {
-                // Screen shake if big hit? Nah, confusing for auto attack
-            }
-
-            // Check Death
-            if (tHp.current <= 0) {
-                targetComp.targetId = null;
-
-                // Gain XP
-                const pXp = world.getComponent(player, Experience);
-                if (pXp) {
-                    const gain = 50;
-                    pXp.current += gain;
-                    if ((ui as any).console) (ui as any).console.addSystemMessage(`You dealt ${damage} damage. Target died.`);
-                }
-
-                // --- LOOT LOGIC ---
-                const loot: Item[] = [];
-
-                // 50% Chance: Gold Coin (ID 40)
-                if (Math.random() < 0.5) {
-                    loot.push(createItemFromRegistry(SPRITES.GOLD));
-                }
-                // 20% Chance: Short Sword (ID 42)
-                if (Math.random() < 0.2) {
-                    loot.push(createItemFromRegistry(SPRITES.SWORD));
-                }
-                // 20% Chance: Potion (ID 41)
-                if (Math.random() < 0.2) {
-                    loot.push(createItemFromRegistry(SPRITES.POTION));
-                }
-
-
-                if (loot.length > 0) {
-                    createCorpse(world, tPos.x, tPos.y, loot);
-                } else {
-                    createCorpse(world, tPos.x, tPos.y, []);
-                }
-            }
-        }
     } else {
-        // CHASE BEHAVIOR (Out of Range)
-        if (vel) {
-            const speed = 60; // Match player speed
-            vel.x = (dx / dist) * speed;
-            vel.y = (dy / dist) * speed;
-
-            // Update Facing
-            const sprite = world.getComponent(player, Sprite);
-            if (sprite) {
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    sprite.direction = dx > 0 ? 3 : 2; // R : L
-                    sprite.flipX = dx < 0;
-                } else {
-                    sprite.direction = dy > 0 ? 0 : 1; // D : U
-                }
-                sprite.animState = 'walk';
-            }
-        }
+        // Chase Logic: Move towards target if too far
+        // (This can be added if we want auto-chase like Tibia)
+        // For now, we'll just stop when in range.
     }
 }
+
 
 export function inputSystem(world: World, input: InputHandler) {
     // query includes Target so we can use it
@@ -501,7 +400,7 @@ export function inputSystem(world: World, input: InputHandler) {
 
 
 
-export function createNPC(world: World, x: number, y: number, text: string = "Hello!", name: string = "Villager", spriteIndex: number = SPRITES.NPC) {
+export function createNPC(world: World, x: number, y: number, text: string = "Hello!", name: string = "Villager", spriteIndex: number = 260) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
     world.addComponent(e, new Sprite(spriteIndex));
@@ -539,7 +438,36 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
             return;
         }
         const pPos = world.getComponent(player, Position)!;
-        console.log(`[Interaction] Player at ${pPos.x}, ${pPos.y}`);
+
+        // --- TARGETING LOGIC ---
+        const cameraEntity = world.query([Camera])[0];
+        if (cameraEntity !== undefined) {
+            const camera = world.getComponent(cameraEntity, Camera)!;
+            const mouseGrid = input.getMouseWorldCoordinates(camera);
+
+            // Search for creatures at this grid position
+            const creatures = world.query([Position, Health]);
+            for (const eid of creatures) {
+                if (eid === player) continue;
+                const pos = world.getComponent(eid, Position)!;
+                const gx = Math.floor(pos.x / 32);
+                const gy = Math.floor(pos.y / 32);
+
+                if (gx === mouseGrid.x && gy === mouseGrid.y) {
+                    // Check Z
+                    if (pos.z !== pPos.z) continue;
+
+                    const targetComp = world.getComponent(player, Target);
+                    if (targetComp) {
+                        targetComp.targetId = eid;
+                        const name = world.getComponent(eid, Name)?.value || "Target";
+                        if ((ui as any).console) (ui as any).console.addSystemMessage(`Targeting: ${name}`);
+                        console.log(`[Interaction] Target set to ${eid} (${name})`);
+                        return; // Done targeting
+                    }
+                }
+            }
+        }
 
         // Check for NPC Component
         const npcs = world.query([NPC, Position]);
@@ -567,7 +495,10 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                     const pInv = world.getComponent(player, Inventory);
                     if (pInv) {
                         // Call toggleShop instead of renderShop - toggleShop actually shows the panel!
-                        ui.toggleShop(merchant, world.getComponent(eid, Name)?.value || "Merchant");
+                        const nameComp = world.getComponent(eid, Name);
+                        if (nameComp) {
+                            openShop(nameComp.value);
+                        }
                         console.log(`[Interaction] Shop opened for ${npcName}`);
                     }
                 } else if (qGiver) {
@@ -599,7 +530,7 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                             ui.showDialogue("Thank you! Here is your reward.", npcName);
                             console.log(`[Quest] Quest completed and turned in!`);
                         } else {
-                            ui.showDialogue(`Quest Progress: ${existing.current}/${existing.required}`, npcName);
+                            ui.showDialogue(`Quest Progress: ${existing.current}/${existing.targetCount}`, npcName);
                         }
                     } else {
                         ui.showDialogue(npc.dialog[0], npcName);
@@ -638,23 +569,19 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
         let clickedObject = false;
 
         // A. Check Interactables & Lootables
-        // We need to query separately or combine. Simplest is to just check both sets.
         const interactables = world.query([Interactable, Position]);
         const lootables = world.query([Lootable, Position]);
-        // Combine unique IDs
         const clickableIds = new Set([...interactables, ...lootables]);
-
-        // Fix: Ensure playerEntity is available for distance checks and interactions if needed
-        // (Removing duplicate declaration that caused crash)
 
         for (const id of clickableIds) {
             const pos = world.getComponent(id, Position)!;
-            // Hitbox 32x32 for items/interactables is usually fine, but let's be generous
+            // Hitbox 32x32 for items/interactables
             if (worldX >= pos.x && worldX <= pos.x + 32 &&
                 worldY >= pos.y && worldY <= pos.y + 32) {
 
-                const player = world.query([PlayerControllable, Position])[0];
-                if (player) {
+                const playerQuery = world.query([PlayerControllable, Position]);
+                if (playerQuery.length > 0) {
+                    const player = playerQuery[0];
                     const pPos = world.getComponent(player, Position)!;
                     const dx = (pPos.x + 16) - (pos.x + 16);
                     const dy = (pPos.y + 16) - (pos.y + 16);
@@ -664,14 +591,34 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                         const merchant = world.getComponent(id, Merchant);
                         const lootable = world.getComponent(id, Lootable);
                         const questGiver = world.getComponent(id, QuestGiver);
+                        const dungeon = world.getComponent(id, DungeonEntrance);
 
-                        if (merchant) {
+                        if (dungeon) {
+                            if (dungeon.destination) {
+                                // Direct Teleport
+                                const pPos = world.getComponent(player, Position)!;
+                                pPos.x = dungeon.destination.x;
+                                pPos.y = dungeon.destination.y;
+
+                                // Snap Camera
+                                const cam = world.query([Camera])[0];
+                                if (cam) {
+                                    const cPos = world.getComponent(cam, Camera)!;
+                                    cPos.x = pPos.x - 160;
+                                    cPos.y = pPos.y - 120;
+                                }
+                                if ((ui as any).console) (ui as any).console.sendMessage(`Teleported to ${dungeon.label}.`);
+                            } else {
+                                // Map Switch
+                                switchMap(world, 'dungeon', dungeon.dungeonType);
+                            }
+                            clickedObject = true;
+                        } else if (merchant) {
                             ui.currentMerchant = merchant;
                             ui.activeMerchantId = id;
                             ui.toggleShop(merchant, world.getComponent(id, Name)?.value || "Merchant");
                             clickedObject = true;
                         } else if (lootable) {
-                            // ... Existing Loot Logic ...
                             const hp = world.getComponent(id, Health);
                             if (hp && hp.current > 0) {
                                 gameEvents.emit(EVENTS.SYSTEM_MESSAGE, "You cannot loot a living target.");
@@ -684,322 +631,247 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                             }
                         } else if (questGiver) {
                             // Quest Interaction
-                            const playerQLog = world.getComponent(player, QuestLog);
-                            const playerInv = world.getComponent(player, Inventory);
-                            const playerXp = world.getComponent(player, Experience);
+                            let dialogFound = false;
                             const nameVal = world.getComponent(id, Name) || new Name("Quest Giver");
 
-                            if (playerQLog) {
-                                // Check for quests to turn in
-                                for (const quest of playerQLog.quests) {
-                                    if (quest.completed && !quest.turnedIn) {
-                                        // Find matching quest in giver
-                                        const giverQuest = questGiver.availableQuests.find(q => q.id === quest.id);
-                                        if (giverQuest) {
-                                            quest.turnedIn = true;
-                                            playerQLog.completedQuestIds.push(quest.id);
-                                            // Remove from active
-                                            playerQLog.quests = playerQLog.quests.filter(q => q.id !== quest.id);
-
-                                            // Give rewards
-                                            const reward = giverQuest.reward;
-                                            if (playerInv) playerInv.gold += reward.gold;
-                                            if (playerXp) {
-                                                playerXp.current += reward.xp;
-                                                if (playerXp.current >= playerXp.next) {
-                                                    playerXp.level++;
-                                                    playerXp.current -= playerXp.next;
-                                                    playerXp.next = Math.floor(playerXp.next * 1.5);
-                                                }
-                                            }
-
-                                            const msgTitle = `Quest Complete: "${quest.name}"!`;
-                                            const msgReward = `Reward: ${reward.gold} gold, ${reward.xp} XP`;
-                                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, msgTitle);
-                                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, msgReward);
-
-                                            // Trigger UI Update
-                                            const gameObj = (window as any).game;
-                                            if (gameObj && gameObj.player) {
-                                                gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
-                                                gameEvents.emit(EVENTS.INVENTORY_CHANGED, playerInv);
-                                            }
-
-                                            clickedObject = true;
-                                            break;
-                                        }
-                                    }
-                                }
+                            // Ensure player has QuestLog
+                            let playerQLog = world.getComponent(player, QuestLog);
+                            if (!playerQLog) {
+                                playerQLog = new QuestLog();
+                                world.addComponent(player, playerQLog);
                             }
+                            const playerInv = world.getComponent(player, Inventory);
+                            const playerXp = world.getComponent(player, Experience);
 
-                            // 4. Quest Logic Interaction
-                            // -------------------------
-                            // Removed redundant questGiver declaration
-                            if (questGiver) {
-                                let dialogFound = false;
-
-                                // Ensure player has QuestLog
-                                let playerQLog = world.getComponent(playerEntity, QuestLog);
-                                if (!playerQLog) {
-                                    playerQLog = new QuestLog();
-                                    world.addComponent(playerEntity, playerQLog);
-                                }
-
-                                // 4a. Check for Turn-Ins (Complete -> Reward)
-                                for (const quest of playerQLog.quests) {
-                                    if (quest.completed && !quest.turnedIn) {
-                                        // ... (Logic already handled above mostly, but kept for safety/flow)
-                                        // Actually the block above handles turn in. This duplicates it?
-                                        // The block above seems better. Let's keep this as fallback or cleanup.
-
+                            // Check for Turn-Ins
+                            for (const quest of playerQLog.quests) {
+                                if (quest.completed && !quest.turnedIn) {
+                                    const giverQuest = questGiver.availableQuests.find(q => q.id === quest.id);
+                                    if (giverQuest) {
                                         quest.turnedIn = true;
                                         playerQLog.completedQuestIds.push(quest.id);
-                                        playerQLog.quests = playerQLog.quests.filter(q => q.id !== quest.id);
+                                        // Update active list logic if needed, or rely on UI filter
 
-                                        // Grant Rewards
-                                        const template = QUEST_REGISTRY[quest.id];
-                                        if (template && template.reward) {
-                                            const r = template.reward;
-                                            const pInv = world.getComponent(playerEntity, Inventory);
-
-                                            if ((ui as any).console) (ui as any).console.sendMessage(`Completed: ${quest.name}!`);
-
-                                            if (pInv) pInv.gold += r.gold;
-                                            // gainExperience(world, r.xp, ui, audio); // Need gainExperience imported or implemented
-
-                                            // Inline XP gain for now
-                                            if (playerXp) {
-                                                playerXp.current += r.xp;
-                                                // level up logic
-                                            }
-
-                                            if (r.items) {
-                                                for (const itemStr of r.items) {
-                                                    if ((ui as any).console) (ui as any).console.sendMessage(`Received: ${itemStr}`);
-                                                }
+                                        const reward = giverQuest.reward;
+                                        if (playerInv) playerInv.gold += reward.gold;
+                                        if (playerXp) {
+                                            playerXp.current += reward.xp;
+                                            // Simple level up check
+                                            if (playerXp.current >= playerXp.next) {
+                                                playerXp.level++;
+                                                playerXp.current -= playerXp.next;
+                                                playerXp.next = Math.floor(playerXp.next * 1.5);
                                             }
                                         }
+
+                                        const msgTitle = `Quest Complete: "${quest.name}"!`;
+                                        const msgReward = `Reward: ${reward.gold} gold, ${reward.xp} XP`;
+                                        gameEvents.emit(EVENTS.SYSTEM_MESSAGE, msgTitle);
+                                        gameEvents.emit(EVENTS.SYSTEM_MESSAGE, msgReward);
+
+                                        // Trigger UI Update
+                                        const gameObj = (window as any).game;
+                                        if (gameObj && gameObj.player) {
+                                            gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+                                            gameEvents.emit(EVENTS.INVENTORY_CHANGED, playerInv);
+                                        }
+
                                         dialogFound = true;
                                         break;
                                     }
                                 }
+                            }
 
-                                // 4b. Offer New Quest
-                                if (!dialogFound) {
-                                    // Linear Chain: Rat -> Wolf -> Orc -> Warlord
-                                    const chain = ['rat_catcher', 'wolf_hunt', 'orc_menace', 'slay_warlord'];
-                                    const nextQuestId = chain.find(qid => !playerQLog!.completedQuestIds.includes(qid));
+                            // Offer New Quest
+                            if (!dialogFound) {
+                                const chain = ['rat_catcher', 'wolf_hunt', 'orc_menace', 'slay_warlord'];
+                                const nextQuestId = chain.find(qid => !playerQLog!.completedQuestIds.includes(qid));
 
-                                    if (nextQuestId) {
-                                        // Do we have it active?
-                                        const active = playerQLog.quests.find(q => q.id === nextQuestId);
-                                        const tpl = QUEST_REGISTRY[nextQuestId];
+                                if (nextQuestId) {
+                                    const active = playerQLog.quests.find(q => q.id === nextQuestId);
+                                    const tpl = QUEST_REGISTRY[nextQuestId];
 
-                                        if (!active && tpl) {
-                                            // Accept
-                                            if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "${tpl.description}"`);
-                                            if ((ui as any).console) (ui as any).console.sendMessage(`[Quest] Accepted: ${tpl.name}`);
+                                    if (!active && tpl) {
+                                        if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "${tpl.description}"`);
+                                        if ((ui as any).console) (ui as any).console.sendMessage(`[Quest] Accepted: ${tpl.name}`);
 
-                                            // Add to log
-                                            playerQLog.quests.push({
-                                                id: nextQuestId,
-                                                name: tpl.name!,
-                                                description: tpl.description!,
-                                                type: tpl.type as any, // Cast to avoid partial mismatch
-                                                target: tpl.target!,
-                                                required: tpl.required!,
-                                                current: 0,
-                                                reward: tpl.reward!,
-                                                completed: false,
-                                                turnedIn: false
-                                            });
-                                            dialogFound = true;
-                                        } else if (active) {
-                                            // Status Check
-                                            if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "Hunt ${active.current}/${active.required} ${active.target}s."`);
-                                            dialogFound = true;
-                                        }
-                                    } else {
-                                        if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "You are a true legend. I have no more tasks."`);
+                                        playerQLog.quests.push({
+                                            id: nextQuestId,
+                                            name: tpl.name!,
+                                            description: tpl.description!,
+                                            type: tpl.type as any,
+                                            targetId: tpl.targetId!,
+                                            targetCount: tpl.targetCount!,
+                                            current: 0,
+                                            reward: tpl.reward!,
+                                            completed: false,
+                                            turnedIn: false
+                                        });
+                                        dialogFound = true;
+                                    } else if (active) {
+                                        if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "Hunt ${active.current}/${active.targetCount} ${active.targetId}s."`);
                                         dialogFound = true;
                                     }
+                                } else {
+                                    if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "You are a true legend."`);
+                                    dialogFound = true;
                                 }
-                                clickedObject = true;
                             }
-
-                            // Generic NPC Fallback
-                            if (!clickedObject) {
-                                const phrases = [
-                                    "Nice day for fishing, ain't it?",
-                                    "Watch out for the sewers.",
-                                    "I used to be an adventurer like you."
-                                ];
-                                const text = phrases[Math.floor(Math.random() * phrases.length)];
-                                // audio.playSound('villager'); // Disabled until audio passed
-                                spawnFloatingText(world, pos.x, pos.y - 16, text, '#aaa');
-                                if ((ui as any).console) (ui as any).console.sendMessage(`${nameVal.value}: "${text}"`);
-                                clickedObject = true;
-                            }
-                        }
-                        if (clickedObject) break;
-                    }
-                }
-
-                if (clickedObject) return; // Skip targeting if we interacted
-
-                // B. Check Enemies (Targeting)
-                const enemies = world.query([Health, Position, Name]);
-                let closestDist = 9999; // Fix: Initialize to large value so fallback works
-                let foundTargetId = -1;
-
-                for (const eId of enemies) {
-                    if (world.getComponent(eId, PlayerControllable)) continue;
-                    const pos = world.getComponent(eId, Position)!;
-                    console.log(`[TargetDebug] Checking Ent ${eId} at ${pos.x},${pos.y} vs Click ${worldX},${worldY}`);
-
-                    // 1. Direct Hitbox Check (Expanded for usability)
-                    const margin = 16; // 16px forgiveness radius
-                    const boxL = pos.x - margin;
-                    const boxR = pos.x + 32 + margin;
-                    const boxT = pos.y - 64 - margin; // Assumes 32x64 sprite (tall)
-                    const boxB = pos.y + margin;
-
-                    if (worldX >= boxL && worldX <= boxR && worldY >= boxT && worldY <= boxB) {
-                        // We have a hit!
-                        // Prioritize "closest to center of click" if multiple overlap? 
-                        // For now, just taking the first one or closest dist is fine.
-                        const distV = Math.abs(pos.x - worldX) + Math.abs(pos.y - worldY);
-
-                        if (distV < closestDist) {
-                            closestDist = distV;
-                            foundTargetId = eId;
-                        }
-                    }
-
-                    // 2. Proximity Check (Fallback if no direct hit, but very close)
-                    // (Optional: can add later if this isn't enough, but expanded margins usually work best)
-                }
-
-                if (foundTargetId !== -1) {
-                    const pEntity = world.query([PlayerControllable, Target])[0];
-                    if (pEntity !== undefined) {
-                        const targetComp = world.getComponent(pEntity, Target);
-                        if (targetComp) {
-                            targetComp.targetId = foundTargetId;
-                        }
-                        console.log(`[Targeting] HIT Entity ${foundTargetId} (${world.getComponent(foundTargetId, Name)?.value}). Dist: ${closestDist}`);
-
-                        // Emit
-                        gameEvents.emit(EVENTS.TARGET_ENTITY, foundTargetId);
-                    }
-                    clickedObject = true;
-                }
-
-
-
-                // End of scope (if checking for enemies) - WAIT, this is shutting the 'MouseLeft' block too early! 
-                // I need to REMOVE this closing brace so the falling through logic works.
-
-                // C. Clear Target & Set Destination (Click-to-Move)
-                if (!clickedObject && input.clickedOnCanvas) {
-                    const pEnt = world.query([PlayerControllable])[0];
-                    if (pEnt !== undefined) {
-                        const pTarget = world.getComponent(pEnt, Target);
-                        if (pTarget) pTarget.targetId = null; // Stop chasing entity
-
-                        // Set Destination to walk there
-                        let dest = world.getComponent(pEnt, Destination);
-                        if (!dest) {
-                            dest = new Destination(worldX - 16, worldY - 16); // Center on click (player is 32x32)
-                            world.addComponent(pEnt, dest);
-                        } else {
-                            dest.x = worldX - 16;
-                            dest.y = worldY - 16;
+                            clickedObject = true;
                         }
 
-                        // Spawn visual marker (optional/simple)
-                        // spawnMagicEffect(world, worldX, worldY, 'green'); // Reuse magic effect as "click" marker
+                        // Generic NPC Fallback
+                        if (!clickedObject) {
+                            const phrases = ["Nice day!", "Hello there.", "Stay safe."];
+                            const text = phrases[Math.floor(Math.random() * phrases.length)];
+                            spawnFloatingText(world, pos.x, pos.y - 16, text, '#aaa');
+                            if ((ui as any).console) (ui as any).console.sendMessage(`NPC: "${text}"`);
+                            clickedObject = true;
+                        }
                     }
                 }
+            }
+            if (clickedObject) break;
+        }
 
+        // B. Check Enemies (Targeting)
+        // Only if we didn't interact with something
+        if (!clickedObject) {
+            const enemies = world.query([Health, Position, Name]);
+            let closestDist = 9999;
+            let foundTargetId = -1;
 
+            for (const eId of enemies) {
+                if (world.getComponent(eId, PlayerControllable)) continue; // Don't target self
+                const pos = world.getComponent(eId, Position)!;
+
+                // 1. Direct Hitbox Check (Expanded for usability)
+                const margin = 16;
+                const boxL = pos.x - margin;
+                const boxR = pos.x + 32 + margin;
+                const boxT = pos.y - 64 - margin; // Assumes 32x64 sprite
+                const boxB = pos.y + margin;
+
+                if (worldX >= boxL && worldX <= boxR && worldY >= boxT && worldY <= boxB) {
+                    const distV = Math.abs(pos.x - worldX) + Math.abs(pos.y - worldY);
+                    if (distV < closestDist) {
+                        closestDist = distV;
+                        foundTargetId = eId;
+                    }
+                }
             }
 
-            // 3. LOOK (Right Click)
-            if (input.isJustPressed('MouseRight')) {
-                if (!input.clickedOnCanvas) return;
-                const mx = input.mouse.x;
-                const my = input.mouse.y;
-                // Calc World Coords
-                const camEntity = world.query([Camera])[0];
-                const cam = camEntity !== undefined ? world.getComponent(camEntity, Camera) : null;
-                const camX = cam ? Math.floor(cam.x) : 0;
-                const camY = cam ? Math.floor(cam.y) : 0;
-                const worldX = mx + camX;
-                const worldY = my + camY;
-
-                // Find entity under mouse
-                const allEnts = world.query([Position, Name]);
-                let found = false;
-
-                // Check "Top" entity first (reverse order might be better but iteration order is unsafe deps)
-                for (const id of allEnts) {
-                    if (id === world.query([PlayerControllable])[0]) continue;
-                    const pos = world.getComponent(id, Position)!;
-                    const name = world.getComponent(id, Name)!.value;
-
-                    // Simple 32x32 check + Vertical offset for mobs
-                    // Let's use the generous search
-                    if (worldX >= pos.x && worldX <= pos.x + 32 &&
-                        worldY >= pos.y - 32 && worldY <= pos.y + 32) {
-
-                        let desc = `You see ${name}.`;
-
-                        // Add details
-                        const hp = world.getComponent(id, Health);
-                        if (hp) desc += ` [HP: ${hp.current}/${hp.max}]`;
-
-                        const loot = world.getComponent(id, Lootable);
-                        if (hp) desc += ` [HP: ${hp.current}/${hp.max}]`;
-
-                        // --- FIX: Enable Right-Click interactions (Loot/Open) ---
-                        const lootable = world.getComponent(id, Lootable);
-                        const interactable = world.getComponent(id, Interactable);
-                        const merchant = world.getComponent(id, Merchant);
-
-                        if (lootable) {
-                            desc += " (Right-Click to Open)";
-                            const pEnt = world.query([PlayerControllable])[0];
-                            const pInv = world.getComponent(pEnt, Inventory);
-                            if (pInv) {
-                                ui.openLoot(lootable, id, pInv);
-                                gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You open the ${name}.`);
-                            }
-                        } else if (merchant) {
-                            ui.currentMerchant = merchant;
-                            ui.activeMerchantId = id;
-                            // FIX: Pass Player Inventory (needed for Sell List)
-                            const pEnt = world.query([PlayerControllable, Inventory])[0];
-                            const pInv = world.getComponent(pEnt, Inventory);
-                            if (pInv) {
-                                ui.toggleShop(merchant, world.getComponent(id, Name)?.value || "Merchant");
-                            }
-                        } else if (interactable) {
-                            // Generic interact
-                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You look at ${name}.`);
-                        } else {
-                            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, desc);
-                        }
-
-                        // Trigger Visual Feedback
-                        spawnParticle(world, worldX, worldY, SPRITES.SPARKLE, 0.3); // Re-use sparkle for look
-                        found = true;
-                        break; // Only look at top renderable entity
+            if (foundTargetId !== -1) {
+                const pEntity = world.query([PlayerControllable])[0];
+                if (pEntity !== undefined) {
+                    const targetComp = world.getComponent(pEntity, Target);
+                    if (targetComp) {
+                        targetComp.targetId = foundTargetId;
                     }
+                    console.log(`[Targeting] HIT Entity ${foundTargetId}`);
+                    // Emit
+                    gameEvents.emit(EVENTS.TARGET_ENTITY, foundTargetId);
                 }
-
+                clickedObject = true;
             }
         }
+
+        // C. Clear Target & Set Destination (Click-to-Move)
+        if (!clickedObject && input.clickedOnCanvas) {
+            const pEnt = world.query([PlayerControllable])[0];
+            if (pEnt !== undefined) {
+                // Clear Target
+                const pTarget = world.getComponent(pEnt, Target);
+                if (pTarget) pTarget.targetId = null;
+
+                // Set Destination
+                let dest = world.getComponent(pEnt, Destination);
+                if (!dest) {
+                    dest = new Destination(worldX - 16, worldY - 16);
+                    world.addComponent(pEnt, dest);
+                } else {
+                    dest.x = worldX - 16;
+                    dest.y = worldY - 16;
+                }
+            }
+        }
+
+    }
+
+    // 3. LOOK (Right Click)
+    if (input.isJustPressed('MouseRight')) {
+        if (!input.clickedOnCanvas) return;
+        const mx = input.mouse.x;
+        const my = input.mouse.y;
+        // Calc World Coords
+        const camEntity = world.query([Camera])[0];
+        const cam = camEntity !== undefined ? world.getComponent(camEntity, Camera) : null;
+        const camX = cam ? Math.floor(cam.x) : 0;
+        const camY = cam ? Math.floor(cam.y) : 0;
+        const worldX = mx + camX;
+        const worldY = my + camY;
+
+        // Find entity under mouse
+        const allEnts = world.query([Position, Name]);
+        let found = false;
+
+        // Check "Top" entity first
+        for (const id of allEnts) {
+            if (id === world.query([PlayerControllable])[0]) continue;
+            const pos = world.getComponent(id, Position)!;
+            const name = world.getComponent(id, Name)!.value;
+
+            // Simple 32x32 check + Vertical offset for mobs
+            if (worldX >= pos.x && worldX <= pos.x + 32 &&
+                worldY >= pos.y - 32 && worldY <= pos.y + 32) {
+
+                let desc = `You see ${name}.`;
+
+                // Add details
+                const hp = world.getComponent(id, Health);
+                if (hp) desc += ` [HP: ${hp.current}/${hp.max}]`;
+
+                // --- FIX: Enable Right-Click interactions (Loot/Open) ---
+                const lootable = world.getComponent(id, Lootable);
+                const interactable = world.getComponent(id, Interactable);
+                const merchant = world.getComponent(id, Merchant);
+
+                if (lootable) {
+                    desc += " (Right-Click to Open)";
+                    const pEnt = world.query([PlayerControllable])[0];
+                    const pInv = world.getComponent(pEnt, Inventory);
+                    if (pInv) {
+                        ui.openLoot(lootable, id, pInv);
+                        gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You open the ${name}.`);
+                    }
+                } else if (merchant) {
+                    ui.currentMerchant = merchant;
+                    ui.activeMerchantId = id;
+                    // FIX: Pass Player Inventory (needed for Sell List)
+                    const pEnt = world.query([PlayerControllable, Inventory])[0];
+                    const pInv = world.getComponent(pEnt, Inventory);
+                    if (pInv) {
+                        ui.toggleShop(merchant, world.getComponent(id, Name)?.value || "Merchant");
+                    }
+                } else if (interactable) {
+                    // Generic interact
+                    gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You look at ${name}.`);
+                } else {
+                    gameEvents.emit(EVENTS.SYSTEM_MESSAGE, desc);
+                }
+
+                // Trigger Visual Feedback
+                // Assuming 'pos' is available in toolSystem scope or we need to find it
+                // digging usually involves a target tile.
+                // Let's assume z=7 or pass correct Z.
+                // Actually toolSystem (L830+) probably iterates.
+                // I need to see the context to get Z.
+                spawnParticle(world, worldX, worldY, 7, SPRITES.SPARKLE, 0.3); // Default Z=7 for now safe
+                found = true;
+                break; // Only look at top renderable entity
+            }
+        }
+
     }
 }
 
@@ -1522,6 +1394,58 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                         audio.playFootstep(material);
                         pc.footstepTimer = 0.4;
                     }
+
+                    // --- FLOOR TRANSITION CHECK (Ramps/Stairs) ---
+                    if (map) {
+                        const tx = Math.floor((pos.x + 16) / map.tileSize);
+                        const ty = Math.floor((pos.y + 16) / map.tileSize);
+                        const tile = map.getTile(tx, ty, pos.z);
+
+                        if (tile) {
+                            for (const item of tile.items) {
+                                // Ramp North (1950) - Walk onto from South, go UP
+                                if (item.id === 1950 && vel.y < 0) {
+                                    pos.z = Math.max(0, pos.z - 1);
+                                    pos.y -= 32; // Push north
+                                    console.log(`[Floor] Ramp N -> Z=${pos.z}`);
+                                    break;
+                                }
+                                // Ramp South (1952)
+                                if (item.id === 1952 && vel.y > 0) {
+                                    pos.z = Math.max(0, pos.z - 1);
+                                    pos.y += 32;
+                                    console.log(`[Floor] Ramp S -> Z=${pos.z}`);
+                                    break;
+                                }
+                                // Ramp East (1951)
+                                if (item.id === 1951 && vel.x > 0) {
+                                    pos.z = Math.max(0, pos.z - 1);
+                                    pos.x += 32;
+                                    console.log(`[Floor] Ramp E -> Z=${pos.z}`);
+                                    break;
+                                }
+                                // Ramp West (1953)
+                                if (item.id === 1953 && vel.x < 0) {
+                                    pos.z = Math.max(0, pos.z - 1);
+                                    pos.x -= 32;
+                                    console.log(`[Floor] Ramp W -> Z=${pos.z}`);
+                                    break;
+                                }
+                                // Stairs Down (438) / Hole (594) / Sewer Grate (312)
+                                if (item.id === 438 || item.id === 594 || item.id === 312) {
+                                    pos.z = Math.min(15, pos.z + 1);
+                                    console.log(`[Floor] Down (Stairs/Hole/Grate) -> Z=${pos.z}`);
+                                    break; // Only trigger one transition per frame
+                                }
+                                // Stairs Up (1391) / Ladder Up (1386)
+                                if (item.id === 1391 || item.id === 1386) {
+                                    pos.z = Math.max(0, pos.z - 1);
+                                    console.log(`[Floor] Up (Stairs/Ladder) -> Z=${pos.z}`);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1583,7 +1507,7 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
 
         const weapon = inv.getEquipped('rhand');
         if (weapon) {
-            damage = weapon.item.damage;
+            damage = weapon.item.attack;
 
             // Skill Damage Bonus
             if (skills) {
@@ -1616,7 +1540,7 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                         // Tibia Formula approximation: (Level * 0.2) + (Skill * Atk * 0.06) + (Atk * 0.5)
                         // (Calculation continues below...)
                         const playerLevel = xp ? xp.level : 1;
-                        const skillDmg = (skillLevel * weapon.item.damage * 0.06) + (playerLevel * 0.2);
+                        const skillDmg = (skillLevel * weapon.item.attack * 0.06) + (playerLevel * 0.2);
 
                         // Final Damage
                         damage = Math.floor(skillDmg + (Math.random() * (damage * 0.5))); // Variation
@@ -1739,10 +1663,10 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                         const qLog = world.getComponent(playerEntity, QuestLog);
                         if (qLog) {
                             for (const quest of qLog.quests) {
-                                if (!quest.completed && quest.type === 'kill' && quest.target.toLowerCase() === enemyName.toLowerCase()) {
+                                if (!quest.completed && quest.type === 'KILL' && quest.targetId.toLowerCase() === enemyName.toLowerCase()) {
                                     quest.current++;
-                                    if ((ui as any).console) (ui as any).console.sendMessage(`Quest "${quest.name}": ${quest.current}/${quest.required} ${quest.target}s`);
-                                    if (quest.current >= quest.required) {
+                                    if ((ui as any).console) (ui as any).console.sendMessage(`Quest "${quest.name}": ${quest.current}/${quest.targetCount} ${quest.targetId}s`);
+                                    if (quest.current >= quest.targetCount) {
                                         quest.completed = true;
                                         if ((ui as any).console) (ui as any).console.addSystemMessage(`Quest Complete! Return to turn in "${quest.name}"`);
                                     }
@@ -1772,7 +1696,7 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                                 // CreateEnemy takes type.
                                 // If we want "small slime", we might need a registry entry or dynamic modification.
                                 // Let's modify the new entity after creation.
-                                const child = createEnemy(world, ePos.x + offX, ePos.y + offY, splitComp.splitType || enemyName.toLowerCase());
+                                const child = createEnemy(world, ePos.x + offX, ePos.y + offY, splitComp.splitType || enemyName.toLowerCase(), 1.0, ePos.z);
 
                                 // Scale down child
                                 // 1. Health
@@ -1855,8 +1779,8 @@ export function projectileSystem(world: World, dt: number, ui: UIManager, audio:
 
                 // Hit!
                 const tHp = world.getComponent(tId, Health)!;
-                tHp.current -= proj.damage;
-                spawnFloatingText(world, tPos.x, tPos.y, `-${proj.damage}`, '#ff0');
+                tHp.current -= proj.attack;
+                spawnFloatingText(world, tPos.x, tPos.y, `-${proj.attack}`, '#ff0');
 
                 // Status Effects
                 if (proj.ownerType === 'player_ice') {
@@ -1989,20 +1913,50 @@ function renderSystem(world: World, ctx: CanvasRenderingContext2D) {
 
     const overlays: number[] = []; // Store IDs to draw HUDs later
 
+    // Get Player Z for floor-based rendering
+    let playerZ = 7; // Default ground floor
+    const playerEnts = world.query([PlayerControllable, Position]);
+    if (playerEnts.length > 0) {
+        const pPos = world.getComponent(playerEnts[0], Position);
+        if (pPos) playerZ = pPos.z;
+    }
+
+    // DEBUG: Log map3D status once
+    if (Math.random() < 0.001) {
+        console.log(`[Render] map3D: ${map.map3D ? 'YES' : 'NO'}, playerZ: ${playerZ}`);
+        const sampleTile = map.getTile(50, 50, playerZ);
+        console.log(`[Render] Sample Tile (50,50,${playerZ}):`, sampleTile?.items?.length || 0, 'items');
+    }
+
     // --- MAIN RENDER LOOP (Y-Sorted / Row-by-Row) ---
     // Tibia-like: Draw Row N (Ground -> Items -> Creature) -> Next Row
     for (let r = startRow; r < endRow; r++) {
         for (let c = startCol; c < endCol; c++) {
-            const idx = r * map.width + c;
-            const tile = map.tiles[idx];
+            // Use 3D getTile if available
+            const tile = map.getTile(c, r, playerZ);
             if (!tile) continue;
 
             const drawX = Math.floor(c * map.tileSize - camX);
             const drawY = Math.floor(r * map.tileSize - camY);
 
             // 1. Draw Tile Items (Ground -> Walls -> Objects)
+            let hasWall = false;
             for (const item of tile.items) {
                 drawSprite(ctx, item.id, drawX, drawY, map.tileSize);
+
+                // Shadow Check: If this item is a wall (Edron or Mountain)
+                if ((item.id >= 1050 && item.id <= 1060) || (item.id >= 4468 && item.id <= 4479)) {
+                    hasWall = true;
+                }
+            }
+
+            // CAST SHADOW: If this tile has a wall, cast a shadow to the East and SE
+            if (hasWall) {
+                ctx.fillStyle = "rgba(0,0,0,0.2)";
+                // East Shadow (Half-width)
+                ctx.fillRect(drawX + map.tileSize, drawY, map.tileSize / 2, map.tileSize);
+                // SE shadow (Small corner)
+                ctx.fillRect(drawX + map.tileSize, drawY + map.tileSize, map.tileSize / 2, map.tileSize / 2);
             }
 
             // 2. Draw Creature (if on this tile)
@@ -2270,11 +2224,11 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                 const armor = pInv.getEquipped('armor');
                 if (armor) {
                     // Flat reduction. Armor Value = Damage Reduction
-                    const reduction = Math.floor(armor.item.damage * 0.5); // 50% effectiveness vs Raw Dmg? 
+                    const reduction = Math.floor(armor.item.attack * 0.5); // 50% effectiveness vs Raw Dmg? 
                     // Let's make it 1:1 for now but randomized?
                     // Tibia style: Arm absorbs between Min and Max.
                     // Let's do: Absorbs 0 to ArmorValue.
-                    const absorbed = Math.floor(Math.random() * (armor.item.damage + 1));
+                    const absorbed = Math.floor(Math.random() * (armor.item.attack + 1));
                     damage -= absorbed;
                     if (absorbed > 0 && (ui as any).console) (ui as any).console.sendMessage(`Armor absorbed ${absorbed} dmg.`);
                 }
@@ -2282,19 +2236,19 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                 // Helmet
                 const helm = pInv.getEquipped('head');
                 if (helm) {
-                    const absorbed = Math.floor(Math.random() * (helm.item.damage + 1));
+                    const absorbed = Math.floor(Math.random() * (helm.item.attack + 1));
                     damage -= absorbed;
                 }
 
                 const shield = pInv.getEquipped('lhand');
                 if (shield) {
                     // Shielding Mitigation: Defense * (ShieldSkill * 0.01) + Defense
-                    let mitigation = shield.item.damage;
+                    let mitigation = shield.item.attack;
 
                     if (skills) {
                         const shSkill = skills.shielding;
                         // Bonus mitigation based on skill
-                        mitigation += Math.floor(shield.item.damage * (shSkill.level * 0.05));
+                        mitigation += Math.floor(shield.item.attack * (shSkill.level * 0.05));
 
                         // Gain XP
                         shSkill.xp += 1;
@@ -2412,7 +2366,9 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
 
 // Draw Target Reticle
 
-export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonType: string = 'temple', seed: number = 0) {
+import { generateEdronMap } from './edron_gen';
+
+export function switchMap(world: World, type: 'overworld' | 'dungeon' | 'edron', dungeonType: string = 'temple', seed: number = 0) {
     // 1. Clear Entities (Preserve Player)
     const players = world.query([PlayerControllable]);
     if (players.length === 0) return;
@@ -2427,58 +2383,113 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
     }
 
     // 2. Generate Map
-    let mapData;
+    let mapData: any;
     if (type === 'overworld') {
-        mapData = generateOverworld(256, 256, seed);
+        const width = 512;
+        const height = 512;
+        const generator = new TibiaMapGenerator(width, height, seed);
+        const map3D = generator.generate();
+
+        mapData = {
+            width,
+            height,
+            tileSize: 32,
+            tiles: map3D.exportTo2D(),
+            entities: generator.getSpawns().map(s => ({ type: 'mob', x: s.x * 32, y: s.y * 32, mobType: s.mobType, customName: s.customName, difficulty: s.difficulty })),
+            transitions: generator.getTransitions().getAll(),
+            towns: generator.getTowns()
+        };
+    } else if (type === 'edron') {
+        const width = 250;
+        const height = 250;
+        const edronMap = generateEdronMap(width, height);
+
+        // Scan for NPCs & Mobs generated by City Planner / Habitat Pass
+        const entities: any[] = [];
+        for (let z = 0; z < edronMap.floors; z++) {
+            for (let x = 0; x < width; x++) {
+                for (let y = 0; y < height; y++) {
+                    const t = edronMap.getTile(x, y, z);
+                    if (t && t.mob) {
+                        const name = t.mob;
+
+                        // HOSTILE MOBS
+                        if (['Rat', 'Wolf', 'Bear', 'Orc', 'Skeleton', 'Cyclops', 'Bandit'].includes(name)) {
+                            entities.push({
+                                type: 'enemy', // Game loop handles 'enemy' type via createEnemy
+                                x: x * 32,
+                                y: y * 32,
+                                z: z, // Captured Z level
+                                enemyType: name.toLowerCase(), // 'rat', 'wolf', etc.
+                                difficulty: 1.0
+                            });
+                        }
+                        // FRIENDLY NPCs
+                        else {
+                            let npcType = 'guide';
+                            let spriteId = SPRITES.NPC_GUIDE;
+
+                            if (name === 'Clyde') { npcType = 'merchant'; spriteId = SPRITES.NPC_BANKER; }
+                            else if (name === 'Xodet') { npcType = 'merchant'; spriteId = SPRITES.NPC_WIZARD; }
+                            else if (name === 'Willard') { npcType = 'merchant'; spriteId = SPRITES.NPC_BLACKSMITH; }
+                            else if (name === 'Henricus') { npcType = 'healer'; spriteId = SPRITES.NPC_PRIEST; }
+                            else if (name === 'Beggar') { npcType = 'guide'; spriteId = SPRITES.NPC_BEGGAR; }
+
+                            else if (name === 'King Tibianus') { npcType = 'guide'; spriteId = 7000; }
+                            else if (name === 'Royal Guard') { npcType = 'guide'; spriteId = 7001; }
+
+                            entities.push({
+                                type: 'npc',
+                                x: x * 32,
+                                y: y * 32,
+                                z: z,
+                                name: name,
+                                npcType: npcType,
+                                sprite: spriteId
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        mapData = {
+            width,
+            height,
+            tileSize: 32,
+            tiles: edronMap.exportTo2D(), // 2D fallback
+            entities: entities,
+            map3D: edronMap // Store 3D map reference
+        };
     } else {
-        // Biome-based generation: 'snow', 'desert', 'swamp' -> 'cave' type
-        // If dungeonType is 'temple' or generic, use 'dungeon' type logic?
-        // Let's assume most entrances are caves for now.
-        // We pass the 'dungeonType' string (e.g. 'snow') as the BIOME argument.
         const isBuilt = dungeonType === 'temple' || dungeonType === 'crypt';
         mapData = generateDungeon(64, 64, seed + Math.random(), isBuilt ? 'dungeon' : 'cave', dungeonType);
     }
 
     const mapEntity = world.query([TileMap])[0];
     if (mapEntity !== undefined) {
-        // Update existing map component
         const map = world.getComponent(mapEntity, TileMap)!;
         map.width = mapData.width;
         map.height = mapData.height;
         map.tileSize = mapData.tileSize;
-        map.tiles = mapData.tiles; // Replace array
+        map.tiles = mapData.tiles;
+        // Assign 3D map if available
+        if (mapData.map3D) {
+            map.map3D = mapData.map3D;
+        }
     }
 
     // 3. Spawn Entities (from Map Data)
     for (const ent of mapData.entities) {
         if (ent.type === 'player') {
-            // Teleport Player
-            const pPos = world.getComponent(playerEntity, Position)!;
-
-            // Force Town Center for Overworld (User Request)
-            if (type === 'overworld') {
-                pPos.x = 128 * 32;
-                pPos.y = 128 * 32;
-            } else {
-                pPos.x = ent.x;
-                pPos.y = ent.y;
-            }
-
-            // Reset Camera immediately to prevent flicker
-            const cam = world.query([Camera])[0];
-            if (cam) {
-                const cPos = world.getComponent(cam, Camera)!;
-                cPos.x = pPos.x - 160;
-                cPos.y = pPos.y - 120;
-            }
+            continue;
         } else if (ent.type === 'dungeon_entrance') {
             const portal = world.createEntity();
             world.addComponent(portal, new Position(ent.x, ent.y));
             world.addComponent(portal, new Sprite(77, 32));
-            world.addComponent(portal, new DungeonEntrance(ent.dungeonType, ent.label));
+            world.addComponent(portal, new DungeonEntrance(ent.dungeonType, ent.label, (ent as any).destination));
             world.addComponent(portal, new Interactable(`Enter ${ent.label}`));
             world.addComponent(portal, new Name(ent.label));
-
             if ((ent as any).locked) {
                 const lockData = (ent as any).locked;
                 world.addComponent(portal, new Locked(lockData.keyIds, lockData.message));
@@ -2491,7 +2502,7 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
             world.addComponent(portal, new Interactable(ent.label));
             world.addComponent(portal, new Name(ent.label));
         } else if (ent.type === 'enemy') {
-            createEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+            createEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty, ent.z);
         } else if (ent.type === 'fire_enemy') {
             createFireEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
         } else if (ent.type === 'ice_enemy') {
@@ -2500,67 +2511,72 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon', dungeonTy
             createWaterEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
         } else if (ent.type === 'earth_enemy') {
             createEarthEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
+        } else if (ent.type === 'mob') {
+            createMonsterFromSprite(world, ent.x, ent.y, ent.mobType, (ent as any).customName || "Monster", (ent as any).difficulty || 1.0);
         } else if (ent.type === 'item') {
-            createItem(world, ent.x, ent.y, new ItemInstance(new Item(ent.name, ent.slot, ent.uIndex, ent.damage)));
+            const itemInstance = new ItemInstance(new Item(ent.name, ent.slot, ent.uIndex, ent.attack));
+            createItem(world, ent.x, ent.y, itemInstance);
         } else if (ent.type === 'static') {
             const s = world.createEntity();
             world.addComponent(s, new Position(ent.x, ent.y));
             world.addComponent(s, new Sprite(ent.sprite, ent.size));
-        } else if (ent.type === 'boss') {
-            // Use createEnemy for bosses, they are defined in MOB_REGISTRY
-            createEnemy(world, ent.x, ent.y, ent.enemyType, 1.5); // 1.5x difficulty scaling
         } else if (ent.type === 'npc') {
-            // NPC spawning from map_gen (e.g., Aric the Guide, Gorn, Adana)
             const npcE = world.createEntity();
-            world.addComponent(npcE, new Position(ent.x, ent.y));
+            // 1. Position (Correct Z from Map)
+            world.addComponent(npcE, new Position(ent.x, ent.y, ent.z || 7));
 
-            // Determine sprite and dialogue based on npcType
-            let spriteId = SPRITES.NPC_GUIDE;
-            let dialogue = ['Greetings, traveler.', 'Welcome to Rookgaard.'];
+            // 2. Sprite (Prefer specific sprite from scanner)
+            world.addComponent(npcE, new Sprite(ent.sprite || SPRITES.NPC_GUIDE, 32));
+
+            // 3. Name & Identity
+            world.addComponent(npcE, new Name(ent.name || ent.npcName || 'Villager'));
+
+            // 4. Interaction Logic
+            let dialogue = ent.dialog || ['Greetings, traveler.', 'Welcome.'];
             let interactType = 'Talk';
 
             if (ent.npcType === 'merchant') {
-                spriteId = SPRITES.NPC_MERCHANT;
-                dialogue = ["Welcome to my Smithy!", "I sell only the essentials."];
                 interactType = 'Trade';
-
-                // Add Merchant items (matches main.ts)
                 const merchItems = [
                     createItemFromRegistry(SPRITES.POTION),
                     createItemFromRegistry(SPRITES.SWORD),
-                    new Item("Backpack", "backpack", 142, 0, 200, "20 slots.", "none", "common", 0, 0, 0, true, 20),
+                    new Item("Backpack", "backpack", 142, 0, 200, "20 slots.", "none", "common", 0, 0, 0, 0, 0, true, 20),
                     new Item("Mana Potion", "none", SPRITES.MANA_POTION || 65, 0, 75, "Restores 30 mana.", "none", "common")
                 ].filter(i => i) as Item[];
                 world.addComponent(npcE, new Merchant(merchItems));
             } else if (ent.npcType === 'healer') {
-                spriteId = SPRITES.NPC_HEALER;
-                dialogue = ["Blessings upon you.", "Do you need healing?"];
                 interactType = 'Heal';
             }
 
-            world.addComponent(npcE, new Sprite(spriteId));
-            world.addComponent(npcE, new Name(ent.name || 'Villager'));
             world.addComponent(npcE, new Interactable(interactType));
             world.addComponent(npcE, new NPC(ent.npcType || 'guide', dialogue));
+        } else if (ent.type === 'boss') {
+            createEnemy(world, ent.x, ent.y, ent.enemyType, 1.5, 7); // Default Dungeon Z?
 
-            // If quest_giver, add QuestGiver component
-            if (ent.npcType === 'quest_giver') {
-                world.addComponent(npcE, new QuestGiver([
-                    {
-                        id: 'aric_1',
-                        name: 'Rat Plague',
-                        description: 'Kill 5 Rats to protect the supplies.',
-                        type: 'kill',
-                        target: 'Rat',
-                        required: 5,
-                        current: 0,
-                        completed: false,
-                        turnedIn: false,
-                        reward: { gold: 100, xp: 200 }
-                    }
-                ]));
+        }
+
+        // 4. Force Player Positioning (Source of truth)
+        const pPos = world.getComponent(playerEntity, Position)!;
+        if (type === 'overworld' || type === 'edron') {
+            pPos.x = (type === 'overworld' ? 128 : 125) * 32;
+            pPos.y = (type === 'overworld' ? 128 : 125) * 32;
+        } else {
+            const pSpawn = mapData.entities.find((e: any) => e.type === 'player');
+            if (pSpawn) {
+                pPos.x = pSpawn.x;
+                pPos.y = pSpawn.y;
             }
-            console.log(`[SwitchMap] Spawned NPC '${ent.name}' at ${ent.x / 32}, ${ent.y / 32}`);
+        }
+
+        // Reset Camera immediately to prevent flicker
+        const cam = world.query([Camera])[0];
+        if (cam) {
+            const cPos = world.getComponent(cam, Camera)!;
+            const gameCanvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+            const viewW = gameCanvas ? gameCanvas.width : 800;
+            const viewH = gameCanvas ? gameCanvas.height : 600;
+            cPos.x = pPos.x - (viewW / 2);
+            cPos.y = pPos.y - (viewH / 2);
         }
     }
 }
@@ -2711,7 +2727,7 @@ export function toolSystem(world: World, input: InputHandler, ui: UIManager) {
 
 export function createPlayer(world: World, x: number, y: number, input: InputHandler, vocationKey: string = 'knight') {
     const e = world.createEntity();
-    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Position(x, y, 6)); // Z=6 = Elevated city floor
     world.addComponent(e, new Velocity(0, 0));
 
     // Set sprite based on vocation
@@ -2741,7 +2757,7 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
     world.addComponent(e, new ActiveSpell('adori flam')); // Default Fireball
 
     world.addComponent(e, new SkillPoints(0, 0));
-    world.addComponent(e, new Stats(10, 5, 1.5));
+    world.addComponent(e, new Stats(10, 5, 0.5)); // 2.0s Cooldown (Tibia Standard)
     world.addComponent(e, new CombatState());
     world.addComponent(e, new Target(null));
     world.addComponent(e, new RegenState());
@@ -2771,7 +2787,7 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
         // Knights start with basic gear - not the best, but functional
 
         // 1. Small Bag (8 slots only - upgrade to Backpack later!)
-        const bagItem = new Item("Small Bag", "backpack", SPRITES.SMALL_BAG, 0, 30, "A small leather bag. Limited storage.", "none", "common", 0, 0, 0, true, 8);
+        const bagItem = new Item("Small Bag", "backpack", SPRITES.SMALL_BAG, 0, 30, "A small leather bag. Limited storage.", "none", "common", 0, 0, 0, 0, 0, true, 8);
         const bagInst = new ItemInstance(bagItem, 1);
 
         // Add starting consumables to bag
@@ -2803,9 +2819,9 @@ export function createPlayer(world: World, x: number, y: number, input: InputHan
     return e;
 }
 
-function createEnemy(world: World, x: number, y: number, type: string = "orc", difficulty: number = 1.0) {
+function createEnemy(world: World, x: number, y: number, type: string = "orc", difficulty: number = 1.0, z: number = 7) {
     const e = world.createEntity();
-    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Position(x, y, z));
     world.addComponent(e, new Velocity(0, 0));
 
     // Scale HP based on difficulty
@@ -2827,10 +2843,13 @@ function createEnemy(world: World, x: number, y: number, type: string = "orc", d
         const maxHp = Math.floor(def.hp * hpScale);
         world.addComponent(e, new Health(maxHp, maxHp));
         world.addComponent(e, new Name(def.name));
+        world.addComponent(e, new Stats(def.attack, def.defense, 1.0)); // 1.0 = Default attack speed
+        world.addComponent(e, new CombatState());
 
         // Loot Generation
         const lootItems = generateLoot(def.lootTable || type);
-        world.addComponent(e, new Lootable(lootItems));
+        const lootInstances = lootItems.map(item => new ItemInstance(item));
+        world.addComponent(e, new Lootable(lootInstances));
 
         // Equipment Interaction
         if (def.equipment) {
@@ -2907,17 +2926,21 @@ export function createIceEnemy(world: World, x: number, y: number, type: string 
         world.addComponent(e, new AI(55)); // Fast
         world.addComponent(e, new Health(45 * hpScale, 45 * hpScale));
         world.addComponent(e, new Name("Ice Wolf"));
+        world.addComponent(e, new Stats(18, 10, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('bleed', 0.35, 6, 4));
     } else if (type === "frost_mage") {
         world.addComponent(e, new Sprite(SPRITES.FROST_MAGE, 32));
         world.addComponent(e, new AI(25)); // Slow caster
         world.addComponent(e, new Health(80 * hpScale, 80 * hpScale));
         world.addComponent(e, new Name("Frost Mage"));
+        world.addComponent(e, new Stats(30, 12, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('freeze', 0.6, 4, 50));
         // Drop Thunder Staff (Rare)
         world.addComponent(e, new Lootable([
-            new Item('Ice Shard', 'currency', 101, 0, 5, 'Cold to the touch', 'none', 'common', 0, 0, 0, false, 0, undefined, undefined),
-            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, false, 0, '#00ffff', 40)
+            new ItemInstance(new Item('Ice Shard', 'currency', 101, 0, 5, 'Cold to the touch', 'none', 'common', 0, 0, 0, 0, 0, false, 0)),
+            new ItemInstance(new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 0, 0, 0, false, 0, '#00ffff', 40))
         ]));
     } else if (type === "yeti") {
         // Boss-like enemy
@@ -2925,12 +2948,14 @@ export function createIceEnemy(world: World, x: number, y: number, type: string 
         world.addComponent(e, new AI(18)); // Very slow
         world.addComponent(e, new Health(250 * hpScale, 250 * hpScale));
         world.addComponent(e, new Name("Yeti"));
+        world.addComponent(e, new Stats(45, 30, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('bleed', 0.5, 8, 8));
 
         // Boss Drops
         world.addComponent(e, new Lootable([
-            new Item('Frost Helm', 'head', SPRITES.FROST_HELM, 0, 800, 'Icy protection', 'none', 'epic', 8, 0, 0, false, 0, '#ccffff', 30),
-            new Item('Ice Bow', 'rhand', SPRITES.ICE_BOW, 35, 700, 'Freezes enemies', 'bow', 'rare', 0, 0, 0, false, 0, '#99ffff', 35)
+            new ItemInstance(new Item('Frost Helm', 'head', SPRITES.FROST_HELM, 0, 800, 'Icy protection', 'none', 'epic', 8, 0, 0, 0, 0, false, 0, '#ccffff', 30)),
+            new ItemInstance(new Item('Ice Bow', 'rhand', SPRITES.ICE_BOW, 35, 700, 'Freezes enemies', 'bow', 'rare', 0, 0, 0, 0, 0, false, 0, '#99ffff', 35))
         ]));
     }
     return e;
@@ -2948,23 +2973,29 @@ function createWaterEnemy(world: World, x: number, y: number, type: string = "cr
         world.addComponent(e, new AI(20)); // Slow
         world.addComponent(e, new Health(60 * hpScale, 60 * hpScale)); // Tanky
         world.addComponent(e, new Name("Crab"));
+        world.addComponent(e, new Stats(15, 20, 1.0));
+        world.addComponent(e, new CombatState());
         // Shell gives natural armor? (Maybe high health reflects this)
     } else if (type === "siren") {
         world.addComponent(e, new Sprite(SPRITES.SIREN, 32));
         world.addComponent(e, new AI(45)); // Fast shimmer
         world.addComponent(e, new Health(50 * hpScale, 50 * hpScale));
         world.addComponent(e, new Name("Siren"));
+        world.addComponent(e, new Stats(22, 5, 1.0));
+        world.addComponent(e, new CombatState());
     } else if (type === "hydra") {
         world.addComponent(e, new Sprite(SPRITES.HYDRA, 32));
         world.addComponent(e, new AI(25));
         world.addComponent(e, new Health(300 * hpScale, 300 * hpScale)); // Boss HP
         world.addComponent(e, new Name("Hydra"));
+        world.addComponent(e, new Stats(55, 35, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('poison', 0.5, 5, 10)); // Venemous
 
         // Hydra Drops
         world.addComponent(e, new Lootable([
-            new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 20, false, 0, '#00ffff', 40),
-            new Item('Water Essence', 'currency', 100, 0, 50, 'Pure water energy', 'none', 'rare', 0, 0, 0, false, 0, undefined, undefined)
+            new ItemInstance(new Item('Thunder Staff', 'rhand', SPRITES.THUNDER_STAFF, 25, 600, 'Crackles with energy', 'staff', 'rare', 0, 0, 0, 0, 0, false, 0, '#00ffff', 40)),
+            new ItemInstance(new Item('Water Essence', 'currency', 100, 0, 50, 'Pure water energy', 'none', 'rare', 0, 0, 0, 0, 0, false, 0))
         ]));
     }
     return e;
@@ -2982,10 +3013,12 @@ function createEarthEnemy(world: World, x: number, y: number, type: string = "go
         world.addComponent(e, new AI(15)); // Very slow
         world.addComponent(e, new Health(120 * hpScale, 120 * hpScale)); // Extremely Tanky
         world.addComponent(e, new Name("Golem"));
+        world.addComponent(e, new Stats(40, 50, 1.0));
+        world.addComponent(e, new CombatState());
         // Golem Drops
         world.addComponent(e, new Lootable([
-            new Item('Earth Essence', 'currency', 110, 0, 50, 'Solid earth energy', 'none', 'rare', 0, 0, 0, undefined, undefined, undefined, undefined),
-            new Item('Obsidian Shard', 'currency', 103, 0, 15, 'Sharp black stone', 'none', 'common', 0, 0, 0, undefined, undefined, undefined, undefined)
+            new ItemInstance(new Item('Earth Essence', 'currency', 110, 0, 50, 'Solid earth energy', 'none', 'rare', 0, 0, 0, undefined, undefined, undefined, undefined)),
+            new ItemInstance(new Item('Obsidian Shard', 'currency', 103, 0, 15, 'Sharp black stone', 'none', 'common', 0, 0, 0, undefined, undefined, undefined, undefined))
         ]));
         // TODO: Add 'Resistance' component later? for now just HP.
     } else if (type === "basilisk") {
@@ -2993,6 +3026,8 @@ function createEarthEnemy(world: World, x: number, y: number, type: string = "go
         world.addComponent(e, new AI(45)); // Fast
         world.addComponent(e, new Health(60 * hpScale, 60 * hpScale));
         world.addComponent(e, new Name("Basilisk"));
+        world.addComponent(e, new Stats(28, 15, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('poison', 0.4, 4, 8));
     }
     return e;
@@ -3002,7 +3037,7 @@ function createEarthEnemy(world: World, x: number, y: number, type: string = "go
 function createMerchant(world: World, x: number, y: number) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y));
-    world.addComponent(e, new Sprite(SPRITES.NPC, 32));
+    world.addComponent(e, new Sprite(260, 32)); // Generic Merchant Sprite
     world.addComponent(e, new Interactable("Open Shop"));
     world.addComponent(e, new Name("Merchant"));
     const merch = new Merchant();
@@ -3047,21 +3082,27 @@ export function createFireEnemy(world: World, x: number, y: number, type: string
         world.addComponent(e, new AI(55)); // Fast
         world.addComponent(e, new Health(30 * hpScale, 30 * hpScale));
         world.addComponent(e, new Name("Scorpion"));
+        world.addComponent(e, new Stats(15, 8, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('poison', 0.5, 4, 6));
     } else if (type === "mummy") {
         world.addComponent(e, new Sprite(SPRITES.MUMMY, 32));
         world.addComponent(e, new AI(20)); // Slow
         world.addComponent(e, new Health(80 * hpScale, 80 * hpScale));
         world.addComponent(e, new Name("Mummy"));
+        world.addComponent(e, new Stats(12, 10, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('curse', 0.2, 5, 20)); // Curses reduce damage dealt? (Not impl yet)
     } else if (type === "spider") {
         world.addComponent(e, new Sprite(SPRITES.SPIDER, 32));
         world.addComponent(e, new AI(45));
         world.addComponent(e, new Health(35 * hpScale, 35 * hpScale));
         world.addComponent(e, new Name("Spider"));
+        world.addComponent(e, new Stats(10, 4, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('slow', 0.4, 3, 2)); // Webs
         world.addComponent(e, new Lootable([
-            new Item('Spider Silk', 'currency', 102, 0, 5, 'Sticky silk', 'none', 'common', 0, 0, 0, undefined, undefined, undefined, undefined)
+            new ItemInstance(new Item('Spider Silk', 'currency', 102, 0, 5, 'Sticky silk', 'none', 'common', 0, 0, 0, 0, 0, false, 0))
         ]));
     } else if (type === "fire_guardian") {
         // BOSS
@@ -3069,12 +3110,14 @@ export function createFireEnemy(world: World, x: number, y: number, type: string
         world.addComponent(e, new AI(35));
         world.addComponent(e, new Health(250 * hpScale, 250 * hpScale));
         world.addComponent(e, new Name("Fire Guardian"));
+        world.addComponent(e, new Stats(45, 25, 1.0));
+        world.addComponent(e, new CombatState());
         world.addComponent(e, new StatusOnHit('burn', 0.5, 6, 20));
 
         // Boss Drops
         world.addComponent(e, new Lootable([
-            new Item('Magma Armor', 'armor', SPRITES.MAGMA_ARMOR, 0, 800, 'Forged in fire', 'none', 'epic', 10, 0, 0, false, 0, '#ff4400', 50),
-            new Item('Fire Sword', 'rhand', SPRITES.FIRE_SWORD, 30, 700, 'Burns on contact', 'sword', 'rare', 0, 0, 0, false, 0, '#ffaa00', 40)
+            new ItemInstance(new Item('Magma Armor', 'armor', SPRITES.MAGMA_ARMOR, 0, 800, 'Forged in fire', 'none', 'epic', 10, 0, 0, 0, 0, false, 0, '#ff4400', 50)),
+            new ItemInstance(new Item('Fire Sword', 'rhand', SPRITES.FIRE_SWORD, 30, 700, 'Burns on contact', 'sword', 'rare', 0, 0, 0, 0, 0, false, 0, '#ffaa00', 40))
         ]));
     }
     return e;
@@ -3088,6 +3131,8 @@ export function createFinalBoss(world: World, x: number, y: number) {
     world.addComponent(e, new AI(45)); // Fast
     world.addComponent(e, new Health(1000, 1000));
     world.addComponent(e, new Name("Void Bringer"));
+    world.addComponent(e, new Stats(120, 60, 1.0));
+    world.addComponent(e, new CombatState());
     world.addComponent(e, new StatusOnHit('curse', 1.0, 10, 50)); // High damage curse
     return e;
 }
@@ -3757,12 +3802,7 @@ function castSpell(world: World, ui: UIManager, spellName: string, network?: Net
     }
 }
 
-function spawnFloatingText(world: World, x: number, y: number, text: string, color: string) {
-    const ft = world.createEntity();
-    world.addComponent(ft, new Position(x, y));
-    world.addComponent(ft, new Velocity(0, -20));
-    world.addComponent(ft, new FloatingText(text, color));
-}
+// spawnFloatingText moved to effects.ts
 
 function gainExperience(world: World, amount: number, ui: UIManager, audio: AudioController) {
     const playerEntity = world.query([PlayerControllable, Experience, Health, Mana, Position])[0];
@@ -3905,50 +3945,17 @@ export function generateLoot(enemyType: string = "orc"): Item[] {
 }
 
 // Helper to create Item Component from Registry
-export function createItemFromRegistry(id: number | string, count: number = 1): Item {
-    // Assuming ItemRegistry keys are available
-    // We treat 'id' as 'uIndex' (number) usually
-    const def = (ItemRegistry[id as number] || ItemRegistry[id as any]) as any;
-
-    if (def) {
-        // Create Item component
-        // Constructor: name, slotType, uIndex, ...
-        const item = new Item(
-            def.name,
-            def.slot,
-            def.uIndex,
-            0, 0, // frame, direction
-            def.damage,
-            def.price,
-            def.description,
-            def.weaponType,
-            def.rarity || 'common',
-            def.defense
-        );
-        item.id = (typeof id === 'number') ? id : (def.id || 0);
-        return item;
-    }
-    // Fallback
-    return new Item("Unknown", "none", 0);
-}
 
 // --- Restored Helpers ---
 
-function spawnParticle(world: World, x: number, y: number, spriteId: number, duration: number = 0.5, scale: number = 1.0, vx: number = 0, vy: number = 0, fadeRate: number = 0.9) {
+function spawnParticle(world: World, x: number, y: number, z: number, spriteId: number, duration: number = 0.5, scale: number = 1.0, vx: number = 0, vy: number = 0, fadeRate: number = 0.9) {
     const e = world.createEntity();
-    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Position(x, y, z));
     world.addComponent(e, new Sprite(spriteId, 16, false, 0));
     world.addComponent(e, new Particle(duration, duration, '#fff', 2, vx, vy));
 }
 
-function spawnBloodEffect(world: World, x: number, y: number) {
-    for (let i = 0; i < 5; i++) {
-        const e = world.createEntity();
-        world.addComponent(e, new Position(x, y));
-        world.addComponent(e, new Particle(0.5, 0.5, '#FF0000', 2, (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100));
-        world.addComponent(e, new Decay(0.5));
-    }
-}
+// spawnBloodEffect moved to effects.ts
 
 function createItem(world: World, x: number, y: number, itemInst: ItemInstance): Entity {
     const e = world.createEntity();
@@ -3962,12 +3969,14 @@ function createItem(world: World, x: number, y: number, itemInst: ItemInstance):
         old.name,
         old.slotType,
         old.uIndex,
-        old.damage,
+        old.attack, // attack (replaces damage)
         old.price,
         old.description,
         old.weaponType,
         old.rarity,
         old.defense,
+        old.armor, // added
+        old.speed, // added
         old.bonusHp,
         old.bonusMana,
         old.isContainer,
@@ -4150,7 +4159,9 @@ function createCorpse(world: World, x: number, y: number, loot: Item[] = [], spr
     world.addComponent(e, new Sprite(spriteId, 16));
     world.addComponent(e, new Decay(300)); // 300s decay (5 mins)
     world.addComponent(e, new Interactable("Loot Corpse"));
-    world.addComponent(e, new Lootable(loot));
+    // Convert Item[] to ItemInstance[]
+    const lootInstances = loot.map(item => new ItemInstance(item));
+    world.addComponent(e, new Lootable(lootInstances));
     if (loot.length > 0) {
         // world.addComponent(e, new Lootable(loot)); // Removed redundant check
 
@@ -4436,3 +4447,30 @@ export function spawnDebugSet(world: World, ui?: UIManager) {
 
 
 
+export function createMonsterFromSprite(world: World, x: number, y: number, spriteId: number, name: string = "Monster", difficulty: number = 1.0) {
+    const e = world.createEntity();
+    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Sprite(spriteId));
+    world.addComponent(e, new Name(name));
+    // Scale Logic
+    const hp = Math.floor(100 * difficulty);
+    const atk = Math.floor(10 * difficulty);
+    const def = Math.floor(5 * difficulty);
+
+    world.addComponent(e, new Health(hp, hp));
+    world.addComponent(e, new Stats(atk, def, 1.0));
+    // world.addComponent(e, new StartPos(x, y));
+
+    // AI
+    world.addComponent(e, new AI(30, 'melee')); // Default to melee
+
+    // Loot (Basic)
+    world.addComponent(e, new Lootable([new ItemInstance(new Item("Gold Coin", "currency", SPRITES.GOLD, 0, 0, "", "none", "common", 0, 0, 0, 0, 0, true, 10))]));
+
+    // Register generic mob as interactable? Maybe not.
+    // But Quest System might need interaction? No, Kill quest.
+}
+
+// Add StartPos component to components imports if missing, or define basic AI logic
+// StartPos is required for tethering/respawn often.
+// If not available, skip it.

@@ -19,7 +19,6 @@ import {
     regenSystem,
     projectileSystem,
     spawnDebugSet,
-    createItemFromRegistry,
     teleportSystem,
     switchMap,
     aiSystem,
@@ -27,23 +26,32 @@ import {
     toolSystem,
     generateLoot,
     textRenderSystem,
-    createPlayer
+    createPlayer,
+    updateEffects
 } from './game';
+import { updateMonsterAI } from './ai';
+import { createItemFromRegistry } from './data/items';
 import { PHYSICS } from './physics';
 import { AudioController } from './audio';
 import { UIManager } from './client/ui_manager';
 
 import { Position, PlayerControllable, Inventory, Passives, Velocity, Sprite, Health, Mana, Experience, QuestLog, AI, Name, SpellBook, SkillPoints, ActiveSpell, TileMap, Tile as CompTile, TileItem as CompTileItem, Stats, CombatState, Target, Tint, NPC, QuestGiver, Interactable, Merchant, Teleporter, Collider, Skills, ItemInstance, Vocation, VOCATIONS, RegenState, FloatingText, Lootable, LightSource, Corpse, CorpseDefinition, Camera, Item } from './components';
 import { useItem } from './core/interaction';
+import { initEquipmentUI } from './ui';
+import { recalculateStats } from './equipment';
 import { saveGame, loadGame } from './core/persistence';
 import { damageTextManager } from './client/damage_text';
+import { setupShopSystem } from './ui/shop';
+import { ManifestLoader } from './systems/ManifestLoader';
 import { gameEvents, EVENTS } from './core/events';
+import { initQuestSystem } from './systems/quest_system';
+import { spawnQuestNPCs } from './setup_npcs';
 
 console.log("[Main] Script Loaded. Imports Success.");
 
 const CANVAS_WIDTH = 800;
-const MAP_WIDTH = 256;
-const MAP_HEIGHT = 256;
+const MAP_WIDTH = 100;
+const MAP_HEIGHT = 100;
 
 const canvas = document.getElementById("gameCanvas") as HTMLCanvasElement;
 if (!canvas) throw new Error("No canvas found with id 'gameCanvas'");
@@ -59,9 +67,9 @@ window.addEventListener("resize", resize);
 resize();
 
 // let map: WorldMap; // ECS manages map
-let player: Player;
+export let player: Player;
 let renderer: PixelRenderer;
-let world: World;
+export let world: World;
 let input: InputHandler;
 let ui: UIManager;
 const audio = new AudioController();
@@ -90,11 +98,20 @@ window.addEventListener("mousemove", (e) => {
 
 async function start() {
     console.log("[Main] Starting Engine... (Version: Visual Polish v3)");
+
+    // EXPOSE ASSET MANAGER FOR LOADERS
+    (window as any).game = (window as any).game || {};
+    (window as any).game.assetManager = assetManager;
+
     await assetManager.loadAll();
 
     world = new World();
     input = new InputHandler();
     ui = new UIManager();
+    // LOAD CUSTOM ASSETS (Manifest) - WAIT FOR THIS
+    await ManifestLoader.load();
+    setupShopSystem(); // Initialize Shop UI Listeners
+    initQuestSystem(world); // Initialize Quest System
 
     // Listeners moved to top-level to prevent stacking on restart
     // See lines 450+
@@ -122,8 +139,11 @@ async function start() {
     player.id = pe;
 
     // NOW call switchMap - player exists so mobs/entities will be spawned
-    switchMap(world, 'overworld', 'temple', seed);
-    console.log("[Main] Map Generated via switchMap");
+    switchMap(world, 'edron', 'temple', seed);
+    console.log("[Main] Map Generated via switchMap (Edron City)");
+
+    // Spawn Quest NPCs (Override/Add to map)
+    spawnQuestNPCs(world);
 
     const centerX = Math.floor(MAP_WIDTH / 2);
     const centerY = Math.floor(MAP_HEIGHT / 2);
@@ -131,6 +151,31 @@ async function start() {
 
     renderer = new PixelRenderer(canvas);
     console.log("[Main] Renderer Created");
+
+    // Initialize Equipment UI
+    const inv = world.getComponent(player.id, Inventory);
+    if (inv) {
+        initEquipmentUI(inv.equipment, (newStats) => {
+            // Update player stats in ECS
+            const stats = world.getComponent(player.id, Stats);
+            if (stats) {
+                stats.attack = newStats.attack;
+                stats.defense = newStats.defense;
+                // stats.armor/speed could be added to Stats component or handled separately
+            }
+            // Notify UI of change
+            gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, player);
+            gameEvents.emit(EVENTS.INVENTORY_CHANGED, inv);
+        });
+
+        // Initial Stat Calculation
+        const finalStats = recalculateStats(inv.equipment, world.getComponent(player.id, Stats) || undefined);
+        const stats = world.getComponent(player.id, Stats);
+        if (stats) {
+            stats.attack = finalStats.attack;
+            stats.defense = finalStats.defense;
+        }
+    }
 
     // Assign to global game object
     game.world = world;
@@ -167,9 +212,10 @@ async function start() {
         // Override saved position to Ensure Town Center (128,128)
         const pLoc = world.getComponent(game.player.id, Position);
         if (pLoc) {
-            pLoc.x = 128 * 32;
-            pLoc.y = 128 * 32;
-            console.log("[Main] Forced Player Position to Town Center (128,128)");
+            pLoc.x = 125 * 32;
+            pLoc.y = 125 * 32;
+            pLoc.z = 6; // Elevated city floor (Z=6)
+            console.log("[Main] Forced Player Position to Town Center (125,125) on Z=6");
         }
     } else {
         ui.log("Welcome to Retro RPG!");
@@ -196,7 +242,10 @@ const game = {
             interactionSystem(world, input, ui); // New Targeting Logic
             // uiInteractionSystem(world, ui, input, player, map, renderer); // Removed to avoid conflict
             combatSystem(world);
-            aiSystem(world, dt);
+            // aiSystem(world, dt);
+            const mapEnt = world.query([TileMap])[0];
+            const mapC = mapEnt !== undefined ? (world.getComponent(mapEnt, TileMap) || null) : null;
+            updateMonsterAI(world, Date.now(), player, mapC);
             regenSystem(world, dt);
             decaySystem(world, dt);
             toolSystem(world, input, ui);
@@ -237,8 +286,22 @@ document.addEventListener("shopBuy", (e: any) => {
         const inv = world.getComponent(pEnt, Inventory);
         if (inv && inv.gold >= price) {
             inv.gold -= price;
-            inv.addItem(item); // Note: Should probably clone item or create instance
-            if (ui) ui.log(`Bought ${item.name}`);
+            inv.addItem(item);
+            if (ui) {
+                ui.log(`Bought ${item.name}`);
+                // Refresh Inventory UI
+                ui.updateEquipment(inv);
+                // Refresh Gold Display
+                if (game.player) {
+                    // game.player.gold updates automatically via ECS getter
+                    ui.handleStatsUpdate(game.player);
+                }
+            }
+            // Emit Events for other systems
+            gameEvents.emit(EVENTS.INVENTORY_CHANGED, inv);
+            // gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, pEnt); // Optional, keep if systems use ID
+        } else {
+            if (ui) ui.log("Not enough gold!", "#ff5555");
         }
     }
 });
@@ -283,13 +346,44 @@ document.addEventListener("playerAction", (e: any) => {
 
         if (consumed) {
             gameEvents.emit(EVENTS.SYSTEM_MESSAGE, msg);
-            // Remove consumed item
+            // Remove consumed item from bag (handle stacking)
             if (fromBag && inv) {
+                const bag = inv.getEquipped('backpack');
+                if (bag && bag.contents && typeof index === 'number') {
+                    const itemInst = bag.contents[index];
+                    if (itemInst) {
+                        if (itemInst.count > 1) {
+                            // Decrement stack count
+                            itemInst.count--;
+                        } else {
+                            // Remove entire item if count was 1
+                            bag.contents.splice(index, 1);
+                        }
+                    }
+                }
+            }
+            gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, player);
+            gameEvents.emit(EVENTS.INVENTORY_CHANGED, inv);
+        }
+    } else if (action === "collectGold") {
+        // Handle gold coin collection - add to player's gold balance
+        if (inv) {
+            const goldAmount = e.detail.count || 1;
+            inv.gold += goldAmount;
+
+            // Remove gold coins from bag
+            if (fromBag) {
                 const bag = inv.getEquipped('backpack');
                 if (bag && bag.contents && typeof index === 'number') {
                     bag.contents.splice(index, 1);
                 }
             }
+
+            if (ui) {
+                ui.log(`Collected ${goldAmount} gold.`);
+                ui.handleStatsUpdate(player);
+            }
+
             gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, player);
             gameEvents.emit(EVENTS.INVENTORY_CHANGED, inv);
         }
@@ -308,6 +402,8 @@ document.addEventListener("playerAction", (e: any) => {
             }
         }
 
+
+
         if (itemInst) {
             if (to.type === 'slot') {
                 inv.equip(to.slot, itemInst);
@@ -316,6 +412,12 @@ document.addEventListener("playerAction", (e: any) => {
                 if (bag && bag.contents) bag.contents.push(itemInst);
             }
             gameEvents.emit(EVENTS.INVENTORY_CHANGED, inv);
+        }
+    } else if (action === "use") {
+        // Handle generic item usage
+        if (item) {
+            gameEvents.emit(EVENTS.ITEM_USED, item.name);
+            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You use the ${item.name}.`);
         }
     }
 });
@@ -338,7 +440,10 @@ function loop() {
         try {
             cameraSystem(world, dt);
             interactionSystem(world, input, ui);
-            aiSystem(world, dt);
+            // aiSystem(world, dt);
+            const mapEnt = world.query([TileMap])[0];
+            const mapC = mapEnt !== undefined ? (world.getComponent(mapEnt, TileMap) || null) : null;
+            updateMonsterAI(world, Date.now(), player, mapC);
             toolSystem(world, input, ui);
             autoAttackSystem(world, dt, ui, input);
             combatSystem(world); // Player Combat
@@ -348,6 +453,7 @@ function loop() {
             movementSystem(world, dt, audio);
             teleportSystem(world, ui);
             decaySystem(world, dt);
+            updateEffects(dt); // New Tibia Effects
         } catch (e) {
             console.error("[Update Error]", e);
         }
@@ -374,6 +480,7 @@ function loop() {
                 playerObj = {
                     x: pos.x / TILE_SIZE,  // Convert to tile coords for renderer
                     y: pos.y / TILE_SIZE,  // Convert to tile coords for renderer
+                    z: pos.z,              // Floor level for 3D rendering
                     spriteId: spr ? spr.uIndex : 16,
                     flipX: false,
                     name: world.getComponent(pid, Name)?.value,
@@ -394,7 +501,9 @@ function loop() {
                 renderEntities.push({
                     x: pos.x,
                     y: pos.y,
+                    z: pos.z, // Pass Z-Level for Filtering
                     spriteIndex: spr.uIndex,
+                    size: spr.size, // Pass ECS size (e.g. 32)
                     tint: world.getComponent(eid, Tint),
                     name: world.getComponent(eid, Name)?.value,
                     health: world.getComponent(eid, Health),
@@ -438,6 +547,9 @@ function loop() {
                 xp.level, xp.current, xp.next,
                 skills
             );
+
+            // Update Backpack Grid (Throttled or every frame? Every frame is OK for now)
+            ui.renderBackpack(inv);
         }
     }
 

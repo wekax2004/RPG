@@ -1,64 +1,56 @@
-import { SPRITES } from '../constants';
 import { Quest } from '../components';
 
-export const QUEST_REGISTRY: Record<string, Partial<Quest>> = {
-    'rat_catcher': {
-        name: "Rat Catcher",
-        description: "The sewers are overrun! Kill 10 Rats for me.",
-        type: 'kill',
-        target: 'Rat', // Matches Mob Name
-        required: 10,
-        current: 0,
-        reward: {
-            gold: 50,
-            xp: 100,
-            items: [] // Title handling will be special
-        }
-    },
-    'wolf_hunt': {
-        name: "Wolf Hunt",
-        description: "Wolves are attacking the livestock. Cull 5 of them.",
-        type: 'kill',
-        target: 'Wolf',
-        required: 5,
-        current: 0,
-        reward: {
-            gold: 100,
-            xp: 250,
-            items: ['Leather Legs', 'Orchard Key'] // Key ID 101
-        }
-    },
-    'orc_menace': {
-        name: "Orc Menace",
-        description: "Orcs have taken the mines. Kill 10 Orc Warriors.",
-        type: 'kill',
-        target: 'Orc Warrior',
-        required: 10,
-        current: 0,
-        reward: {
-            gold: 200,
-            xp: 500,
-            items: ['Chain Armor', 'Mine Key'] // Key ID 102
-        }
-    },
-    'slay_warlord': {
-        name: "Slay the Warlord",
-        description: "The Orc Warlord commands them. End him.",
-        type: 'kill',
-        target: 'Orc Warlord',
-        required: 1,
-        current: 0,
-        reward: {
-            gold: 1000,
-            xp: 2000,
-            items: ['Golden Helmet'] // Epic Reward
-        }
-    }
-};
+import { Quest } from '../components';
 
-export const MOBS_BY_QUEST: Record<string, string> = {
-    'Rat': 'rat_catcher',
-    'Wolf': 'wolf_hunt',
-    'Orc Warrior': 'orc_menace',
-    'Orc Warlord': 'slay_warlord'
+export const QUEST_REGISTRY: Record<string, Quest> = {
+    'q_sewer_duty': {
+        id: 'q_sewer_duty',
+        name: 'Sewer Duty',
+        description: 'Old Man Jory needs you to clear out the sewers. Kill 10 Sewer Slimes.',
+        type: 'KILL',
+        targetId: 'Sewer Slime',
+        targetCount: 10,
+        current: 0,
+        reward: { gold: 100, xp: 200, items: ['Rusty Key'] },
+        completed: false,
+        turnedIn: false
+    },
+    'q_the_clue': {
+        id: 'q_the_clue',
+        name: 'The Clue',
+        description: 'You found a dirty note. Use it to decipher the text.',
+        type: 'USE',
+        targetId: 'Dirty Note',
+        targetCount: 1,
+        current: 0,
+        reward: { gold: 0, xp: 50 }, // Reward is mostly the unlock
+        completed: false,
+        turnedIn: false // Auto-turn in?
+    },
+    'q_finding_grom': {
+        id: 'q_finding_grom',
+        name: 'Finding Grom',
+        description: 'Find the entrance to Grom\'s Cave based on the clue.',
+        type: 'EXPLORE',
+        targetId: 'cave_entrance',
+        targetCount: 1,
+        current: 0,
+        prereq: 'q_the_clue',
+        reward: { gold: 50, xp: 100 },
+        completed: false,
+        turnedIn: false
+    },
+    'q_kings_beef': {
+        id: 'q_kings_beef',
+        name: 'The King\'s Beef',
+        description: 'Grom wants the King\'s Roast Chicken. Steal it from the castle kitchen.',
+        type: 'FETCH',
+        targetId: 'Roast Chicken',
+        targetCount: 1,
+        current: 0,
+        prereq: 'q_finding_grom', // Must meet Grom first
+        reward: { gold: 500, xp: 500, items: ['Orcish Peace Treaty'] },
+        completed: false,
+        turnedIn: false
+    }
 };

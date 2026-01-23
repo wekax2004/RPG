@@ -77,7 +77,7 @@ export function saveGame(world: World, ui: UIManager, seed: number) {
             name: inst.item.name,
             uIndex: inst.item.uIndex,
             count: inst.count,
-            damage: inst.item.damage,
+            attack: inst.item.attack,
             price: inst.item.price || 10,
             description: inst.item.description || "",
             weaponType: inst.item.weaponType || "none",
@@ -88,7 +88,7 @@ export function saveGame(world: World, ui: UIManager, seed: number) {
                 name: c.item.name,
                 uIndex: c.item.uIndex,
                 count: c.count,
-                damage: c.item.damage,
+                attack: c.item.attack,
                 price: c.item.price || 10,
                 description: c.item.description || "",
                 weaponType: c.item.weaponType || "none",
@@ -220,7 +220,11 @@ export function loadGame(world: World, ui: UIManager): boolean {
             // OLD FORMAT MIGRATION
             // (data.inventory.items array of simple items)
             (data.inventory as any).items.forEach((i: any) => {
-                const newItem = new Item(i.name, i.slot || 'backpack', i.uIndex, i.damage, i.price, i.description, i.weaponType || 'none', 'common', i.defense || 0, 0, 0, false, 0);
+                const dmg = i.attack ?? i.damage ?? 0;
+                const newItem = new Item(
+                    i.name, i.slot || 'backpack', i.uIndex, dmg, i.price, i.description, i.weaponType || 'none', 'common', i.defense || 0,
+                    0, 0, 0, 0, false, 0
+                );
                 const inst = new ItemInstance(newItem, 1);
                 inv.equip(i.slot || 'backpack', inst);
             });
@@ -230,18 +234,21 @@ export function loadGame(world: World, ui: UIManager): boolean {
                 // FALLBACK: If item not found in registry, create generic
                 // This is critical for Bulk items if they aren't fully registered in items.ts yet
                 // But we added basic stats for them.
+                const dmg = i.attack ?? i.damage ?? 0;
                 const newItem = new Item(
                     i.name,
                     i.slotType || 'none',
                     i.uIndex,
-                    i.damage,
+                    dmg,
                     i.price,
                     i.description,
                     i.weaponType,
                     'common',
                     i.defense || 0,
-                    0,
-                    0,
+                    0, // armor
+                    0, // speed
+                    0, // bonusHp
+                    0, // bonusMana
                     i.name === 'Backpack',
                     i.name === 'Backpack' ? 20 : 0
                 );
@@ -251,7 +258,11 @@ export function loadGame(world: World, ui: UIManager): boolean {
                 // Restore contents if backpack
                 if (i.contents) {
                     i.contents.forEach((c: any) => {
-                        const subItem = new Item(c.name, c.slotType, c.uIndex, c.damage, c.price, c.description, c.weaponType, 'common', c.defense);
+                        const dmg = c.attack ?? c.damage ?? 0;
+                        const subItem = new Item(
+                            c.name, c.slotType, c.uIndex, dmg, c.price, c.description, c.weaponType, 'common', c.defense,
+                            0, 0, 0, 0, false, 0
+                        );
                         inst.contents.push(new ItemInstance(subItem, c.count));
                     });
                 }

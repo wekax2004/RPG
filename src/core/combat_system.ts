@@ -1,9 +1,10 @@
-import { Position, Health, Sprite, Tint, Stats, CombatState, TileMap, FloatingText, Experience, Corpse, ItemInstance, Inventory, Lootable, AI, Target, Skills, Interactable, CorpseDefinition, Item } from '../components';
-import { Player } from './player';
-// import { Item } from './types'; // Removed to use Item from components
-import { SPRITES } from '../constants'; // Moved to top
-import { damageTextManager } from '../client/damage_text';
+import { Position, Health, Sprite, Tint, Stats, CombatState, TileMap, FloatingText, Experience, Corpse, ItemInstance, Inventory, Lootable, AI, Target, Skills, Interactable, CorpseDefinition, Item, Name } from '../components';
+import { SPRITES, CORPSE_IDS, ITEM_IDS } from '../constants';
+import { spawnFloatingText, spawnBloodEffect } from '../effects';
 import { gameEvents, EVENTS } from './events';
+import { MONSTER_LOOT, LootEntry } from '../data/loot';
+import { createItemFromRegistry } from '../data/items';
+import { addExperience } from './progression';
 
 export const combatSystem = (world: any) => {
     const now = performance.now();
@@ -37,6 +38,9 @@ export const combatSystem = (world: any) => {
             continue;
         }
 
+        // Z-Level Check
+        if (tPos.z !== pos.z) continue;
+
         // Determine Attack Type & Range
         // (For now assumes Melee Sword; Phase 3 will check Weapon Type)
         // Default Melee
@@ -54,7 +58,7 @@ export const combatSystem = (world: any) => {
             // 1. Hit Chance (Simple: 90% Base + Skill Factor?)
             // Let's assume 90% hit rate for now
             if (Math.random() > 0.9) {
-                damageTextManager.addText(tPos.x, tPos.y - 16, "MISS", '#aaaaaa');
+                spawnFloatingText(tPos.x, tPos.y - 16, tPos.z, "MISS", '#aaaaaa');
                 continue;
             }
 
@@ -65,7 +69,7 @@ export const combatSystem = (world: any) => {
             if (skills.sword.xp >= reqXp) {
                 skills.sword.level++;
                 skills.sword.xp = 0;
-                damageTextManager.addText(pos.x, pos.y - 32, "Skill Up!", "#ffff00");
+                spawnFloatingText(pos.x, pos.y - 32, pos.z, "Skill Up!", "#ffff00");
             }
 
             // UI UPDATE: If attacker is player, update skill bars
@@ -105,71 +109,83 @@ export const combatSystem = (world: any) => {
             }
 
             // 5. Visual Feedback
+            spawnBloodEffect(tPos.x, tPos.y, tPos.z);
             if (damage <= 0) {
-                damageTextManager.addText(tPos.x, tPos.y - 16, "BLOCK", '#00aaff');
+                spawnFloatingText(tPos.x, tPos.y - 16, tPos.z, "BLOCK", '#00aaff');
             } else {
                 if (isCrit) {
-                    damageTextManager.addText(tPos.x, tPos.y - 24, `CRIT ${damage}!`, '#ffff00');
+                    spawnFloatingText(tPos.x, tPos.y - 24, tPos.z, `CRIT ${damage}!`, '#ffff00');
                 } else {
-                    damageTextManager.addText(tPos.x + 8, tPos.y, damage.toString(), '#ff3333');
+                    spawnFloatingText(tPos.x + 8, tPos.y, tPos.z, damage.toString(), '#ff3333');
                 }
             }
 
             // Death Check
             if (tHealth.current <= 0) {
-                handleDeath(world, targetId);
+                handleDeath(world, targetId, attackerId); // Pass attackerId
                 targetComp.targetId = null;
             }
         }
     }
 };
 
+// Helper: Roll the dice for loot
+function generateLootItems(monsterName: string): ItemInstance[] {
+    const table = MONSTER_LOOT[monsterName] || [];
+    const loot: ItemInstance[] = [];
+
+    table.forEach(entry => {
+        if (Math.random() <= entry.chance) {
+            const count = entry.maxCount ? Math.floor(Math.random() * entry.maxCount) + 1 : 1;
+            const item = createItemFromRegistry(entry.itemId, count);
+            loot.push(new ItemInstance(item, count));
+        }
+    });
+
+    return loot;
+}
+
 // Helper: Handle Death (Corpses & Loot)
-function handleDeath(world: any, victimId: number) {
+export function handleDeath(world: any, victimId: number, killerId?: number) {
     const pos = world.getComponent(victimId, Position);
-    const sprite = world.getComponent(victimId, Sprite);
-    const loot = world.getComponent(victimId, Lootable); // Assumes we have Lootable component
+    const nameComp = world.getComponent(victimId, Name);
 
-    if (pos && sprite) {
-        // Create Corpse Entity
-        const corpseId = world.createEntity();
-        world.addComponent(corpseId, new Position(pos.x, pos.y));
-
-        // Corpse Sprite Logic
-        let corpseSpriteId = SPRITES.CORPSE || 299;
-
-        // Use CorpseDefinition if available
-        const corpseDef = world.getComponent(victimId, CorpseDefinition);
-        if (corpseDef && corpseDef.spriteId) {
-            corpseSpriteId = corpseDef.spriteId;
-        }
-
-        const cSprite = new Sprite(corpseSpriteId, 32);
-        world.addComponent(corpseId, cSprite);
-        world.addComponent(corpseId, new Tint('#ffffffff'));
-
-        // Add Lootable Component
-        const lootItems: Item[] = [];
-        if (loot && loot.items) {
-            for (const item of loot.items) {
-                // DROP RATE BOOST: 100% chance (User complained "no loot")
-                // Was 50%.
-                if (Math.random() < 1.0) {
-                    lootItems.push(item);
-                    console.log(`[Loot] Dropped ${item.name}`);
-                }
-            }
-        }
-        world.addComponent(corpseId, new Lootable(lootItems));
-
-        // Decay (5 mins)
-        world.addComponent(corpseId, new Corpse(300));
-
-        // Fix: Add Interactable so we can click it!
-        world.addComponent(corpseId, new Interactable("Loot Corpse"));
-
+    if (!pos || !nameComp) {
+        world.removeEntity(victimId);
+        return;
     }
 
-    // Destroy Victim
+    const monsterName = nameComp.value;
+    console.log(`${monsterName} died.`);
+
+    // QUEST HOOK
+    gameEvents.emit(EVENTS.MOB_KILLED, monsterName);
+
+    // 1. Determine Corpse ID
+    const upperName = monsterName.toUpperCase();
+    const corpseSpriteId = CORPSE_IDS[upperName as keyof typeof CORPSE_IDS] || CORPSE_IDS.DEFAULT;
+
+    // 2. Generate Loot Content
+    const lootItems = generateLootItems(monsterName);
+
+    // 3. Create Corpse Entity
+    const corpseId = world.createEntity();
+    world.addComponent(corpseId, new Position(pos.x, pos.y, pos.z));
+    world.addComponent(corpseId, new Sprite(corpseSpriteId, 32));
+    world.addComponent(corpseId, new Tint('#ffffffff'));
+    world.addComponent(corpseId, new Lootable(lootItems));
+    world.addComponent(corpseId, new Corpse(300)); // 5 min decay
+    world.addComponent(corpseId, new Interactable("Loot Corpse"));
+
+    console.log(`[Combat] ${monsterName} spawned corpse ${corpseSpriteId} with ${lootItems.length} items.`);
+
+    // AWARD EXPERIENCE
+    if (killerId) {
+        // Assume monsters have a yield
+        const xpAmount = 50; // Hardcoded for now
+        addExperience(world, killerId, xpAmount);
+    }
+
+    // 4. Destroy Victim
     world.removeEntity(victimId);
 }

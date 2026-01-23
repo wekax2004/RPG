@@ -3,6 +3,8 @@ import { SPRITES } from '../constants';
 export interface MobDef {
     name: string;
     hp: number;
+    attack: number;
+    defense: number;
     speed: number; // Pixels per second (approx)
     xp: number;    // XP value
     spriteIndex: number; // Single Sprite
@@ -53,6 +55,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'rat': {
         name: "Rat",
         hp: 25,
+        attack: 5,
+        defense: 1,
         speed: 80,
         xp: 10,
         spriteIndex: SPRITES.RAT,
@@ -64,6 +68,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'wolf': {
         name: "Wolf",
         hp: 60,
+        attack: 12,
+        defense: 4,
         speed: 70,
         xp: 35,
         spriteIndex: SPRITES.WOLF,
@@ -75,6 +81,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'bear': {
         name: "Bear",
         hp: 140,
+        attack: 25,
+        defense: 10,
         speed: 55,
         xp: 90,
         spriteIndex: SPRITES.BEAR,
@@ -86,6 +94,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'spider': {
         name: "Giant Spider",
         hp: 80,
+        attack: 18,
+        defense: 6,
         speed: 90,
         xp: 60,
         spriteIndex: SPRITES.SPIDER || 44,
@@ -98,6 +108,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'orc': {
         name: "Orc Warrior",
         hp: 120,
+        attack: 20,
+        defense: 12,
         speed: 60,
         xp: 110,
         spriteIndex: SPRITES.ORC || 58,
@@ -114,9 +126,11 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'bandit': {
         name: "Bandit",
         hp: 90,
+        attack: 15,
+        defense: 5,
         speed: 80,
         xp: 65,
-        spriteIndex: 56,
+        spriteIndex: SPRITES.BANDIT, // New ID 210
         behavior: 'aggressive',
         lootTable: 'bandit',
         fleeThreshold: 0.2,
@@ -126,9 +140,37 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
             head: SPRITES.LEATHER_HELMET
         }
     },
+    'cyclops': {
+        name: "Cyclops",
+        hp: 260,
+        attack: 45,
+        defense: 12,
+        speed: 65,
+        xp: 150,
+        spriteIndex: SPRITES.CYCLOPS, // ID 7003
+        behavior: 'aggressive',
+        lootTable: 'orc', // Placeholder loot
+        fleeThreshold: 0.1,
+        corpse: SPRITES.ORC_DEAD || 59
+    },
+    'royal_guard': {
+        name: "Royal Guard",
+        hp: 500,
+        attack: 60,
+        defense: 40,
+        speed: 70,
+        xp: 0,
+        spriteIndex: SPRITES.NPC_GUIDE, // Placeholder
+        behavior: 'neutral',
+        lootTable: 'none',
+        fleeThreshold: 0,
+        corpse: SPRITES.HUMAN_CORPSE
+    },
     'skeleton': {
         name: "Skeleton",
         hp: 45,
+        attack: 15,
+        defense: 5,
         speed: 50,
         xp: 40,
         spriteIndex: SPRITES.SKELETON,
@@ -144,6 +186,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'zombie': {
         name: "Zombie",
         hp: 100,
+        attack: 18,
+        defense: 8,
         speed: 30,
         xp: 55,
         spriteIndex: SPRITES.ZOMBIE,
@@ -156,6 +200,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'ghost': {
         name: "Ghost",
         hp: 60,
+        attack: 25,
+        defense: 0,
         speed: 60,
         xp: 75,
         spriteIndex: SPRITES.GHOST,
@@ -168,6 +214,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'slime': {
         name: "Slime",
         hp: 30,
+        attack: 10,
+        defense: 2,
         speed: 25,
         xp: 15,
         spriteIndex: SPRITES.SLIME,
@@ -181,6 +229,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'necromancer': {
         name: "Necromancer",
         hp: 300,
+        attack: 40,
+        defense: 15,
         speed: 65,
         xp: 600,
         spriteIndex: SPRITES.NECROMANCER,
@@ -196,6 +246,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'polar_bear': {
         name: "Polar Bear",
         hp: 180,
+        attack: 35,
+        defense: 15,
         speed: 50,
         xp: 140,
         spriteIndex: SPRITES.POLAR_BEAR,
@@ -208,6 +260,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'yeti': {
         name: "Yeti",
         hp: 400,
+        attack: 50,
+        defense: 25,
         speed: 65,
         xp: 350,
         spriteIndex: SPRITES.YETI,
@@ -220,6 +274,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'scorpion': {
         name: "Scorpion",
         hp: 45,
+        attack: 15,
+        defense: 8,
         speed: 85,
         xp: 35,
         spriteIndex: SPRITES.SCORPION,
@@ -233,6 +289,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'snake': {
         name: "Snake",
         hp: 20,
+        attack: 8,
+        defense: 2,
         speed: 60,
         xp: 15,
         spriteIndex: SPRITES.SNAKE,
@@ -246,6 +304,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'quest_giver': {
         name: "Aric the Guide",
         hp: 1000, // Immortal-ish
+        attack: 0,
+        defense: 100,
         speed: 0, // Stationary
         xp: 0,
         spriteIndex: SPRITES.NPC_GUIDE || 262,
@@ -260,6 +320,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'frost_giant': {
         name: "Frost Giant",
         hp: 1500,
+        attack: 80,
+        defense: 40,
         speed: 40,
         xp: 1200,
         spriteIndex: SPRITES.FROST_GIANT,
@@ -280,6 +342,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'scorpion_king': {
         name: "Scorpion King",
         hp: 1200,
+        attack: 60,
+        defense: 30,
         speed: 70,
         xp: 1000,
         spriteIndex: SPRITES.SCORPION_KING,
@@ -301,6 +365,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'hydra': {
         name: "Hydra",
         hp: 2000,
+        attack: 70,
+        defense: 35,
         speed: 30,
         xp: 1500,
         spriteIndex: SPRITES.HYDRA,
@@ -321,6 +387,8 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
     'orc_warlord': {
         name: "Orc Warlord",
         hp: 1800,
+        attack: 90,
+        defense: 50,
         speed: 55,
         xp: 1400,
         spriteIndex: SPRITES.ORC_WARLORD,
@@ -340,6 +408,26 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
             { name: 'War Cry', type: 'buff', cooldown: 15 }, // Boosts damage
             { name: 'Whirlwind', type: 'aoe', damage: 50, range: 64, cooldown: 8 },
             { name: 'Summon Orcs', type: 'summon', cooldown: 20, summonType: 'orc', summonCount: 3 }
+        ]
+    },
+    'big_zombie': {
+        name: "Big Zombie",
+        hp: 600,
+        attack: 45,
+        defense: 20,
+        speed: 35, // Slow but tough
+        xp: 250,
+        spriteIndex: SPRITES.ZOMBIE, // ID 300
+        behavior: 'aggressive',
+        lootTable: 'zombie',
+        fleeThreshold: 0,
+        corpse: SPRITES.ZOMBIE_DEAD || 22,
+        isBoss: true,
+        resistance: { poison: 1.0, physical: 0.1 },
+        enrageThreshold: 0.4,
+        bossSkills: [
+            { name: 'Vomit', type: 'aoe', damage: 30, range: 48, cooldown: 8, statusEffect: 'poison' },
+            { name: 'Summon Rats', type: 'summon', cooldown: 12, summonType: 'rat', summonCount: 3 }
         ]
     }
 };
