@@ -9,7 +9,7 @@
  */
 
 import { WorldMap3D, GROUND_FLOOR, FloorTransition, FloorTransitionRegistry } from './world_map_3d';
-import { Tile, Item } from './types';
+import { Tile, MapItem as Item } from './types';
 import { RNG } from '../rng';
 import { SPRITES } from '../constants';
 

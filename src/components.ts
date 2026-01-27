@@ -33,7 +33,11 @@ export class Sprite {
 export class TileItem {
     constructor(
         public id: number, // Sprite/Type ID
-        public count: number = 1 // Support stacking items later
+        public count: number = 1, // Support stacking items later
+        // Interactive Props
+        public locked: boolean = false,
+        public keyId: number = 0,
+        public loot: number[] = [] // Item IDs inside (for Chests)
     ) { }
 }
 
@@ -120,11 +124,13 @@ export class AI {
 
     constructor(
         public speed: number = 30,
-        public behavior: 'melee' | 'ranged' | 'flee' = 'melee',
+        public behavior: 'melee' | 'ranged' | 'flee' | 'caster' = 'melee',
         public attackRange: number = 40,
         public attackCooldown: number = 2.0,
         public detectionRadius: number = 200,      // Range to detect player
-        public fleeHealthThreshold: number = 0.2   // 20% HP triggers FLEE
+        public fleeHealthThreshold: number = 0.2,   // 20% HP triggers FLEE
+        public keepDistance: number = 0,           // Distance to maintain (Ranged/Caster)
+        public spells: string[] = []               // Available spells
     ) { }
 }
 
@@ -218,7 +224,11 @@ export class Item {
         public frame: number = 0,
         public direction: 0 | 1 | 2 | 3 = 0, // 0=Down, 1=Up, 2=Left, 3=Right
         public id: number = 0, // Registry ID moved to end for compatibility
-        public icon: string = "" // Added icon path
+        public icon: string = "", // Added icon path
+        // Rune Properties
+        public isRune: boolean = false,
+        public runeSpellName: string = "",
+        public charges: number = 0
     ) { }
 }
 
@@ -231,8 +241,14 @@ export class ItemInstance {
         // We might store that data here or link to an Entity.
         // For simplicity Phase 3: We will generate a UUID for containers or just use nested arrays if we don't need persistent world entities yet.
         // Let's use a simple nested array approach for "Container Data"
-        public contents: ItemInstance[] = []
-    ) { }
+        public contents: ItemInstance[] = [],
+        public charges: number = 0
+    ) {
+        // Init charges from definition if not provided
+        if (charges === 0 && item.charges) {
+            this.charges = item.charges;
+        }
+    }
 }
 
 export class Container {
@@ -482,6 +498,7 @@ export class Skill {
 }
 
 export class Skills {
+    fist: Skill = new Skill();
     sword: Skill = new Skill();
     axe: Skill = new Skill();
     club: Skill = new Skill();
@@ -584,13 +601,20 @@ export class Temple {
 // Mob Resistance - immunity or resistance to damage types
 export class MobResistance {
     constructor(
-        public physicalImmune: boolean = false,   // Ghost: immune to physical
-        public magicImmune: boolean = false,      // Some enemies immune to magic
-        public fireResist: number = 0,            // 0-100% fire resistance
-        public iceResist: number = 0,             // 0-100% ice resistance
-        public poisonImmune: boolean = false      // Immune to poison
+        public physical: boolean = false,
+        public magic: boolean = false,
+        public fire: number = 0,
+        public ice: number = 0,
+        public poison: boolean = false
     ) { }
 }
+
+export class Hotbar {
+    // 1-9, 0. Index 0 = '1', Index 9 = '0'?
+    // Let's stick to array index 0-9. Input System maps key to index.
+    constructor(public slots: (string | null)[] = new Array(10).fill(null)) { }
+}
+
 
 // Split On Death - creates smaller copies when killed (Slime mechanic)
 export class SplitOnDeath {

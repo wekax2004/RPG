@@ -89,6 +89,8 @@ export class InputHandler {
     }
 
     getDirection(): { x: number, y: number } {
+        if (this.shouldIgnoreInput()) return { x: 0, y: 0 };
+
         let dx = 0;
         let dy = 0;
 

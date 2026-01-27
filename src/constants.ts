@@ -48,6 +48,13 @@ export namespace SPRITES {
     export const ROPE_SPOT = 126; // Sprite for rope spot/ceiling hole
     export const CORPSE = 299;
 
+    // Interactive Objects
+    export const DOOR_LOCKED_H = 1080;
+    export const DOOR_LOCKED_V = 1081;
+    export const CHEST = 1082;
+    export const CHEST_OPEN = 1083;
+    export const IRON_KEY = 1084;
+
     // UI Sprites
     export const SWORD = 42;
     export const ARMOR = 43;
@@ -89,6 +96,7 @@ export namespace SPRITES {
 
     // Bulk Integration - Walls/Floors
     // Bulk Integration - Walls/Floors
+    export const ICE_SHARD = 3160;
     export const WALL_STONE_V = 210; // Vertical (Index 3)
     export const WALL_STONE_H = 211; // Horizontal (Index 1)
     export const WALL_STONE_NW = 215; // Corner NW (Index 0)
@@ -130,6 +138,7 @@ export namespace SPRITES {
     export const ORC_PEON = 252;
     // ORC_WARLORD moved to BOSSES section (ID 333)
 
+    export const ORC_RIDER = 253;
     export const DWARF_GUARD = 251;
     export const DWARF_MINER = 254;
     export const DWARF_GEOMANCER = 255; // Mage
@@ -162,6 +171,11 @@ export namespace SPRITES {
     // NEW MOBS
     export const BANDIT = 212;
     export const CYCLOPS = 7003;
+    export const CYCLOPS_DRONE = 7004;
+    export const CYCLOPS_SMITH = 7005;
+    export const SCARAB = 7006;
+    export const LARVA = 7007;
+    export const PALM_TREE = 52;
     // HYDRA moved to BOSSES section (ID 332)
     export const GOLEM = 279;
     export const BASILISK = 280;
@@ -341,7 +355,7 @@ export namespace SPRITES {
     export const LAMPPOST = 594;          // Street lamp
     export const TABLE = 595;             // Table
     export const BED = 596;               // Bed
-    export const CHEST = 597;             // Treasure chest
+    // export const CHEST = 597;             // Treasure chest (Duplicate)
     export const GOLD_PILE = 598;         // Pile of gold
     export const COIN = 599;              // Single coin
     export const WALL_3D = 600;           // 3D-looking wall (thick/deep)

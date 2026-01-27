@@ -27,7 +27,10 @@ import {
     generateLoot,
     textRenderSystem,
     createPlayer,
-    updateEffects
+    updateEffects,
+    handleChat,
+    hotbarSystem,
+    stairsSystem
 } from './game';
 import { updateMonsterAI } from './ai';
 import { createItemFromRegistry } from './data/items';
@@ -40,6 +43,7 @@ import { useItem } from './core/interaction';
 import { initEquipmentUI } from './ui';
 import { recalculateStats } from './equipment';
 import { saveGame, loadGame } from './core/persistence';
+import { game, createPlayer, ensureStartingEquipment } from './game';
 import { damageTextManager } from './client/damage_text';
 import { setupShopSystem } from './ui/shop';
 import { ManifestLoader } from './systems/ManifestLoader';
@@ -50,8 +54,8 @@ import { spawnQuestNPCs } from './setup_npcs';
 console.log("[Main] Script Loaded. Imports Success.");
 
 const CANVAS_WIDTH = 800;
-const MAP_WIDTH = 100;
-const MAP_HEIGHT = 100;
+const MAP_WIDTH = 300;
+const MAP_HEIGHT = 300;
 
 const canvas = document.getElementById("gameCanvas") as HTMLCanvasElement;
 if (!canvas) throw new Error("No canvas found with id 'gameCanvas'");
@@ -108,6 +112,11 @@ async function start() {
     world = new World();
     input = new InputHandler();
     ui = new UIManager();
+
+    // --- Chat System Hook ---
+    document.addEventListener('player-chat', (e: any) => {
+        handleChat(world, e.detail.text, ui);
+    });
     // LOAD CUSTOM ASSETS (Manifest) - WAIT FOR THIS
     await ManifestLoader.load();
     setupShopSystem(); // Initialize Shop UI Listeners
@@ -182,6 +191,28 @@ async function start() {
     game.player = player;
     game.ui = ui;
 
+    // LATE BINDING FIX: Ensure UI updates on stats change
+    gameEvents.on(EVENTS.PLAYER_STATS_CHANGED, (p: Player) => {
+        if (game.player && game.player.id === p.id) {
+            const hp = world.getComponent(p.id, Health);
+            const mana = world.getComponent(p.id, Mana);
+            const stats = world.getComponent(p.id, Stats);
+            const exp = world.getComponent(p.id, Experience);
+            const skills = world.getComponent(p.id, Skills);
+            const inv = world.getComponent(p.id, Inventory);
+
+            if (hp && mana && stats && exp && skills && inv) {
+                ui.updateStatus(
+                    hp.current, hp.max,
+                    mana.current, mana.max,
+                    stats.capacity, inv.gold,
+                    exp.level, exp.current, exp.next,
+                    skills
+                );
+            }
+        }
+    });
+
     // Targeting Listener (for Battle List)
     gameEvents.on(EVENTS.TARGET_ENTITY, (id: number) => {
         console.log(`[Main] TARGET_ENTITY received for ID: ${id}`);
@@ -212,10 +243,15 @@ async function start() {
         // Override saved position to Ensure Town Center (128,128)
         const pLoc = world.getComponent(game.player.id, Position);
         if (pLoc) {
-            pLoc.x = 125 * 32;
-            pLoc.y = 125 * 32;
+            pLoc.x = 126 * 32;
+            pLoc.y = 126 * 32;
             pLoc.z = 6; // Elevated city floor (Z=6)
-            console.log("[Main] Forced Player Position to Town Center (125,125) on Z=6");
+            console.log("[Main] Forced Player Position to Town Center (126,126) on Z=6");
+        }
+
+        // Retroactively apply Starting Gear if missing (Partial Save Fix)
+        if (game.player && game.player.id) {
+            ensureStartingEquipment(world, game.player.id);
         }
     } else {
         ui.log("Welcome to Retro RPG!");
@@ -241,7 +277,7 @@ const game = {
             inputSystem(world, input);
             interactionSystem(world, input, ui); // New Targeting Logic
             // uiInteractionSystem(world, ui, input, player, map, renderer); // Removed to avoid conflict
-            combatSystem(world);
+            combatSystem(world, input, audio, ui);
             // aiSystem(world, dt);
             const mapEnt = world.query([TileMap])[0];
             const mapC = mapEnt !== undefined ? (world.getComponent(mapEnt, TileMap) || null) : null;
@@ -249,6 +285,7 @@ const game = {
             regenSystem(world, dt);
             decaySystem(world, dt);
             toolSystem(world, input, ui);
+            hotbarSystem(world, input, audio, ui);
             teleportSystem(world, ui);
             movementSystem(world, dt, audio);
             cameraSystem(world, dt); // Dynamic Viewport
@@ -445,8 +482,11 @@ function loop() {
             const mapC = mapEnt !== undefined ? (world.getComponent(mapEnt, TileMap) || null) : null;
             updateMonsterAI(world, Date.now(), player, mapC);
             toolSystem(world, input, ui);
+            hotbarSystem(world, input, audio, ui);
+            stairsSystem(world, ui);
             autoAttackSystem(world, dt, ui, input);
-            combatSystem(world); // Player Combat
+
+            combatSystem(world, input, audio, ui); // Player Combat
             enemyCombatSystem(world, dt, ui, audio); // Added: Enemy Combat
             projectileSystem(world, dt, ui, audio);
             regenSystem(world, dt);
@@ -550,12 +590,14 @@ function loop() {
 
             // Update Backpack Grid (Throttled or every frame? Every frame is OK for now)
             ui.renderBackpack(inv);
+            ui.updateEquipment(inv);
         }
     }
 
     if (input) input.update();
     requestAnimationFrame(loop);
 }
+
 
 // Start game - loop is called from inside start() after initialization
 start().catch(e => console.error(e));

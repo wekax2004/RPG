@@ -1,6 +1,6 @@
 import { WorldMap, WALL, GRASS, TOWN_WALL, TOWN_FLOOR } from './map';
 import { SPRITES } from '../constants';
-import { Item } from './types';
+import { Tile, MapItem as Item } from './types';
 import { RNG } from '../rng';
 
 export class MapGenerator {

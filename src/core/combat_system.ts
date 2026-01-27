@@ -62,14 +62,39 @@ export const combatSystem = (world: any) => {
                 continue;
             }
 
-            // 1.5 SKILL GAIN (New)
-            // Only for Sword for now
-            skills.sword.xp += 1;
-            const reqXp = Math.floor(10 * Math.pow(1.1, skills.sword.level));
-            if (skills.sword.xp >= reqXp) {
-                skills.sword.level++;
-                skills.sword.xp = 0;
-                spawnFloatingText(pos.x, pos.y - 32, pos.z, "Skill Up!", "#ffff00");
+            // 1.5 SKILL GAIN (Dynamic)
+            const inv = world.getComponent(attackerId, Inventory);
+            let weaponType = 'fist'; // Default
+
+            if (inv) {
+                const weapon = inv.getEquipped('rhand') || inv.getEquipped('lhand'); // Check both hands
+                if (weapon && weapon.item.weaponType) {
+                    // map 'sword', 'axe', 'club' directly.
+                    if (['sword', 'axe', 'club'].includes(weapon.item.weaponType)) {
+                        weaponType = weapon.item.weaponType;
+                    }
+                }
+            }
+
+            // Gain XP based on Weapon Type
+            // @ts-ignore
+            if (skills[weaponType]) {
+                // @ts-ignore
+                skills[weaponType].xp += 1;
+                // @ts-ignore
+                const reqXp = Math.floor(10 * Math.pow(1.1, skills[weaponType].level));
+
+                // @ts-ignore
+                console.log(`[Combat] Attacker ${weaponType} XP: ${skills[weaponType].xp} / ${reqXp}`);
+
+                // @ts-ignore
+                if (skills[weaponType].xp >= reqXp) {
+                    // @ts-ignore
+                    skills[weaponType].level++;
+                    // @ts-ignore
+                    skills[weaponType].xp = 0;
+                    spawnFloatingText(pos.x, pos.y - 32, pos.z, "Skill Up!", "#ffff00");
+                }
             }
 
             // UI UPDATE: If attacker is player, update skill bars
@@ -106,6 +131,31 @@ export const combatSystem = (world: any) => {
             // UI UPDATE: If target is player, update HP
             if (gameObj && gameObj.player && targetId === gameObj.player.id) {
                 gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+
+                // 4.5 SHIELD SKILL GAIN (Defender)
+                // Only if player is defender
+                const defSkills = world.getComponent(targetId, Skills);
+                const defInv = world.getComponent(targetId, Inventory);
+
+                // check if shielding equipped
+                let hasShield = false;
+                if (defInv && (defInv.getEquipped('lhand')?.item.type === 'shield' || defInv.getEquipped('rhand')?.item.type === 'shield')) {
+                    hasShield = true;
+                }
+
+                if (defSkills && hasShield) {
+                    defSkills.shielding.xp += 1; // 1 XP per hit taken/blocked
+                    const reqXp = Math.floor(10 * Math.pow(1.1, defSkills.shielding.level));
+
+                    console.log(`[Combat] Defender Shield XP: ${defSkills.shielding.xp} / ${reqXp} (Lvl ${defSkills.shielding.level})`);
+
+                    if (defSkills.shielding.xp >= reqXp) {
+                        defSkills.shielding.level++;
+                        defSkills.shielding.xp = 0;
+                        spawnFloatingText(tPos.x, tPos.y - 48, tPos.z, "Shield UP!", "#0000ff");
+                        console.log(`[Combat] Shield Level Up! New Level: ${defSkills.shielding.level}`);
+                    }
+                }
             }
 
             // 5. Visual Feedback

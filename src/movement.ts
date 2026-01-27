@@ -99,7 +99,7 @@ export function movePlayer(
 
     // 3. COLLISION CHECK (Standard blocking)
     // Check items on the tile for blocking
-    const isBlocked = targetTile.items.some(item =>
+    const isBlocked = targetTile.items.some((item: any) =>
         BLOCKING_IDS.has(item.id) || PHYSICS.isSolid(item.id)
     );
 
@@ -153,6 +153,41 @@ export function movePlayer(
         if (item.id === RAMP_IDS.STAIRS_UP || item.id === RAMP_IDS.LADDER_UP) {
             targetZ -= 1;
             break;
+        }
+    }
+
+    // 5b. CHECK FLOOR BELOW FOR RAMPS (Going DOWN)
+    // If the tile *below* the target (Z+1) has a ramp, we might be walking down it.
+    if ((map as any).map3D && targetZ === startZ) {
+        const belowTile = (map as any).map3D.getTile(targetX, targetY, startZ + 1);
+        if (belowTile) {
+            for (const item of belowTile.items) {
+                // RAMP_NORTH (1950): Walk South (dy>0) to go down?
+                // Logic: Ramp Up is North. So Top is North. Bottom is South?
+                // No, Ramp North means "Ascend Northwards". Base is South, Top is North.
+                // So to go down, you start North (Top) and walk South?
+                // Yes. If below has RAMP_NORTH, and dy > 0, we go down.
+                if (item.id === RAMP_IDS.NORTH && dy > 0) {
+                    targetZ += 1;
+                    console.log(`[Move] Walking Down Ramp North (Southward). Z->${targetZ}`);
+                    break;
+                }
+                if (item.id === RAMP_IDS.SOUTH && dy < 0) {
+                    targetZ += 1;
+                    console.log(`[Move] Walking Down Ramp South (Northward). Z->${targetZ}`);
+                    break;
+                }
+                if (item.id === RAMP_IDS.EAST && dx < 0) {
+                    targetZ += 1;
+                    console.log(`[Move] Walking Down Ramp East (Westward). Z->${targetZ}`);
+                    break;
+                }
+                if (item.id === RAMP_IDS.WEST && dx > 0) {
+                    targetZ += 1;
+                    console.log(`[Move] Walking Down Ramp West (Eastward). Z->${targetZ}`);
+                    break;
+                }
+            }
         }
     }
 

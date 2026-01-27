@@ -1,9 +1,12 @@
+
+// Renderer Process
 import { WorldMap } from '../core/map';
 import { TILE_SIZE } from '../core/types';
 import { Player } from '../core/player';
 import { assetManager } from '../assets';
 import { renderEffects } from '../effects';
-import { Tint, Target, Position, Health } from '../components';
+import { Tint, Target, Position, Health, Hotbar, PlayerControllable } from '../components';
+import { renderHotbar } from '../ui/hotbar';
 
 // Define RenderItem type based on its usage in the original code
 type RenderItem = { y: number, draw: () => void, debugId?: string };
@@ -41,7 +44,10 @@ export class PixelRenderer {
         const screenWidth = this.canvas.width;
         const screenHeight = this.canvas.height;
         // TIBIA GREEN BACKGROUND: Masks gaps in "jagged" grass tiles
-        this.ctx.fillStyle = '#426829'; // Tibia Grass Green
+        // TIBIA GREEN BACKGROUND: Masks gaps in "jagged" grass tiles
+        // If Underground (z > 7), use BLACK
+        const playerZ = player ? (player.z ?? 7) : 7;
+        this.ctx.fillStyle = playerZ > 7 ? '#000000' : '#426829';
         this.ctx.fillRect(0, 0, screenWidth, screenHeight);
 
         // DEBUG: Log map state once
@@ -70,7 +76,7 @@ export class PixelRenderer {
         const endRow = Math.min(map.height, Math.ceil((camY + screenHeight) / TILE_SIZE) + 1);
 
         // Get player Z for 3D floor rendering
-        const playerZ = player.z !== undefined ? player.z : 7;
+
 
         // STEP 1: Draw Floor (Always Bottom)
         // STEP 1: Draw Floor (Always Bottom)
@@ -344,6 +350,18 @@ export class PixelRenderer {
                 this.ctx.lineTo(tx + 10, ty - 16 - pulse);
                 this.ctx.lineTo(tx + 22, ty - 16 - pulse);
                 this.ctx.fill();
+            }
+        }
+
+        // STEP 6: UI Overlays (Hotbar)
+        if (world) {
+            const pEnts = world.query([PlayerControllable]);
+            if (pEnts.length > 0) {
+                const pid = pEnts[0];
+                const hotbar = world.getComponent(pid, Hotbar);
+                if (hotbar) {
+                    renderHotbar(this.ctx, hotbar, screenHeight, screenWidth);
+                }
             }
         }
     }

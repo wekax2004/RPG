@@ -1,7 +1,10 @@
 import { WorldMap3D, GROUND_FLOOR } from './core/world_map_3d';
-import { Tile, Item } from './core/types';
+import { Tile, MapItem as Item } from './core/types';
 import { SPRITES, EDRON_ASSETS } from './constants';
 import { TERRAIN, generateHeightMap } from './core/noise';
+import { generateCyclopsMountain } from './gen/mountain_gen';
+import { generateOrcFortress } from './gen/orc_fortress_gen';
+import { generateDesert } from './gen/desert_gen';
 
 const WALL_SETS = EDRON_ASSETS.WALLS;
 
@@ -110,7 +113,7 @@ export function placeEdronCity(map: WorldMap3D, startX: number, startY: number, 
         const tile = map.getTile(x, y, z);
         if (tile) {
             wallIndices.add(y * map.width + x);
-            tile.addItem(new Item(wallType));
+            tile.addItem(new Item(1, {}, wallType));
         }
     };
 
@@ -142,7 +145,7 @@ export function placeEdronCity(map: WorldMap3D, startX: number, startY: number, 
         const cornerTile = map.getTile(tx, ty, z);
         if (cornerTile) {
             cornerTile.items = [];
-            cornerTile.addItem(new Item(EDRON_ASSETS.WALLS.PILLAR)); // Pillar
+            cornerTile.addItem(new Item(1, {}, EDRON_ASSETS.WALLS.PILLAR)); // Pillar
         }
     };
 
@@ -166,7 +169,7 @@ export function placeEdronCity(map: WorldMap3D, startX: number, startY: number, 
         const tile = map.getTile(x, shopTy + 2, z); // 2 tiles down from top
         if (tile) {
             tile.items = []; // Clear other items
-            tile.addItem(new Item(SPRITES.EDRON_SHOP_COUNTER));
+            tile.addItem(new Item(1, {}, SPRITES.EDRON_SHOP_COUNTER));
         }
     }
 
@@ -203,7 +206,7 @@ export function placeEdronCity(map: WorldMap3D, startX: number, startY: number, 
     const keepDoorTile = map.getTile(keepDoorX, keepY + keepH - 1, z);
     if (keepDoorTile) {
         keepDoorTile.items = [];
-        keepDoorTile.addItem(new Item(6003)); // Wooden Door
+        keepDoorTile.addItem(new Item(1, {}, 6003)); // Wooden Door
     }
 
     // === 4. MASSIVE GATEHOUSE (5-tiles wide so you can DEFINITELY walk out) ===
@@ -224,11 +227,11 @@ export function placeEdronCity(map: WorldMap3D, startX: number, startY: number, 
     const leftPillar = map.getTile(gateX - 3, gateY, z);
     const rightPillar = map.getTile(gateX + 3, gateY, z);
     if (leftPillar) {
-        leftPillar.addItem(new Item(EDRON_ASSETS.WALLS.PILLAR));  // Pillar Left
+        leftPillar.addItem(new Item(1, {}, EDRON_ASSETS.WALLS.PILLAR));  // Pillar Left
         wallIndices.add(gateY * map.width + (gateX - 3));
     }
     if (rightPillar) {
-        rightPillar.addItem(new Item(EDRON_ASSETS.WALLS.PILLAR)); // Pillar Right
+        rightPillar.addItem(new Item(1, {}, EDRON_ASSETS.WALLS.PILLAR)); // Pillar Right
         wallIndices.add(gateY * map.width + (gateX + 3));
     }
 
@@ -248,16 +251,16 @@ export function placeEdronCity(map: WorldMap3D, startX: number, startY: number, 
     for (let y = gateY - 2; y > keepY + keepH; y -= 3) {
         const leftLamp = map.getTile(gateX - 3, y, z);
         const rightLamp = map.getTile(gateX + 3, y, z);
-        if (leftLamp && !leftLamp.items.length) leftLamp.addItem(new Item(SPRITES.EDRON_LAMP));  // Edron Lamp
-        if (rightLamp && !rightLamp.items.length) rightLamp.addItem(new Item(SPRITES.EDRON_LAMP)); // Edron Lamp
+        if (leftLamp && !leftLamp.items.length) leftLamp.addItem(new Item(1, {}, SPRITES.EDRON_LAMP));  // Edron Lamp
+        if (rightLamp && !rightLamp.items.length) rightLamp.addItem(new Item(1, {}, SPRITES.EDRON_LAMP)); // Edron Lamp
     }
 
     // === 7. LAMPS ALONG OUTSIDE ROAD ===
     for (let y = gateY + 1; y < map.height; y += 6) {
         const leftLamp = map.getTile(gateX - 2, y, z);
         const rightLamp = map.getTile(gateX + 2, y, z);
-        if (leftLamp && !leftLamp.items.length) leftLamp.addItem(new Item(SPRITES.EDRON_LAMP));  // Lamp Left
-        if (rightLamp && !rightLamp.items.length) rightLamp.addItem(new Item(SPRITES.EDRON_LAMP)); // Lamp Right
+        if (leftLamp && !leftLamp.items.length) leftLamp.addItem(new Item(1, {}, SPRITES.EDRON_LAMP));  // Lamp Left
+        if (rightLamp && !rightLamp.items.length) rightLamp.addItem(new Item(1, {}, SPRITES.EDRON_LAMP)); // Lamp Right
     }
 
     // === 8. COURTYARD CLUTTER ===
@@ -276,13 +279,13 @@ export function placeEdronCity(map: WorldMap3D, startX: number, startY: number, 
 
         const tile = map.getTile(rx, ry, z);
         if (tile && tile.items.length === 0 && !wallIndices.has(ry * map.width + rx)) {
-            tile.addItem(new Item(CLUTTER[Math.floor(Math.random() * CLUTTER.length)]));
+            tile.addItem(new Item(1, {}, CLUTTER[Math.floor(Math.random() * CLUTTER.length)]));
         }
     }
 
     // === 9. FOUNTAIN IN PLAZA ===
     const fTile = map.getTile(centerX, centerY, z);
-    if (fTile) fTile.addItem(new Item(EDRON_ASSETS.DECOR.FOUNTAIN_WATER));
+    if (fTile) fTile.addItem(new Item(1, {}, EDRON_ASSETS.DECOR.FOUNTAIN_WATER));
 }
 
 export function generateMountainBorders(map: WorldMap3D, startX: number, startY: number, width: number, height: number, z: number = GROUND_FLOOR) {
@@ -315,7 +318,7 @@ export function generateMountainBorders(map: WorldMap3D, startX: number, startY:
                 }
 
                 if (borderId !== 0) {
-                    tile.addItem(new Item(borderId));
+                    tile.addItem(new Item(1, {}, borderId));
                 }
             }
         }
@@ -340,7 +343,7 @@ export function createCityGate(map: WorldMap3D, x: number, y: number, z: number 
     tile.baseId = EDRON_ASSETS.FLOORS.COBBLESTONE;
 
     // 2. Place the Ramp (Assuming South entrance leading North)
-    tile.addItem(new Item(EDRON_ASSETS.STAIR_ASSETS.RAMP_NORTH));
+    tile.addItem(new Item(1, {}, EDRON_ASSETS.STAIR_ASSETS.RAMP_NORTH));
 
     // 3. Clear path in front
     const frontTile = map.getTile(x, y + 1, z);
@@ -371,8 +374,8 @@ export function generateEdronMap(width: number, height: number): WorldMap3D {
 
     // Helper: Check if coordinate is inside city zone (with 2-tile buffer for cliffs)
     const isInsideCity = (x: number, y: number): boolean => {
-        return (x >= CITY_RECT.x - 2 && x <= CITY_RECT.x + CITY_RECT.w + 1 &&
-            y >= CITY_RECT.y - 2 && y <= CITY_RECT.y + CITY_RECT.h + 1);
+        return (x >= CITY_RECT.x - 5 && x <= CITY_RECT.x + CITY_RECT.w + 4 &&
+            y >= CITY_RECT.y - 5 && y <= CITY_RECT.y + CITY_RECT.h + 4);
     };
 
     // ============================================================
@@ -473,10 +476,10 @@ export function generateEdronMap(width: number, height: number): WorldMap3D {
             // Add items
             items.forEach(itemId => {
                 const tile7 = map.getTile(x, y, GROUND_FLOOR);
-                if (tile7) tile7.addItem(new Item(itemId));
+                if (tile7) tile7.addItem(new Item(1, {}, itemId));
 
                 const tile6 = map.getTile(x, y, elevatedZ);
-                if (tile6) tile6.addItem(new Item(itemId));
+                if (tile6) tile6.addItem(new Item(1, {}, itemId));
             });
         }
     }
@@ -600,21 +603,27 @@ export function generateEdronMap(width: number, height: number): WorldMap3D {
         // Floor
         for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
             const t = map.getTile(bx + dx, by + dy, elevatedZ);
-            if (t) { t.baseId = floor; t.items = []; }
+            if (t) {
+                t.items = []; // Clear first
+                t.baseId = floor; // Then set floor
+            }
         }
         // Walls
         for (let i = 0; i < w; i++) {
-            const t1 = map.getTile(bx + i, by, elevatedZ); if (t1) t1.items.push(new Item(6020));
-            const t2 = map.getTile(bx + i, by + h - 1, elevatedZ); if (t2) t2.items.push(new Item(6020));
+            const t1 = map.getTile(bx + i, by, elevatedZ); if (t1) t1.items.push(new Item(1, {}, 1054));
+            const t2 = map.getTile(bx + i, by + h - 1, elevatedZ); if (t2) t2.items.push(new Item(1, {}, 1054));
         }
         for (let i = 0; i < h; i++) {
-            const t1 = map.getTile(bx, by + i, elevatedZ); if (t1) t1.items.push(new Item(6020));
-            const t2 = map.getTile(bx + w - 1, by + i, elevatedZ); if (t2) t2.items.push(new Item(6020));
+            const t1 = map.getTile(bx, by + i, elevatedZ); if (t1) t1.items.push(new Item(1, {}, 1054));
+            const t2 = map.getTile(bx + w - 1, by + i, elevatedZ); if (t2) t2.items.push(new Item(1, {}, 1054));
         }
         // Door (Bottom Center)
         const doorX = bx + Math.floor(w / 2);
         const dt = map.getTile(doorX, by + h - 1, elevatedZ);
-        if (dt) dt.items = []; // Remove wall
+        if (dt) {
+            // Force reset to just the floor item
+            dt.items = [new Item(1, {}, floor)];
+        }
     };
 
     const cityX = cx - 35; // City Top-Left approximation
@@ -703,7 +712,7 @@ export function generateEdronMap(width: number, height: number): WorldMap3D {
         for (let x = 0; x < width; x++) {
             if (isInsideCity(x, y)) continue;
 
-            const t = map.getTile(x, y, groundZ);
+            const t = map.getTile(x, y, elevatedZ);
             if (!t) continue;
             if (t.baseId === SPRITES.WATER) continue; // No swimming mobs yet
 
@@ -725,7 +734,7 @@ export function generateEdronMap(width: number, height: number): WorldMap3D {
                 t.mob = "Bandit"; // Desert = Bandit
             } else {
                 // Distance Zones
-                if (dist < 60) {
+                if (dist < 35) {
                     // Safe Zone (Near City) - Peaceful
                 } else if (dist < 100) {
                     // Outskirts
@@ -744,17 +753,26 @@ export function generateEdronMap(width: number, height: number): WorldMap3D {
     const gTile = map.getTile(grateX, grateY, elevatedZ);
     if (gTile) {
         gTile.items = [];
-        gTile.addItem(new Item(SPRITES.SEWER_GRATE));
+        gTile.addItem(new Item(1, { destinationZ: elevatedZ + 2 }, SPRITES.SEWER_GRATE));
     }
 
     // Generate Sewer Level below
-    generateEdronSewers(map, cx, cy, grateX, grateY, elevatedZ + 1); // Z=7 (Ground/Mountain Base) or Z=8?
+    generateEdronSewers(map, cx, cy, grateX, grateY, elevatedZ + 2); // Z=8 (Deep Sewer)
     // Let's use Z=8 for "Deep Sewer" to be safe and distinct from Wilderness Z=7.
     // Actually, createCityGate links 6->7.
     // Sewer should probably be 8 or a totally different Z. 
     // Let's use Z=7 but ensure it's "Inside" the mountain collision-wise?
     // Or just Z=8.
     // Let's go Z=8.
+
+    // === 11. CYCLOPS MOUNTAIN (North East) ===
+    generateCyclopsMountain(map, 0, 0, map.width, map.height, CITY_RECT);
+
+    // === 12. ORC FORTRESS (West) ===
+    generateOrcFortress(map, CITY_RECT);
+
+    // === 13. DESERT OF SOLITUDE (South) ===
+    generateDesert(map, CITY_RECT);
 
     return map;
 }
@@ -778,7 +796,7 @@ function generateEdronSewers(map: WorldMap3D, cx: number, cy: number, grateX: nu
 
                     // Walls on edge
                     if (x === bx || x === bx + w - 1 || y === by || y === by + h - 1) {
-                        t.items.push(new Item(WALL));
+                        t.items.push(new Item(1, {}, WALL));
                     } else {
                         // Inside room
                         // Mobs?
@@ -825,7 +843,7 @@ function generateEdronSewers(map: WorldMap3D, cx: number, cy: number, grateX: nu
 
     // Ladder Up (North)
     const lTile = map.getTile(grateX, grateY - 1, z);
-    if (lTile) { lTile.items = []; lTile.addItem(new Item(SPRITES.LADDER_UP)); }
+    if (lTile) { lTile.items = []; lTile.addItem(new Item(1, { destinationZ: z - 2 }, SPRITES.LADDER_UP)); }
 
     // Landing Spot
     const landTile = map.getTile(grateX, grateY, z);
@@ -866,8 +884,36 @@ function generateEdronSewers(map: WorldMap3D, cx: number, cy: number, grateX: nu
         bTile.mob = "big_zombie"; // Boss
     }
     // Add extra Mobs in boss room
-    const bTile2 = map.getTile(bx - 2, by - 2, z); if (bTile2) bTile2.mob = "Slime";
     const bTile3 = map.getTile(bx + 2, by + 2, z); if (bTile3) bTile3.mob = "Slime";
+
+    // 5. Treasury Room
+    const tx = bossRoom.x + bossRoom.w + 2;
+    const ty = bossRoom.y + Math.floor(bossRoom.h / 2) - 2;
+    digRoom(tx, ty, 5, 5, false);
+
+    // Connect (Tunnel)
+    const tunnelY = bossRoom.y + Math.floor(bossRoom.h / 2);
+    digTunnel(bossRoom.x + bossRoom.w, tunnelY, tx, tunnelY);
+
+    // Door
+    const dTile = map.getTile(tx, tunnelY, z);
+    if (dTile) {
+        // Vertical Door (Entrance to room on right)
+        dTile.addItem(new Item(1, { locked: true, keyId: SPRITES.IRON_KEY }, SPRITES.DOOR_LOCKED_V));
+    }
+
+    // Chest
+    const cTile = map.getTile(tx + 2, ty + 2, z);
+    if (cTile) {
+        const chest = new Item(1, {}, SPRITES.CHEST);
+        chest.isContainer = true;
+        chest.inventory = [
+            new Item(100, {}, SPRITES.GOLD),
+            new Item(1, {}, SPRITES.KNIGHT_LEGS || 144),
+            new Item(3, {}, SPRITES.MANA_POTION)
+        ];
+        cTile.addItem(chest);
+    }
 
     console.log(`[Sewers] Generated ${rooms.length} rooms. Boss at ${bx},${by}`);
 }

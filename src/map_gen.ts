@@ -1,5 +1,6 @@
 import { SPRITES } from './constants';
 import { RNG } from './rng';
+import { simplex2D } from './core/noise';
 import { Tile } from './components';
 
 // --- WALL BITMASKING (4-Bit Adjacency) ---
@@ -45,7 +46,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
     // --- NEW: TOWN SETTINGS ---
     const centerX = Math.floor(width / 2);
     const centerY = Math.floor(height / 2);
-    const townRadius = 12; // Size of the town (24x24 tiles)
+    const townRadius = 24; // Expanded for 300x300 map
 
     // 1. Generate Base Terrain (Noise/Randomness)
     for (let y = 0; y < height; y++) {
@@ -95,15 +96,28 @@ export function generateOverworld(width: number, height: number, seed: number): 
             const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
 
             if (dist > 3) {
-                if (rng.next() > 0.96) {
+                // Use Noise for organic forests
+                // Scale: 0.1 gives decent clumps. Threshold 0.2 means ~40% forest coverage in dense areas.
+                // Add jitter (rng.next) to make it not 100% solid blocks
+                const noiseVal = simplex2D(x * 0.08, y * 0.08); // Structure
+                const density = 0.3; // Threshold
+
+                if (noiseVal > density && rng.next() > 0.3) {
                     // Add Biome-Specific Obstacles
                     let obs = SPRITES.OAK_TREE;
-                    if (biome === 'snow') obs = SPRITES.PINE_TREE || 50; // Fallback
-                    else if (biome === 'desert') obs = SPRITES.CACTUS || SPRITES.ROCK; // Cactus missing?
+                    if (biome === 'snow') obs = SPRITES.PINE_TREE || 50;
+                    else if (biome === 'desert') obs = SPRITES.CACTUS || SPRITES.ROCK;
                     else if (biome === 'swamp') obs = SPRITES.DROWNED_TREE || SPRITES.TREE_OAK;
 
-                    if (biome === 'desert' && rng.next() > 0.5) obs = SPRITES.ROCK;
+                    if (biome === 'desert' && rng.next() > 0.6) obs = SPRITES.ROCK;
 
+                    tiles[index].add(obs);
+                } else if (rng.next() > 0.985) {
+                    // Sporadic trees outside forests
+                    let obs = SPRITES.OAK_TREE;
+                    if (biome === 'snow') obs = SPRITES.PINE_TREE || 50;
+                    else if (biome === 'desert') obs = SPRITES.ROCK;
+                    else if (biome === 'swamp') obs = SPRITES.DROWNED_TREE || SPRITES.TREE_OAK;
                     tiles[index].add(obs);
                 }
             }
@@ -396,16 +410,21 @@ export function generateOverworld(width: number, height: number, seed: number): 
         }
     };
 
+    const poiScale = Math.max(1, Math.floor((width * height) / 15000));
+    console.log(`[MapGen] Generating up to ${poiScale} instances of major POIs`);
+
     // === A. ORC FORTRESS (Grasslands) ===
-    // Find a spot in the grasslands (center band)
-    let orcPlaced = false;
-    for (let i = 0; i < 50; i++) {
+    let orcCount = 0;
+    for (let k = 0; k < 100 && orcCount < poiScale; k++) {
         const ox = rng.nextInt(width);
         const oy = rng.nextInt(height);
         // Grassland check (middle band)
         if (oy > height * 0.3 && oy < height * 0.7 && Math.abs(ox - centerX) > 30) {
             // Build Fortress
             const fortSize = 14;
+            // Check clearing
+            // ... (Simplified check: just go for it)
+
             for (let fy = oy - fortSize / 2; fy <= oy + fortSize / 2; fy++) {
                 for (let fx = ox - fortSize / 2; fx <= ox + fortSize / 2; fx++) {
                     const fIdx = Math.floor(fy) * width + Math.floor(fx);
@@ -426,60 +445,79 @@ export function generateOverworld(width: number, height: number, seed: number): 
             // Warlord
             entities.push({ type: 'boss', x: ox * 32, y: oy * 32, enemyType: 'orc_warlord' });
             console.log(`[MapGen] Orc Fortress generated at ${ox},${oy}`);
-            orcPlaced = true;
-            break;
+            orcCount++;
         }
     }
 
     // === B. WOLF DEN (Forest) ===
     // Near trees
-    let wolfPlaced = false;
-    for (let i = 0; i < 50 && !wolfPlaced; i++) {
+    let wolfCount = 0;
+    for (let i = 0; i < 100 && wolfCount < poiScale * 1.5; i++) { // More wolf dens than forts
         const wx = rng.nextInt(width);
         const wy = rng.nextInt(height);
         // Check for trees nearby implies forest
         const idx = wy * width + wx;
-        if (tiles[idx] && tiles[idx].has(SPRITES.GRASS_FLOWERS)) { // Deep grass
-            spawnMobGroup(wx, wy, 10, 12, 'wolf');
-            spawnMobGroup(wx, wy, 5, 3, 'bear'); // Bears nearby
+        if (tiles[idx] && tiles[idx].has(SPRITES.OAK_TREE)) { // Check OAK_TREE specifically
+            spawnMobGroup(wx, wy, 10, 8, 'wolf');
+            spawnMobGroup(wx, wy, 5, 2, 'bear'); // Bears nearby
             console.log(`[MapGen] Wolf Den generated at ${wx},${wy}`);
-            wolfPlaced = true;
+            wolfCount++;
         }
     }
 
     // === C. ICE MOUNTAIN (North) ===
-    const iceX = Math.floor(width * 0.7); // East side
-    const iceY = 15; // North
-    spawnMobGroup(iceX, iceY, 20, 8, 'yeti');
-    spawnMobGroup(iceX, iceY, 25, 12, 'polar_bear');
-    console.log(`[MapGen] Ice Mountain populated at ${iceX},${iceY}`);
+    let iceCount = 0;
+    while (iceCount < poiScale) {
+        const iceX = rng.nextInt(width);
+        const iceY = rng.nextInt(Math.floor(height * 0.25));
+        spawnMobGroup(iceX, iceY, 20, 8, 'yeti');
+        spawnMobGroup(iceX, iceY, 25, 12, 'polar_bear');
+        iceCount++;
+    }
+    console.log(`[MapGen] Generated ${iceCount} Ice Mountain mob groups`);
 
     // === D. DESERT RUINS (South) ===
-    const desX = Math.floor(width * 0.3); // West side
-    const desY = height - 20; // South
-    // Ruins (Sandstone columns)
-    for (let r = 0; r < 10; r++) {
-        const rx = desX + Math.floor(rng.next() * 20 - 10);
-        const ry = desY + Math.floor(rng.next() * 10 - 5);
-        tiles[ry * width + rx].add(SPRITES.SANDSTONE);
+    let desCount = 0;
+    while (desCount < poiScale) {
+        const desX = rng.nextInt(width);
+        const desY = height - 1 - rng.nextInt(Math.floor(height * 0.25));
+
+        // Ruins (Sandstone columns)
+        for (let r = 0; r < 10; r++) {
+            const rx = Math.max(0, Math.min(width - 1, desX + Math.floor(rng.next() * 20 - 10)));
+            const ry = Math.max(0, Math.min(height - 1, desY + Math.floor(rng.next() * 10 - 5)));
+            tiles[ry * width + rx].add(SPRITES.SANDSTONE);
+        }
+        spawnMobGroup(desX, desY, 15, 10, 'scorpion');
+        spawnMobGroup(desX, desY, 15, 10, 'snake');
+        desCount++;
     }
-    spawnMobGroup(desX, desY, 15, 10, 'scorpion');
-    spawnMobGroup(desX, desY, 15, 10, 'snake');
-    console.log(`[MapGen] Desert Ruins populated at ${desX},${desY}`);
+    console.log(`[MapGen] Generated ${desCount} Desert Ruins sites`);
 
     // === E. SPIDER CAVES (Swamp edges) ===
-    const swampX = 15;
-    const swampY = Math.floor(height / 2);
-    spawnMobGroup(swampX, swampY, 15, 20, 'spider');
-    spawnMobGroup(swampX, swampY, 15, 5, 'slime');
+    let swampCount = 0;
+    while (swampCount < poiScale) {
+        // Pick West or East Edge
+        const isWest = rng.next() > 0.5;
+        const swampX = isWest ? rng.nextInt(Math.floor(width * 0.2)) : Math.floor(width * 0.8) + rng.nextInt(Math.floor(width * 0.2));
+        const swampY = rng.nextInt(height);
+
+        spawnMobGroup(swampX, swampY, 15, 20, 'spider');
+        spawnMobGroup(swampX, swampY, 15, 5, 'slime');
+        swampCount++;
+    }
 
     // 5. Spawn Dungeon Entrances (Biome Specific)
-    // One per biome
+    // One per cluster
     const biomes = ['snow', 'desert', 'swamp'];
+
+    // Scale dungeon count: 2 per biome for normal map, more for huge map
+    const dungeonsPerBiome = Math.max(2, Math.floor(poiScale / 2));
+
     for (const b of biomes) {
-        let spawned = false;
+        let spawnedCount = 0;
         let attempts = 0;
-        while (!spawned && attempts < 100) {
+        while (spawnedCount < dungeonsPerBiome && attempts < 200) {
             const bx = rng.nextInt(width);
             const by = rng.nextInt(height);
             attempts++;
@@ -516,7 +554,7 @@ export function generateOverworld(width: number, height: number, seed: number): 
 
                     // Add Entrance Sprite (77 = Stairs Down/Hole)
                     tiles[idx].add(SPRITES.STAIRS_DOWN || 77);
-                    spawned = true;
+                    spawnedCount++;
                 }
             }
         }

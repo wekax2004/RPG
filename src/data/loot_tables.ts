@@ -52,6 +52,12 @@ export const LOOT_TABLES: Record<string, LootEntry[]> = {
         { itemId: SPRITES.HATCHET, chance: 0.10 }, // Hatchet
         { itemId: SPRITES.MACE, chance: 0.08 }  // Mace
     ],
+    'big_zombie': [
+        { itemId: SPRITES.IRON_KEY, chance: 1.0, min: 1, max: 1 }, // Guaranteed
+        { itemId: SPRITES.GOLD, chance: 1.0, min: 50, max: 150 },
+        { itemId: SPRITES.LEATHER_ARMOR, chance: 0.3 },
+        { itemId: 41, chance: 0.5, min: 1, max: 3 } // Potions
+    ],
     'ghost': [
         { itemId: 203, chance: 0.05 }, // Ruby
         { itemId: 173, chance: 0.15 }  // Mana Potion
@@ -132,5 +138,40 @@ export const LOOT_TABLES: Record<string, LootEntry[]> = {
         { itemId: SPRITES.THUNDER_AXE, chance: 0.08 },
         { itemId: SPRITES.STORM_ARMOR, chance: 0.06 },
         { itemId: SPRITES.LIGHTNING_ROD, chance: 0.02 } // Legendary
+    ],
+
+    // --- NEW AREAS ---
+    'cyclops': [
+        { itemId: 40, chance: 0.50, min: 20, max: 60 }, // Gold
+        { itemId: SPRITES.BATTLE_AXE, chance: 0.10 },
+        { itemId: SPRITES.CHAIN_ARMOR, chance: 0.05 },
+        { itemId: 170, chance: 0.40, min: 1, max: 3 } // Meat
+    ],
+    'cyclops drone': [
+        { itemId: 40, chance: 0.40, min: 10, max: 40 },
+        { itemId: SPRITES.IRON_MACE || 141, chance: 0.15 }, // Mace
+        { itemId: 170, chance: 0.30 }
+    ],
+    'cyclops smith': [
+        { itemId: 40, chance: 0.60, min: 40, max: 90 },
+        { itemId: SPRITES.DOUBLE_AXE || 132, chance: 0.15 }, // Double Axe
+        { itemId: SPRITES.PLATE_ARMOR || 2, chance: 0.20 },
+        { itemId: 213, chance: 0.10 } // Pickaxe
+    ],
+    'orc rider': [
+        { itemId: 40, chance: 0.50, min: 15, max: 50 },
+        { itemId: SPRITES.ORC_SHIELD || 167, chance: 0.20 },
+        { itemId: 170, chance: 0.40 }
+    ],
+    'larva': [
+        { itemId: 40, chance: 0.30, min: 2, max: 8 },
+        { itemId: 170, chance: 0.50, min: 1, max: 2 }, // Meat
+        { itemId: 10, chance: 0.05 } // Grass (lol)
+    ],
+    'scarab': [
+        { itemId: 40, chance: 0.45, min: 10, max: 30 },
+        { itemId: 203, chance: 0.05 }, // Ruby
+        { itemId: 204, chance: 0.05 }, // Sapphire
+        { itemId: SPRITES.IRON_HELMET || 150, chance: 0.10 }
     ]
 };

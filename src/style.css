@@ -683,7 +683,45 @@ canvas {
     color: #666;
 }
 
-/* UI Status Bars */
+/* Status Bars */
+.status-group {
+    margin-bottom: 5px;
+}
+
+.status-header {
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+}
+
+.bar-bg {
+    width: 100%;
+    height: 12px;
+    background: #000;
+    border: 1px solid #505050;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.bar-bg.small {
+    height: 6px;
+    border: none;
+    background: #222;
+    margin-bottom: 8px;
+}
+
+.bar-bg.tiny {
+    height: 4px;
+    border: none;
+    background: #222;
+}
+
+.bar-fg {
+    height: 100%;
+    width: 0%;
+    transition: width 0.2s;
+}
 .bar-fg.hp {
     background-color: #e74c3c;
     height: 100%;

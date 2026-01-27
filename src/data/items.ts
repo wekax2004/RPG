@@ -15,6 +15,7 @@ export interface ItemDef {
     glowRadius?: number;
     price?: number; // Value in GP
     description?: string; // Added description
+    weaponType?: 'sword' | 'axe' | 'club' | 'distance' | 'wand' | 'none'; // Added weaponType
     // Elemental Properties
     elementalDamage?: {
         type: 'fire' | 'ice' | 'lightning' | 'poison';
@@ -26,13 +27,24 @@ export interface ItemDef {
         lightning?: number;
         poison?: number;
     };
+    // Rune Props
+    isRune?: boolean;
+    runeSpellName?: string;
+    charges?: number;
 }
 
 
 export const ItemRegistry: Record<number, ItemDef> = {
-    42: { name: "Short Sword", type: "weapon", attack: 10, slot: "rhand", uIndex: 8000 },
+    // ... (Existing)
+    // Runes
+    3176: { name: "Heavy Magic Missile", type: "item", uIndex: 3176, isRune: true, runeSpellName: "Heavy Magic Missile", charges: 5, price: 50 },
+    3155: { name: "Sudden Death Rune", type: "item", uIndex: 3155, isRune: true, runeSpellName: "Sudden Death", charges: 1, price: 200 },
+    3191: { name: "Great Fireball Rune", type: "item", uIndex: 3191, isRune: true, runeSpellName: "Fireball", charges: 3, price: 100 },
+
+    42: { name: "Short Sword", type: "weapon", weaponType: 'sword', attack: 10, slot: "rhand", uIndex: 8000 },
     // Terrain
     10: { name: "Grass", type: "other", uIndex: 10 },
+
     11: { name: "Dirt", type: "other", uIndex: 11 },
     12: { name: "Cobblestone", type: "other", uIndex: 12 },
     13: { name: "Water", type: "other", uIndex: 13 },
@@ -48,6 +60,7 @@ export const ItemRegistry: Record<number, ItemDef> = {
     21: { name: "Bag", type: "container", slot: "backpack", stackable: false, uIndex: 8042 },
 
     // Quest Items (Wekax Legends)
+    [SPRITES.IRON_KEY]: { name: "Iron Key", type: "item", uIndex: SPRITES.IRON_KEY, description: "It looks heavy and old." },
     300: { name: "Dirty Note", type: "item", uIndex: 8060, description: "A crumpled note with crude writing." },
     301: { name: "Rusty Key", type: "item", uIndex: 8061, description: "Unlocks the main Sewer Gate." },
     302: { name: "Roast Chicken", type: "item", uIndex: 8062, description: "The King's favorite meal." },
@@ -56,20 +69,20 @@ export const ItemRegistry: Record<number, ItemDef> = {
     100: { name: "Golden Helmet", type: "armor", defense: 12, slot: "head", uIndex: 100 },
     101: { name: "Golden Armor", type: "armor", defense: 18, slot: "body", uIndex: 101 },        // ...
     // --- WEAPONS: CLUBS (Modest Dmg, +Defense) ---
-    140: { name: "Wooden Club", type: "weapon", attack: 8, slot: "rhand", uIndex: 8048 },
-    141: { name: "Iron Mace", type: "weapon", attack: 45, slot: "rhand", uIndex: 8049 },
-    142: { name: "Warhammer", type: "weapon", attack: 130, slot: "rhand", uIndex: 8050 },
-    143: { name: "Morning Star", type: "weapon", attack: 320, slot: "rhand", uIndex: 8051 },
+    140: { name: "Wooden Club", type: "weapon", weaponType: 'club', attack: 8, slot: "rhand", uIndex: 8048 },
+    141: { name: "Iron Mace", type: "weapon", weaponType: 'club', attack: 45, slot: "rhand", uIndex: 8049 },
+    142: { name: "Warhammer", type: "weapon", weaponType: 'club', attack: 130, slot: "rhand", uIndex: 8050 },
+    143: { name: "Morning Star", type: "weapon", weaponType: 'club', attack: 320, slot: "rhand", uIndex: 8051 },
 
     // --- WEAPONS: SWORDS ---
-    150: { name: "Rusty Sword", type: "weapon", attack: 10, slot: "rhand", uIndex: 150 },
-    151: { name: "Wooden Sword", type: "weapon", attack: 5, slot: "rhand", uIndex: 151 },
-    152: { name: "Iron Sword", type: "weapon", attack: 40, slot: "rhand", uIndex: 8001 },
-    153: { name: "Bone Sword", type: "weapon", attack: 25, slot: "rhand", uIndex: 153 },
-    154: { name: "Steel Sword", type: "weapon", attack: 120, slot: "rhand", uIndex: 8002 },
-    155: { name: "Demon Blade", type: "weapon", attack: 300, slot: "rhand", uIndex: 155 },
-    156: { name: "Noble Sword", type: "weapon", attack: 500, slot: "rhand", uIndex: 156 },
-    157: { name: "Venom Dagger", type: "weapon", attack: 150, slot: "rhand", uIndex: 157 },
+    150: { name: "Rusty Sword", type: "weapon", weaponType: 'sword', attack: 10, slot: "rhand", uIndex: 150 },
+    151: { name: "Wooden Sword", type: "weapon", weaponType: 'sword', attack: 5, slot: "rhand", uIndex: 151 },
+    152: { name: "Iron Sword", type: "weapon", weaponType: 'sword', attack: 40, slot: "rhand", uIndex: 8001 },
+    153: { name: "Bone Sword", type: "weapon", weaponType: 'sword', attack: 25, slot: "rhand", uIndex: 153 },
+    154: { name: "Steel Sword", type: "weapon", weaponType: 'sword', attack: 120, slot: "rhand", uIndex: 8002 },
+    155: { name: "Demon Blade", type: "weapon", weaponType: 'sword', attack: 300, slot: "rhand", uIndex: 155 },
+    156: { name: "Noble Sword", type: "weapon", weaponType: 'sword', attack: 500, slot: "rhand", uIndex: 156 },
+    157: { name: "Venom Dagger", type: "weapon", weaponType: 'sword', attack: 150, slot: "rhand", uIndex: 157 },
 
     // --- ARMOR / MISC ---
     160: { name: "Wolf Pelt", type: "armor", defense: 5, slot: "body", uIndex: 160 },
@@ -96,35 +109,35 @@ export const ItemRegistry: Record<number, ItemDef> = {
     202: { name: "Large Rock", type: "other", uIndex: 6 },
 
     // Tools
-    210: { name: "Shovel", type: "weapon", attack: 8, slot: "both", uIndex: 8053 },
+    210: { name: "Shovel", type: "weapon", weaponType: 'club', attack: 8, slot: "both", uIndex: 8053 },
     211: { name: "Rope", type: "other", stackable: false, uIndex: 8052 },
-    212: { name: "Machete", type: "weapon", attack: 15, slot: "rhand", uIndex: 43 },
-    213: { name: "Pickaxe", type: "weapon", attack: 25, slot: "both", uIndex: 8054 },
+    212: { name: "Machete", type: "weapon", weaponType: 'sword', attack: 15, slot: "rhand", uIndex: 43 },
+    213: { name: "Pickaxe", type: "weapon", weaponType: 'axe', attack: 25, slot: "both", uIndex: 8054 },
 
     // --- WEAPONS: SWORDS (Balanced) ---
-    [SPRITES.RAPIER]: { name: "Rapier", type: "weapon", attack: 15, defense: 2, slot: "rhand", uIndex: SPRITES.RAPIER },
+    [SPRITES.RAPIER]: { name: "Rapier", type: "weapon", weaponType: 'sword', attack: 15, defense: 2, slot: "rhand", uIndex: SPRITES.RAPIER },
 
-    [SPRITES.SABRE]: { name: "Sabre", type: "weapon", attack: 25, defense: 12, slot: "rhand", uIndex: SPRITES.SABRE },
-    [SPRITES.BROADSWORD]: { name: "Broadsword", type: "weapon", attack: 30, defense: 15, slot: "rhand", uIndex: SPRITES.BROADSWORD },
-    [SPRITES.SPIKE_SWORD]: { name: "Spike Sword", type: "weapon", attack: 40, defense: 20, slot: "rhand", uIndex: SPRITES.SPIKE_SWORD },
-    [SPRITES.BRIGHT_SWORD]: { name: "Bright Sword", type: "weapon", attack: 45, defense: 25, slot: "rhand", uIndex: SPRITES.BRIGHT_SWORD, rarity: 'rare', glowColor: '#fff', glowRadius: 40 },
-    [SPRITES.ICE_RAPIER]: { name: "Ice Rapier", type: "weapon", attack: 100, defense: 0, slot: "rhand", uIndex: SPRITES.ICE_RAPIER, rarity: 'rare' }, // 1 hit?
-    [SPRITES.GIANT_SWORD]: { name: "Giant Sword", type: "weapon", attack: 80, defense: 10, slot: "both", uIndex: SPRITES.GIANT_SWORD },
-    [SPRITES.MAGIC_SWORD]: { name: "Magic Sword", type: "weapon", attack: 55, defense: 35, slot: "rhand", uIndex: SPRITES.MAGIC_SWORD, rarity: 'legendary', glowColor: '#00ffff', glowRadius: 60 },
+    [SPRITES.SABRE]: { name: "Sabre", type: "weapon", weaponType: 'sword', attack: 25, defense: 12, slot: "rhand", uIndex: SPRITES.SABRE },
+    [SPRITES.BROADSWORD]: { name: "Broadsword", type: "weapon", weaponType: 'sword', attack: 30, defense: 15, slot: "rhand", uIndex: SPRITES.BROADSWORD },
+    [SPRITES.SPIKE_SWORD]: { name: "Spike Sword", type: "weapon", weaponType: 'sword', attack: 40, defense: 20, slot: "rhand", uIndex: SPRITES.SPIKE_SWORD },
+    [SPRITES.BRIGHT_SWORD]: { name: "Bright Sword", type: "weapon", weaponType: 'sword', attack: 45, defense: 25, slot: "rhand", uIndex: SPRITES.BRIGHT_SWORD, rarity: 'rare', glowColor: '#fff', glowRadius: 40 },
+    [SPRITES.ICE_RAPIER]: { name: "Ice Rapier", type: "weapon", weaponType: 'sword', attack: 100, defense: 0, slot: "rhand", uIndex: SPRITES.ICE_RAPIER, rarity: 'rare' }, // 1 hit?
+    [SPRITES.GIANT_SWORD]: { name: "Giant Sword", type: "weapon", weaponType: 'sword', attack: 80, defense: 10, slot: "both", uIndex: SPRITES.GIANT_SWORD },
+    [SPRITES.MAGIC_SWORD]: { name: "Magic Sword", type: "weapon", weaponType: 'sword', attack: 55, defense: 35, slot: "rhand", uIndex: SPRITES.MAGIC_SWORD, rarity: 'legendary', glowColor: '#00ffff', glowRadius: 60 },
 
     // --- WEAPONS: AXES (Offense) ---
-    [SPRITES.HAND_AXE]: { name: "Hand Axe", type: "weapon", attack: 18, defense: 0, slot: "rhand", uIndex: SPRITES.HAND_AXE },
-    [SPRITES.HATCHET]: { name: "Hatchet", type: "weapon", attack: 25, defense: 0, slot: "rhand", uIndex: SPRITES.HATCHET },
-    [SPRITES.BATTLE_AXE]: { name: "Battle Axe", type: "weapon", attack: 35, defense: 0, slot: "both", uIndex: SPRITES.BATTLE_AXE },
-    [SPRITES.DOUBLE_AXE]: { name: "Double Axe", type: "weapon", attack: 50, defense: 0, slot: "both", uIndex: SPRITES.DOUBLE_AXE },
-    [SPRITES.GREAT_AXE]: { name: "Great Axe", type: "weapon", attack: 90, defense: 0, slot: "both", uIndex: SPRITES.GREAT_AXE, rarity: 'legendary' },
+    [SPRITES.HAND_AXE]: { name: "Hand Axe", type: "weapon", weaponType: 'axe', attack: 18, defense: 0, slot: "rhand", uIndex: SPRITES.HAND_AXE },
+    [SPRITES.HATCHET]: { name: "Hatchet", type: "weapon", weaponType: 'axe', attack: 25, defense: 0, slot: "rhand", uIndex: SPRITES.HATCHET },
+    [SPRITES.BATTLE_AXE]: { name: "Battle Axe", type: "weapon", weaponType: 'axe', attack: 35, defense: 0, slot: "both", uIndex: SPRITES.BATTLE_AXE },
+    [SPRITES.DOUBLE_AXE]: { name: "Double Axe", type: "weapon", weaponType: 'axe', attack: 50, defense: 0, slot: "both", uIndex: SPRITES.DOUBLE_AXE },
+    [SPRITES.GREAT_AXE]: { name: "Great Axe", type: "weapon", weaponType: 'axe', attack: 90, defense: 0, slot: "both", uIndex: SPRITES.GREAT_AXE, rarity: 'legendary' },
 
     // --- WEAPONS: CLUBS (Defense) ---
-    [SPRITES.STUDDED_CLUB]: { name: "Studded Club", type: "weapon", attack: 10, defense: 5, slot: "rhand", uIndex: SPRITES.STUDDED_CLUB },
-    [SPRITES.MACE]: { name: "Mace", type: "weapon", attack: 18, defense: 8, slot: "rhand", uIndex: SPRITES.MACE },
-    [SPRITES.MORNING_STAR]: { name: "Morning Star", type: "weapon", attack: 25, defense: 12, slot: "rhand", uIndex: SPRITES.MORNING_STAR },
-    [SPRITES.WAR_HAMMER]: { name: "War Hammer", type: "weapon", attack: 45, defense: 10, slot: "both", uIndex: SPRITES.WAR_HAMMER },
-    [SPRITES.THUNDER_HAMMER]: { name: "Thunder Hammer", type: "weapon", attack: 110, defense: 30, slot: "rhand", uIndex: SPRITES.THUNDER_HAMMER, rarity: 'legendary', glowColor: '#ffff00' },
+    [SPRITES.STUDDED_CLUB]: { name: "Studded Club", type: "weapon", weaponType: 'club', attack: 10, defense: 5, slot: "rhand", uIndex: SPRITES.STUDDED_CLUB },
+    [SPRITES.MACE]: { name: "Mace", type: "weapon", weaponType: 'club', attack: 18, defense: 8, slot: "rhand", uIndex: SPRITES.MACE },
+    [SPRITES.MORNING_STAR]: { name: "Morning Star", type: "weapon", weaponType: 'club', attack: 25, defense: 12, slot: "rhand", uIndex: SPRITES.MORNING_STAR },
+    [SPRITES.WAR_HAMMER]: { name: "War Hammer", type: "weapon", weaponType: 'club', attack: 45, defense: 10, slot: "both", uIndex: SPRITES.WAR_HAMMER },
+    [SPRITES.THUNDER_HAMMER]: { name: "Thunder Hammer", type: "weapon", weaponType: 'club', attack: 110, defense: 30, slot: "rhand", uIndex: SPRITES.THUNDER_HAMMER, rarity: 'legendary', glowColor: '#ffff00' },
 
     // --- ARMOR SETS ---
     // Leather
@@ -211,9 +224,17 @@ export function createItemFromRegistry(id: number | string, count: number = 1): 
             def.defense || 0,
             def.armor || 0,
             def.speed || 0,
+            def.speed || 0,
             0, 0,
-            false, 0,
-            def.glowColor, def.glowRadius || 0
+            def.type === 'container', def.type === 'container' ? 20 : 0,
+            def.glowColor, def.glowRadius || 0,
+            0, /* frame */
+            0, /* direction */
+            typeof id === 'number' ? id : 0, /* registry id */
+            "", /* icon */
+            def.isRune || false,
+            def.runeSpellName || "",
+            def.charges || 0
         );
     }
     return new Item("Unknown Item", "inventory", 0);

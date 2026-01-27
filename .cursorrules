@@ -1,0 +1,20 @@
+# Global Rules for Google Antigravity (Tibia RPG)
+
+1. **Visual & Rendering Architecture**
+   - **Perspective**: Strictly use Oblique Cabinet Projection (Ultima VII / Tibia style). Never use isometric or perspective projection.
+   - **Depth Sorting**: All rendering must follow the Painter’s Algorithm (Y-Sorting). Objects with a higher Y coordinate must be rendered on top of those with a lower Y.
+   - **Tall Sprites**: Vertical objects (Players, Walls, Trees) are 32×64 pixels. Use a negative Y offset to ensure the bottom of the sprite aligns with the 32×32 ground tile.
+
+2. **World & Map Logic**
+   - **Z-Level System**: The world has 16 vertical levels (Z=0 to Z=15).
+     - Ground level is Z=7.
+     - Higher Z values are floors above; lower Z are underground.
+   - **Tile Interactions**: Implement Auto-Bordering using bitmasking for terrain transitions (e.g., grass to water).
+   - **Vertical Movement**: Automate Z-axis changes when a player walks onto "Ramp" or "Stair" tile types.
+
+3. **Technical Constraints (TypeScript)**
+   - **Architecture**: Use the Entity Component System (ECS). Logic must be decoupled from the rendering loop.
+   - **Performance**: Optimize for "Tibia-like" movement—grid-based walking with specific "step-delay" (exhaustion) logic rather than free-form pixel movement.
+
+4. **Agent Instructions**
+   - "When generating code for new systems (like the Quest system), always verify that the logic accounts for the current activeZLevel so players don't interact with NPCs on different floors."

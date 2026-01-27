@@ -8,8 +8,11 @@ export interface MobDef {
     speed: number; // Pixels per second (approx)
     xp: number;    // XP value
     spriteIndex: number; // Single Sprite
-    behavior: 'aggressive' | 'neutral' | 'passive';
+    behavior: 'aggressive' | 'neutral' | 'passive' | 'ranged' | 'caster';
     lootTable: string; // key in LOOT_TABLES
+    attackRange?: number;
+    keepDistance?: number;
+    spells?: string[];
     equipment?: {
         rhand?: number;
         lhand?: number;
@@ -419,7 +422,7 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
         xp: 250,
         spriteIndex: SPRITES.ZOMBIE, // ID 300
         behavior: 'aggressive',
-        lootTable: 'zombie',
+        lootTable: 'big_zombie',
         fleeThreshold: 0,
         corpse: SPRITES.ZOMBIE_DEAD || 22,
         isBoss: true,
@@ -429,6 +432,41 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
             { name: 'Vomit', type: 'aoe', damage: 30, range: 48, cooldown: 8, statusEffect: 'poison' },
             { name: 'Summon Rats', type: 'summon', cooldown: 12, summonType: 'rat', summonCount: 3 }
         ]
+    },
+    'minotaur_archer': {
+        name: "Minotaur Archer",
+        hp: 100,
+        attack: 30, // Ranged dmg
+        defense: 10,
+        speed: 65,
+        xp: 90,
+        spriteIndex: SPRITES.MINOTAUR_ARCHER || 67,
+        behavior: 'ranged',
+        attackRange: 6,
+        keepDistance: 4,
+        lootTable: 'orc',
+        fleeThreshold: 0.1,
+        corpse: SPRITES.MINOTAUR_DEAD || 68,
+        equipment: {
+            lhand: SPRITES.CROSSBOW || 34
+        }
+    },
+    'elf_arcanist': {
+        name: "Elf Arcanist",
+        hp: 80,
+        attack: 40, // Spell dmg
+        defense: 5,
+        speed: 70,
+        xp: 150,
+        spriteIndex: SPRITES.ELF_ARCANIST || 75,
+        behavior: 'caster',
+        attackRange: 7,
+        keepDistance: 4,
+        lootTable: 'elf',
+        fleeThreshold: 0.2,
+        corpse: SPRITES.ELF_DEAD || 76,
+        resistance: { magic: 0.5 },
+        spells: ['fireball', 'heal']
     }
 };
 

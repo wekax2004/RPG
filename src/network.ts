@@ -1,6 +1,8 @@
 import { PacketType, PacketWriter, PacketReader } from './protocol';
 
+
 export class NetworkManager {
+    private ws: WebSocket | null = null;
     public playerId: number | null = null;
     public connected: boolean = false;
     public onLogin: ((seed: number, spawnX: number, spawnY: number) => void) | null = null;
@@ -15,6 +17,29 @@ export class NetworkManager {
             (window as any).electronAPI.onPacket((data: Uint8Array) => {
                 this.handlePacket(data);
             });
+        } else {
+            // Browser Mode: Use WebSocket
+            console.log("[Network] Electron not found. Connecting to WebSocket Server...");
+            this.ws = new WebSocket('ws://localhost:3000');
+            this.ws.binaryType = 'arraybuffer';
+
+            this.ws.onopen = () => {
+                console.log("[Network] WebSocket Connected.");
+            };
+
+            this.ws.onmessage = (event) => {
+                const data = new Uint8Array(event.data as ArrayBuffer);
+                this.handlePacket(data);
+            };
+
+            this.ws.onclose = () => {
+                console.log("[Network] WebSocket Disconnected.");
+                this.connected = false;
+            };
+
+            this.ws.onerror = (err) => {
+                console.error("[Network] WebSocket Error:", err);
+            };
         }
     }
 
@@ -41,23 +66,24 @@ export class NetworkManager {
     }
 
     private send(packet: PacketWriter) {
-        // Check if electronAPI exists (only available in Electron app)
-        if (!(window as any).electronAPI?.sendPacket) {
-            // Running in browser without Electron - skip network
+        // Electron
+        if ((window as any).electronAPI?.sendPacket) {
+            const data = packet.getData();
+            const copy = new Uint8Array(data);
+            (window as any).electronAPI.sendPacket(copy);
             return;
         }
-        // Force copy to avoid serialization issues with views
-        const data = packet.getData();
-        const copy = new Uint8Array(data);
-        // console.log(`[Network] Passing ${copy.length} bytes to Electron bridge`);
-        (window as any).electronAPI.sendPacket(copy);
+
+        // WebSocket
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(packet.getData());
+        }
     }
 
     public onEntityUpdate: ((entities: { id: number, x: number, y: number }[]) => void) | null = null;
-
-    // ... constructor ...
-
-    // ... send methods ...
+    public onChat: ((playerId: number, msg: string) => void) | null = null;
+    public onSpawnItem: ((id: number, x: number, y: number, sprite: number, name: string) => void) | null = null;
+    public onItemDespawn: ((id: number) => void) | null = null;
 
     private handlePacket(data: Uint8Array) {
         try {
@@ -111,15 +137,12 @@ export class NetworkManager {
         }
     }
 
-    public onChat: ((playerId: number, msg: string) => void) | null = null;
-    public onSpawnItem: ((id: number, x: number, y: number, sprite: number, name: string) => void) | null = null;
-    public onItemDespawn: ((id: number) => void) | null = null;
-
     sendChat(msg: string) {
         if (!this.connected) return;
         // console.log(`[Network] Sending Chat: ${msg}`);
         const p = new PacketWriter(512);
         p.writeUint8(PacketType.CHAT);
+        p.writeUint32(0); // Filler for ID (Server overrides)
         p.writeString(msg);
         this.send(p);
     }

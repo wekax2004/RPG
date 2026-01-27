@@ -1,4 +1,4 @@
-import { Tile, Item } from './types';
+import { Tile, MapItem } from './types';
 
 // Tile Types / Item IDs
 export const GRASS = 16;
@@ -62,7 +62,7 @@ export class WorldMap {
                 if (Math.random() < 0.1) {
                     const tile = this.getTile(x, y);
                     if (tile) {
-                        tile.addItem(new Item(17)); // Wall
+                        tile.addItem(new MapItem(17)); // Wall
                     }
                 }
             }

@@ -219,7 +219,7 @@ export class AssetManager {
             }
 
             // [NEW] Remove gray/tan background pixels (fixes Wolf/Rat gray box issue)
-            if (flags.includes('remove_gray_bg') || flags.includes('skip_transparency')) {
+            if (flags.includes('remove_gray_bg')) {
                 // SPECIFIC DEBUG: Log when this block is entered for Wolf/Rat
                 if (id === 200 || id === 201) {
                     console.error(`!!!!! WOLF/RAT POST-PROCESS ENTER: ID=${id} targetSize=${targetW}x${targetH}`);
@@ -2352,35 +2352,54 @@ export class AssetManager {
         const cvs = this.createCanvas(32, 32);
         const ctx = cvs.getContext('2d')!;
 
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        // Shadow (Wider, flatter)
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
-        ctx.ellipse(16, 26, 10, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(16, 26, 12, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Body (blob)
-        ctx.fillStyle = '#40a040';
+        // Organic Puddle Body (Multiple overlapped blobs)
+        ctx.fillStyle = 'rgba(60, 180, 60, 0.85)'; // Semi-transparent base
+
         ctx.beginPath();
-        ctx.ellipse(16, 18, 10, 8, 0, 0, Math.PI * 2);
+        // Base wide puddle
+        ctx.ellipse(16, 24, 12, 6, 0, 0, Math.PI * 2);
+        // Mid blob
+        ctx.ellipse(16, 20, 9, 7, 0, 0, Math.PI * 2);
+        // Top blob (offset)
+        ctx.ellipse(14, 16, 6, 5, 0.2, 0, Math.PI * 2);
+        // Random bulge
+        ctx.ellipse(20, 18, 5, 4, -0.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Highlight
-        ctx.fillStyle = '#60c060';
+        // Inner "Goo" Core (Darker, less transparent)
+        ctx.fillStyle = 'rgba(40, 140, 40, 0.9)';
         ctx.beginPath();
-        ctx.ellipse(12, 14, 4, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(16, 22, 8, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Eyes
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(12, 16, 3, 0, Math.PI * 2);
-        ctx.arc(20, 16, 3, 0, Math.PI * 2);
-        ctx.fill();
+        // Bubbles (Texture)
+        ctx.fillStyle = 'rgba(150, 255, 150, 0.6)';
+        const bubbles = [
+            { x: 12, y: 18, r: 2 },
+            { x: 18, y: 14, r: 1.5 },
+            { x: 20, y: 22, r: 1 },
+            { x: 10, y: 24, r: 1.5 },
+            { x: 15, y: 12, r: 2.5 }
+        ];
+        for (const b of bubbles) {
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
-        ctx.fillStyle = '#000000';
+        // Specular Highlights (Slimy look)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.beginPath();
-        ctx.arc(13, 16, 1.5, 0, Math.PI * 2);
-        ctx.arc(21, 16, 1.5, 0, Math.PI * 2);
+        ctx.ellipse(14, 15, 3, 1.5, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(18, 19, 2, 1, -0.3, 0, Math.PI * 2);
         ctx.fill();
 
         this.addOutline(ctx, cvs);
@@ -4166,30 +4185,48 @@ export class AssetManager {
     }
 
     private createWhiteWall(type: 'V' | 'H' | 'TL' | 'TR' | 'BL' | 'BR'): HTMLCanvasElement {
-        const cvs = this.createCanvas(32, 32);
+        // Enforce 32x64 for Tall Walls (Global Rules)
+        const cvs = this.createCanvas(32, 64);
         const ctx = cvs.getContext('2d')!;
         const BASE = '#f0f0f0';
         const SHADE = '#cccccc';
         const LINE = '#aaaaaa';
 
         ctx.fillStyle = BASE;
+
+        // Draw centered in the 32x64 space (or bottom aligned)
+        // Renderer aligns bottom of sprite to TILE_SIZE.
+        // So y=32 is "ground level" for the top of the wall? 
+        // No, y=64 is bottom. y=32 is where a 32px high wall top would be.
+        // A 64px tall wall goes from y=0 to y=64.
+
         if (type === 'V') {
-            ctx.fillRect(10, 0, 12, 32);
-            ctx.fillStyle = SHADE; ctx.fillRect(10, 0, 2, 32);
-            ctx.strokeStyle = LINE; ctx.strokeRect(10, 0, 12, 32);
+            // Vertical Wall (Tall)
+            ctx.fillRect(10, 0, 12, 64);
+            ctx.fillStyle = SHADE; ctx.fillRect(10, 0, 2, 64);
+            ctx.strokeStyle = LINE; ctx.strokeRect(10, 0, 12, 64);
         } else if (type === 'H') {
-            ctx.fillRect(0, 10, 32, 12);
+            // Horizontal Wall (Tall or Short?)
+            // Usually walls are tall.
+            ctx.fillRect(0, 10, 32, 54); // Fill down to bottom
             ctx.fillStyle = SHADE; ctx.fillRect(0, 10, 32, 2);
-            ctx.strokeStyle = LINE; ctx.strokeRect(0, 10, 32, 12);
+            ctx.strokeStyle = LINE; ctx.strokeRect(0, 10, 32, 54);
+
+            // Add top detail (battlement?)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 32, 10);
+            ctx.strokeRect(0, 0, 32, 10);
         } else {
             // Corner logic
-            ctx.fillRect(10, 10, 22, 22);
-            if (type.includes('T')) ctx.fillRect(10, 0, 12, 10);
-            if (type.includes('B')) ctx.fillRect(10, 22, 12, 10);
-            if (type.includes('L')) ctx.fillRect(0, 10, 10, 12);
-            if (type.includes('R')) ctx.fillRect(22, 10, 10, 12);
+            // Draw a full height pillar for corners
+            ctx.fillRect(10, 0, 12, 64);
+
+            // Add side connections
+            if (type.includes('L')) ctx.fillRect(0, 10, 10, 54);
+            if (type.includes('R')) ctx.fillRect(22, 10, 10, 54);
+
             ctx.strokeStyle = LINE;
-            ctx.stroke();
+            ctx.strokeRect(10, 0, 12, 64); // Vertical Pillar outline
         }
         return cvs;
     }

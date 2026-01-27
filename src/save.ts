@@ -340,7 +340,8 @@ export function loadGame(world: World, ui: UIManager): boolean {
             }
         }
 
-        ui.updateStatus(hp.current, hp.max, 50, 50, 400, inv.gold, xp.level, xp.current, xp.next);
+        const currentSkills = world.getComponent(playerEntity, Skills);
+        ui.updateStatus(hp.current, hp.max, mana ? mana.current : 0, mana ? mana.max : 0, 400, inv.gold, xp.level, xp.current, xp.next, currentSkills);
 
         if ((ui as any).console) (ui as any).console.addSystemMessage("Game Loaded.");
 

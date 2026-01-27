@@ -48,9 +48,7 @@ export class ManifestLoader {
                     searchStr.includes('stone') ||
                     searchStr.includes('ground') ||
                     searchStr.includes('wood') ||
-                    searchStr.includes('road')) &&
-                    !searchStr.includes('wall') &&
-                    !searchStr.includes('corner');
+                    searchStr.includes('road'));
 
                 console.log(`[ManifestLoader] ID: ${mItem.id}, Name: ${mItem.name}, isTile: ${isTile}`);
 

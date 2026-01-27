@@ -9,7 +9,7 @@
  * Total: 16 floors (0-15)
  */
 
-import { Tile, Item, TILE_SIZE } from './types';
+import { Tile, MapItem as Item, TILE_SIZE } from './types';
 
 export const GROUND_FLOOR = 7;
 export const TOTAL_FLOORS = 16;

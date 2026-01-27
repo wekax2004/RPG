@@ -61,16 +61,47 @@ export const MANIFEST: ManifestItem[] = [
         name: "Custom Cobblestone",
         type: "other",
         imagePath: "tiles/custom_cobble.png",
+        postProcess: "skip_transparency",
         spriteId: 446, // OVERRIDES SPRITES.COBBLE
         stats: {},
         description: "A custom pavement."
+    },
+    // Trees
+    {
+        id: "tree_pine",
+        name: "Pine Tree",
+        type: "other",
+        imagePath: "sprites/tibia_tree.png",
+        postProcess: "",
+        spriteId: 50,
+        stats: {}
+    },
+    {
+        id: "tree_oak",
+        name: "Oak Tree",
+        type: "other",
+        imagePath: "sprites/tree.png",
+        postProcess: "",
+        spriteId: 51,
+        stats: {}
+    },
+    // Sewer Grate
+    {
+        id: "sewer_grate",
+        name: "Sewer Grate",
+        type: "other",
+        imagePath: "tiles/sewer_grate.png",
+        postProcess: "",
+        spriteId: 312,
+        stats: {}
     },
     // --- EDRON OVERRIDES ---
     {
         id: "edron_wall_v",
         name: "Edron Wall (Vertical)",
         type: "other",
-        imagePath: "tiles/edron/wall_white.png", // Use polished WHITE MARBLE
+        imagePath: "tiles/edron/wall_white.png", // RESTORED
+        postProcess: "remove_black|skip_transparency",
         spriteId: 1054,
         stats: {}
     },
@@ -78,7 +109,8 @@ export const MANIFEST: ManifestItem[] = [
         id: "edron_wall_h",
         name: "Edron Wall (Horizontal)",
         type: "other",
-        imagePath: "tiles/edron/wall_white.png", // Use polished WHITE MARBLE
+        imagePath: "tiles/edron/wall_white.png", // RESTORED
+        postProcess: "remove_black|skip_transparency",
         spriteId: 1052,
         stats: {}
     },
@@ -92,10 +124,20 @@ export const MANIFEST: ManifestItem[] = [
         stats: {}
     },
     {
+        id: "edron_shop_floor",
+        name: "Edron Shop Floor",
+        type: "other",
+        imagePath: "tiles/edron/floor_checkered.png",
+        postProcess: "",
+        spriteId: 6012,
+        stats: {}
+    },
+    {
         id: "edron_decor_statue",
         name: "Edron Hero Statue",
         type: "other",
         imagePath: "tiles/edron/statue_hero.png",
+        postProcess: "crop_center:32,64|remove_black|skip_transparency",
         spriteId: 1061,
         stats: {}
     },
@@ -120,6 +162,7 @@ export const MANIFEST: ManifestItem[] = [
         name: "Edron Shop Counter",
         type: "other",
         imagePath: "tiles/edron/shop_counter.png",
+        postProcess: "crop_center:32,64|remove_black|skip_transparency",
         spriteId: 1075,
         stats: {}
     },
@@ -128,6 +171,7 @@ export const MANIFEST: ManifestItem[] = [
         name: "Edron Pillar",
         type: "other",
         imagePath: "tiles/edron/pillar.png",
+        postProcess: "crop_center:32,64|remove_black|skip_transparency",
         spriteId: 1050,
         stats: {}
     },
@@ -146,7 +190,17 @@ export const MANIFEST: ManifestItem[] = [
         name: "Edron Dirt Road",
         type: "other",
         imagePath: "tiles/edron/floor_dirt.png",
+        postProcess: "skip_transparency",
         spriteId: 6013,
+        stats: {}
+    },
+    {
+        id: "edron_shop_floor",
+        name: "Edron Shop Floor",
+        type: "other",
+        imagePath: "tiles/edron/floor_checkered.png",
+        postProcess: "skip_transparency",
+        spriteId: 6012,
         stats: {}
     },
     {
@@ -157,17 +211,33 @@ export const MANIFEST: ManifestItem[] = [
         spriteId: 7003, // Must match constants.ts CYCLOPS
         stats: {}
     },
+    {
+        id: "mob_cyclops_drone",
+        name: "Cyclops Drone",
+        type: "other",
+        imagePath: "sprites/cyclops_drone.png",
+        spriteId: 7004,
+        stats: {}
+    },
+    {
+        id: "mob_cyclops_smith",
+        name: "Cyclops Smith",
+        type: "other",
+        imagePath: "sprites/cyclops_smith.png",
+        spriteId: 7005,
+        stats: {}
+    },
     // CORNERS (Sharing one sprite for now)
-    { id: "edron_corner_tl", name: "Edron Corner TL", type: "other", imagePath: "tiles/edron/wall_corner.png", spriteId: 1056, stats: {} },
-    { id: "edron_corner_tr", name: "Edron Corner TR", type: "other", imagePath: "tiles/edron/wall_corner.png", spriteId: 1055, stats: {} },
-    { id: "edron_corner_bl", name: "Edron Corner BL", type: "other", imagePath: "tiles/edron/wall_corner.png", spriteId: 1058, stats: {} },
-    { id: "edron_corner_br", name: "Edron Corner BR", type: "other", imagePath: "tiles/edron/wall_corner.png", spriteId: 1057, stats: {} },
+    { id: "edron_corner_tl", name: "Edron Corner TL", type: "other", imagePath: "tiles/edron/wall_corner.png", postProcess: "crop_center:32,64|remove_black|skip_transparency", spriteId: 1056, stats: {} },
+    { id: "edron_corner_tr", name: "Edron Corner TR", type: "other", imagePath: "tiles/edron/wall_corner.png", postProcess: "crop_center:32,64|remove_black|skip_transparency", spriteId: 1055, stats: {} },
+    { id: "edron_corner_bl", name: "Edron Corner BL", type: "other", imagePath: "tiles/edron/wall_corner.png", postProcess: "crop_center:32,64|remove_black|skip_transparency", spriteId: 1058, stats: {} },
+    { id: "edron_corner_br", name: "Edron Corner BR", type: "other", imagePath: "tiles/edron/wall_corner.png", postProcess: "crop_center:32,64|remove_black|skip_transparency", spriteId: 1057, stats: {} },
 
     // FLOORS
-    { id: "edron_pavement", name: "Edron Pavement", type: "other", imagePath: "tiles/edron/floor_pavement.png", spriteId: 450, stats: {} },
-    { id: "edron_checkered", name: "Edron Checkered", type: "other", imagePath: "tiles/edron/floor_checkered.png", spriteId: 406, stats: {} },
-    { id: "edron_stone", name: "Edron Stone Floor", type: "other", imagePath: "tiles/edron/floor_stone.png", spriteId: 405, stats: {} },
-    { id: "edron_wood", name: "Edron Wood Floor", type: "other", imagePath: "tiles/edron/floor_wood.png", spriteId: 401, stats: {} },
+    { id: "edron_pavement", name: "Edron Pavement", type: "other", imagePath: "tiles/edron/floor_pavement.png", postProcess: "skip_transparency", spriteId: 450, stats: {} },
+    { id: "edron_checkered", name: "Edron Checkered", type: "other", imagePath: "tiles/edron/floor_checkered.png", postProcess: "skip_transparency", spriteId: 406, stats: {} },
+    { id: "edron_stone", name: "Edron Stone Floor", type: "other", imagePath: "tiles/edron/floor_stone.png", postProcess: "skip_transparency", spriteId: 405, stats: {} },
+    { id: "edron_wood", name: "Edron Wood Floor", type: "other", imagePath: "tiles/edron/floor_wood.png", postProcess: "skip_transparency", spriteId: 401, stats: {} },
     {
         id: "mob_rat",
         name: "Rat",
@@ -246,6 +316,48 @@ export const MANIFEST: ManifestItem[] = [
         type: "other",
         imagePath: "sprites/orc_warlord.png",
         spriteId: 333, // SPRITES.ORC_WARLORD
+        stats: {}
+    },
+    {
+        id: "mob_orc_rider",
+        name: "Orc Rider",
+        type: "other",
+        imagePath: "sprites/orc_rider.png",
+        spriteId: 253, // SPRITES.ORC_RIDER
+        stats: {}
+    },
+    {
+        id: "mob_scarab",
+        name: "Scarab",
+        type: "other",
+        imagePath: "sprites/scarab.png",
+        spriteId: 7006,
+        stats: {}
+    },
+    {
+        id: "mob_larva",
+        name: "Larva",
+        type: "other",
+        imagePath: "sprites/larva.png",
+        spriteId: 7007,
+        stats: {}
+    },
+    {
+        id: "tree_palm",
+        name: "Palm Tree",
+        type: "other",
+        imagePath: "sprites/palm_tree.png",
+        spriteId: 52,
+        postProcess: "crop_center:32,64|skip_transparency", // Ensure it fits if larger
+        stats: {}
+    },
+    {
+        id: "palisade_wall",
+        name: "Palisade Wall",
+        type: "other",
+        imagePath: "tiles/palisade.png",
+        postProcess: "skip_transparency",
+        spriteId: 302, // SPRITES.CUSTOM_WOOD_FENCE
         stats: {}
     },
     {

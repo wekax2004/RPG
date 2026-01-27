@@ -1,6 +1,6 @@
 import { WorldMap } from './map';
 import { Player } from './player';
-import { Item } from './types';
+import { MapItem } from './types';
 
 // Type for script functions
 // Type for script functions
@@ -14,7 +14,7 @@ export const ScriptRegistry: Record<number, ItemScript> = {
         if (tile) {
             const item = tile.removeItem();
             if (item && item.id === 200) {
-                tile.addItem(new Item(201)); // Empty Bush
+                tile.addItem(new MapItem(1, {}, 201)); // Empty Bush
                 console.log("You harvest a blueberry.");
                 // Add to inventory if passed
                 if (inventory) {
