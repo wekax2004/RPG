@@ -43,14 +43,11 @@ export function tryAdvanceMagic(world: any, entityId: number, manaSpent: number)
     // Tibia: Mana to advance = 1600 * 1.1^(ML)
     skills.magic.xp += manaSpent;
 
-    // Hardcoded scale for now (easier than Tibia for testing)
-    const reqMana = Math.floor(100 * Math.pow(1.1, skills.magic.level));
-    console.log(`[Progression] Magic XP: ${skills.magic.xp} / ${reqMana} (Lvl ${skills.magic.level})`);
+    let reqMana = Math.floor(100 * Math.pow(1.1, skills.magic.level));
 
-
-    if (skills.magic.xp >= reqMana) {
+    while (skills.magic.xp >= reqMana) {
         skills.magic.level++;
-        skills.magic.xp = 0;
+        skills.magic.xp -= reqMana;
 
         const msg = `You advanced to Magic Level ${skills.magic.level}.`;
         console.log(`[Progression] ${msg}`);
@@ -59,6 +56,8 @@ export function tryAdvanceMagic(world: any, entityId: number, manaSpent: number)
         if (pos) {
             spawnFloatingText(pos.x, pos.y - 60, "Magic UP!", "#00ffff");
         }
+
+        reqMana = Math.floor(100 * Math.pow(1.1, skills.magic.level));
     }
 
     // Update UI
@@ -100,4 +99,40 @@ function levelUp(world: any, entityId: number) {
 
     // Emit Level Up Event (for animations, sounds, etc)
     gameEvents.emit(EVENTS.LEVEL_UP, { entityId, level: exp.level });
+}
+
+export function addSkillExperience(world: any, entityId: number, skillName: keyof Skills, amount: number) {
+    const skills = world.getComponent(entityId, Skills);
+    const pos = world.getComponent(entityId, "Position");
+
+    if (!skills || !skills[skillName]) return;
+
+    const skill = skills[skillName];
+    // Don't add XP to Magic here (use tryAdvanceMagic)
+    if (skillName === 'magic') return;
+
+    skill.xp += amount;
+
+    let reqXp = Math.floor(50 * Math.pow(1.1, skill.level));
+
+    while (skill.xp >= reqXp) {
+        skill.level++;
+        skill.xp -= reqXp;
+
+        const msg = `You advanced to ${skillName} fighting level ${skill.level}.`;
+        console.log(`[Progression] ${msg}`);
+        addChatMessage(msg, 'system');
+
+        if (pos) {
+            spawnFloatingText(pos.x, pos.y - 60, `${skillName.toUpperCase()} UP!`, "#00ff00");
+        }
+
+        reqXp = Math.floor(50 * Math.pow(1.1, skill.level));
+    }
+
+    // Update UI (Now outside level-up block for real-time progress bars)
+    const gameObj = (window as any).game;
+    if (gameObj && gameObj.player && entityId === gameObj.player.id) {
+        gameEvents.emit(EVENTS.PLAYER_STATS_CHANGED, gameObj.player);
+    }
 }

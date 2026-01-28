@@ -37,7 +37,8 @@ export class TileItem {
         // Interactive Props
         public locked: boolean = false,
         public keyId: number = 0,
-        public loot: number[] = [] // Item IDs inside (for Chests)
+        public loot: number[] = [], // Item IDs inside (for Chests)
+        public properties?: any // Custom properties (e.g. destinationZ)
     ) { }
 }
 
@@ -378,18 +379,26 @@ export class Inventory {
         const bag = this.equipment.get('backpack');
 
         if (!bag) {
+            console.log(`[Inventory] No backpack equipped to add item: ${instance.item.name}`);
             // No backpack equipped: Can we equip this item as a backpack?
             if (instance.item.slotType === 'backpack' || instance.item.isContainer) {
                 this.equip('backpack', instance);
+                console.log(`[Inventory] Auto-equipped item as backpack: ${instance.item.name}`);
                 return true;
             }
             return false; // No where to put it
         }
 
+        if (!bag.contents) {
+            console.warn(`[Inventory] Backpack contents was null! Initializing...`);
+            bag.contents = [];
+        }
+
+        const startCount = instance.count;
+
         // 2. Stacking Logic: Iterate all slots to find all potential stacks to fill
         if (instance.item.stackable) {
             const maxStack = 100;
-            if (!bag.contents) bag.contents = []; // Defensive
 
             for (const existingItem of bag.contents) {
                 if (existingItem && existingItem.item.name === instance.item.name && existingItem.count < maxStack) {
@@ -399,6 +408,7 @@ export class Inventory {
                     existingItem.count += amountToAdd;
                     instance.count -= amountToAdd;
 
+                    console.log(`[Inventory] Stacked ${amountToAdd}x ${instance.item.name}. Remaining: ${instance.count}`);
                     if (instance.count <= 0) return true; // Fully consumed
                 }
             }
@@ -407,10 +417,19 @@ export class Inventory {
         // 3. New Slot Logic: If count remains, add as new slot if room exists
         const limit = bag.item.containerSize || 20;
         if (bag.contents.length < limit) {
-            bag.contents.push(instance);
+            const clone = instance.clone();
+            bag.contents.push(clone);
+            console.log(`[Inventory] Added new slot for ${instance.count}x ${instance.item.name}. (Clone ID: ${clone.item.id})`);
+            instance.count = 0; // Source is now empty
             return true;
         }
 
+        if (instance.count < startCount) {
+            console.log(`[Inventory] Partially added item. ${startCount - instance.count} added, ${instance.count} left over.`);
+            return true; // Partially successful is still true for the caller to update counts
+        }
+
+        console.log(`[Inventory] Failed to add item (Full/Limit: ${bag.contents.length}/${limit})`);
         return false; // No room or invalid state
     }
 

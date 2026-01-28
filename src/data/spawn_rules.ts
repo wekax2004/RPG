@@ -480,6 +480,21 @@ export const MONSTERS: Record<string, MonsterDefinition> = {
         attackType: 'melee',
         attackRange: 3
     },
+    // --- DRAGONS ---
+    dragon: {
+        id: 'dragon',
+        name: 'Dragon',
+        spriteId: SPRITES.DRAGON_LORD, // Use Dragon Lord sprite
+        health: 1000,
+        damage: 100,
+        experience: 700,
+        hostile: true,
+        flees: true,
+        fleeHealth: 300,
+        loot: [], // Uses LOOT_TABLES
+        attackType: 'ranged', // Fire Wave
+        attackRange: 5
+    },
     // NPCS / SPECIAL
     royal_guard: {
         id: 'royal_guard',
@@ -536,14 +551,16 @@ export const SPAWN_RULES: Record<BiomeName, SpawnRule[]> = {
 
     // MOUNTAIN: Medium-difficulty creatures
     [BIOME.MOUNTAIN]: [
-        { monsterId: 'goblin', weight: 40, minDifficulty: 2, maxDifficulty: 6 }
+        { monsterId: 'goblin', weight: 40, minDifficulty: 2, maxDifficulty: 5 },
+        { monsterId: 'dragon', weight: 5, minDifficulty: 8, maxDifficulty: 10 } // RARE Dragon spawn
         // Add: troll, cyclops, etc.
     ],
 
     // DUNGEON: High-level mechanical creatures (Underground Z >= 8)
     [BIOME.DUNGEON]: [
         { monsterId: 'mechanical_magus', weight: 40, minDifficulty: 6, maxDifficulty: 10 },
-        { monsterId: 'mechanical_tactician', weight: 50, minDifficulty: 5, maxDifficulty: 10 },
+        { monsterId: 'mechanical_tactician', weight: 40, minDifficulty: 5, maxDifficulty: 10 },
+        { monsterId: 'dragon', weight: 10, minDifficulty: 9, maxDifficulty: 10 }, // Dragon Lair
         { monsterId: 'goblin', weight: 10, minDifficulty: 3, maxDifficulty: 6 }
     ],
 
@@ -558,6 +575,12 @@ export const SPAWN_RULES: Record<BiomeName, SpawnRule[]> = {
     [BIOME.CAVE]: [
         { monsterId: 'goblin', weight: 50, minDifficulty: 2, maxDifficulty: 5 }
         // Add: spider, bat, etc.
+    ],
+
+    [BIOME.SEWER]: [
+        { monsterId: 'rat', weight: 40, minDifficulty: 0, maxDifficulty: 5 },
+        { monsterId: 'slime', weight: 40, minDifficulty: 1, maxDifficulty: 6 },
+        { monsterId: 'bat', weight: 20, minDifficulty: 1, maxDifficulty: 5 }
     ]
 };
 
@@ -600,13 +623,8 @@ export function getBiomeFromTile(tileType: TerrainTypeName, zLevel: number, isNe
 }
 
 // ... (Existing SPAWN_RULES needs SEWER added)
-Object.assign(SPAWN_RULES, {
-    [BIOME.SEWER]: [
-        { monsterId: 'rat', weight: 40, minDifficulty: 0, maxDifficulty: 5 },
-        { monsterId: 'slime', weight: 40, minDifficulty: 1, maxDifficulty: 6 }, // Assuming slime exists or will fall back
-        { monsterId: 'bat', weight: 20, minDifficulty: 1, maxDifficulty: 5 }
-    ]
-});
+// ... (Existing SPAWN_RULES needs SEWER added)
+// Removed Object.assign for SEWER as it is now in the main object.
 
 // ============================================================
 // MAIN FUNCTION: Get Monster for Biome

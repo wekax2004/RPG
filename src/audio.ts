@@ -126,6 +126,39 @@ export class AudioController {
         this.playNoise(0.1);
     }
 
+    playWeaponSound(type: string) {
+        if (!this.initialized) return;
+        const t = type.toLowerCase();
+
+        if (t.includes('sword') || t.includes('dagger') || t.includes('rapier')) {
+            // Metal Swipe
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.15);
+        } else if (t.includes('axe')) {
+            // Heavy Chop
+            this.playTone(250, 'square', 0.15, 0);
+        } else if (t.includes('mace') || t.includes('club') || t.includes('hammer')) {
+            // Blunt Thud
+            this.playFootstep('wood');
+        } else if (t.includes('fire')) {
+            // Fire Effect
+            this.playTone(400, 'sawtooth', 0.2, 0);
+            this.playCrackle(1.0);
+        } else {
+            // Default
+            this.playAttack();
+        }
+    }
+
     /**
      * Play a sound with spatial positioning.
      * Volume decreases with distance, pans left/right based on position.

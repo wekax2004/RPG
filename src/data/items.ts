@@ -41,6 +41,10 @@ export const ItemRegistry: Record<number, ItemDef> = {
     3155: { name: "Sudden Death Rune", type: "item", uIndex: 3155, isRune: true, runeSpellName: "Sudden Death", charges: 1, price: 200 },
     3191: { name: "Great Fireball Rune", type: "item", uIndex: 3191, isRune: true, runeSpellName: "Fireball", charges: 3, price: 100 },
 
+    // 8065 (DAGGER) - Using Dagger sprite (approx sprite ID 73 / 3266 in real Tibia, but using Short Sword or similar for now)
+    // Actually using uIndex 42 (from Sheet) or something unique.
+    8065: { name: "Dagger", type: "weapon", weaponType: "sword", attack: 8, defense: 2, slot: "rhand", uIndex: 42 },
+
     42: { name: "Short Sword", type: "weapon", weaponType: 'sword', attack: 10, slot: "rhand", uIndex: 8000 },
     // Terrain
     10: { name: "Grass", type: "other", uIndex: 10 },

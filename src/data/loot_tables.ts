@@ -140,6 +140,22 @@ export const LOOT_TABLES: Record<string, LootEntry[]> = {
         { itemId: SPRITES.LIGHTNING_ROD, chance: 0.02 } // Legendary
     ],
 
+    // --- MONSTERS ---
+    'goblin': [
+        { itemId: 40, chance: 0.30, min: 1, max: 5 }, // Gold
+        { itemId: SPRITES.DAGGER, chance: 0.15 }, // Dagger from Goblin
+        { itemId: SPRITES.LEATHER_HELMET, chance: 0.10 }, // Basic Armor
+        { itemId: 202, chance: 0.20 } // Small Stones (Rock)
+    ],
+    'dragon': [
+        { itemId: 40, chance: 1.0, min: 100, max: 200 }, // Guaranteed Gold
+        { itemId: SPRITES.FIRE_SWORD, chance: 0.10 }, // Fire Sword from Dragon
+        { itemId: SPRITES.DRAGON_SHIELD, chance: 0.08 }, // Dragon Shield
+        { itemId: SPRITES.DRAGON_HAMMER || 142, chance: 0.05 }, // Warhammer/Dragon Hammer
+        { itemId: 170, chance: 0.80, min: 2, max: 4 }, // Meat (Dragon Ham)
+        { itemId: 203, chance: 0.05 } // Green Mushroom / Ruby
+    ],
+
     // --- NEW AREAS ---
     'cyclops': [
         { itemId: 40, chance: 0.50, min: 20, max: 60 }, // Gold

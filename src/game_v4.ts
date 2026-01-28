@@ -4,9 +4,10 @@ import { UIManager } from './client/ui_manager';
 import { PixelRenderer } from './renderer';
 import { WorldMap } from './core/map';
 import { gameEvents, EVENTS } from './core/events';
-import { addExperience, tryAdvanceMagic } from './core/progression';
+import { addExperience, tryAdvanceMagic, addSkillExperience } from './core/progression';
 import { TILE_SIZE } from './core/types';
 import { AudioController } from './audio';
+import { MapRenderer } from './ui/map_render';
 import { ItemRegistry, createItemFromRegistry } from './data/items';
 
 // --- Components (Re-exported from separate file) ---
@@ -36,7 +37,7 @@ import { TibiaMapGenerator, MapGenerator } from './core/tibia_map_generator';
 import { NetworkManager } from './network';
 import { AIState, getStateName } from './ai/states';
 import { SPELLS, findSpellByWords, SpellDefinition } from './data/spells';
-import { MOB_REGISTRY } from './data/mobs';
+import { MOB_REGISTRY } from './data/mobs_v4';
 import { LOOT_TABLES } from './data/loot_tables';
 import { QUEST_REGISTRY } from './data/quests';
 import { BULK_SPRITES } from './data/bulk_constants';
@@ -49,7 +50,7 @@ export const DEBUG_COLLIDERS = true;
 // Debug flag to show AI state names above enemies
 export const DEBUG_AI_STATES = true;
 
-export const TEMPLE_POS = { x: 25 * 32, y: 25 * 32 }; // Default Temple Position (Center of 50x50 map)
+export const TEMPLE_POS = { x: 125 * 32, y: 125 * 32 }; // Center of Edron City (250x250 map)
 
 // --- Components: Dialogue ---
 export class Dialogue {
@@ -86,6 +87,7 @@ export function attemptCastSpell(world: World, player: Entity, text: string, ui:
 
     // Cast!
     mana.current -= spell.mana;
+    tryAdvanceMagic(world, player, spell.mana);
     const pPos = world.getComponent(player, Position)!;
 
     // Apply Effect
@@ -1692,15 +1694,7 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
                 }
 
                 // Skill Gain
-                skill.xp += 1;
-                // Simple exponential curve: 10 * 1.1^Level
-                const nextXp = Math.floor(50 * Math.pow(1.1, skill.level - 10));
-                if (skill.xp >= nextXp) {
-                    skill.xp = 0;
-                    skill.level++;
-                    if ((ui as any).console) (ui as any).console.addSystemMessage(`You advanced to ${skillType} fighting level ${skill.level}.`);
-                    audio.playLevelUp();
-                }
+                addSkillExperience(world, playerEntity, skillType as any, 1);
             }
         }
     } else {
@@ -1934,7 +1928,7 @@ export function projectileSystem(world: World, dt: number, ui: UIManager, audio:
                 if (tHp.current <= 0) {
                     const name = tName.value.toLowerCase();
                     const loot = generateLoot(name);
-                    createCorpse(world, tPos.x, tPos.y, loot);
+                    createCorpse(world, tPos.x, tPos.y, tPos.z, loot);
                     world.removeEntity(tId);
                     gainExperience(world, 20, ui, audio); // Flat XP for now
                 }
@@ -2388,14 +2382,7 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                         mitigation += Math.floor(shield.item.attack * (shSkill.level * 0.05));
 
                         // Gain XP
-                        shSkill.xp += 1;
-                        const nextXp = Math.floor(50 * Math.pow(1.1, shSkill.level - 10));
-                        if (shSkill.xp >= nextXp) {
-                            shSkill.xp = 0;
-                            shSkill.level++;
-                            if ((ui as any).console) (ui as any).console.addSystemMessage(`You advanced to shielding level ${shSkill.level}.`);
-                            audio.playLevelUp();
-                        }
+                        addSkillExperience(world, playerEntity, 'shielding', 1);
                     }
 
                     damage = Math.max(0, damage - mitigation);
@@ -2546,9 +2533,9 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon' | 'edron',
         for (let z = 0; z < edronMap.floors; z++) {
             for (let x = 0; x < width; x++) {
                 for (let y = 0; y < height; y++) {
-                    const t = edronMap.getTile(x, y, z);
+                    const t = edronMap.getTile(x, y, z) as any;
                     if (t) {
-                        if (t.mob) {
+                        if ((t as any).mob) {
                             // CONVERSION: Use Spawner entity for all map-based mobs
                             // This ensures they interact with the Respawn System
                             entities.push({
@@ -2556,11 +2543,11 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon' | 'edron',
                                 x: x * 32,
                                 y: y * 32,
                                 z: z,
-                                enemyType: t.mob.toLowerCase(), // Spawner expects 'enemyType'
+                                enemyType: (t as any).mob.toLowerCase(), // Spawner expects 'enemyType'
                                 interval: 60 + (Math.random() * 60) // Random respawn 1-2 mins
                             });
                         }
-                        if (t.npc) {
+                        if ((t as any).npc) {
                             let name = "Villager";
                             let npcType = "guide";
                             let spriteId = SPRITES.NPC_GUIDE; // Default sprite
@@ -2740,6 +2727,9 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon' | 'edron',
             cPos.y = pPos.y - (viewH / 2);
         }
     }
+
+    // Trigger Ambience Change
+    gameEvents.emit(EVENTS.ZONE_ENTER, { type, dungeonType });
 }
 
 export function dungeonSystem(world: World, input: InputHandler, ui: UIManager) {
@@ -3022,7 +3012,9 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
     const hpScale = difficulty;
 
 
-    const def = MOB_REGISTRY[type];
+    const normalizedType = type.toLowerCase().replace(/ /g, '_');
+    let def = MOB_REGISTRY[type] || MOB_REGISTRY[normalizedType];
+
     if (def) {
         world.addComponent(e, new Sprite(def.spriteIndex, 32));
         world.addComponent(e, new AI(
@@ -3084,7 +3076,11 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
         }
 
     } else {
-        console.warn(`[Game] Unknown Mob Type: ${type}`);
+        console.warn(`[Game] Unknown Mob Type: '${type}'. Registry Keys: ${Object.keys(MOB_REGISTRY).length} entries.`);
+        // Only dump keys if strictly necessary to avoid spam, or check specific one
+        if (Object.keys(MOB_REGISTRY).length < 5) {
+            console.warn("Registry Dump:", Object.keys(MOB_REGISTRY));
+        }
         world.addComponent(e, new Sprite(SPRITES.ORC || 58, 32));
         world.addComponent(e, new AI(20));
         world.addComponent(e, new Health(50, 50));
@@ -3571,7 +3567,7 @@ export function deathSystem(world: World, ui: UIManager, spawnX: number = TEMPLE
                 if (pos) {
                     pos.x = spawnX;
                     pos.y = spawnY;
-                    pos.z = 7; // Reset to Surface
+                    pos.z = 6; // Reset to Surface (Edron is at Z=6)
                 }
                 const mana = world.getComponent(id, Mana);
                 if (mana) mana.current = mana.max;
@@ -3632,7 +3628,21 @@ function castSpell(world: World, ui: UIManager, spellName: string, network?: Net
             hp.current = Math.min(hp.current + healAmount, hp.max);
 
             spawnFloatingText(world, pos.x, pos.y, `+${healAmount}`, '#00ff00');
-            world.addComponent(world.createEntity(), new Position(pos.x, pos.y)); // Particle effect source?
+
+            // Fix: Ensure Particle has Sprite or use proper Effect Component
+            const p = world.createEntity();
+            world.addComponent(p, new Position(pos.x, pos.y, pos.z));
+            // Add a proper visual effect component (e.g., Sprite 13 = sparkle/magic)
+            world.addComponent(p, new Sprite(13, 32));
+            // Add a lifetime component so it cleans up (using Particle logic if available, or just Decay)
+            // Assuming we lack a generic Particle component in the imports above, we'll rely on updateEffects to clean up if we add an 'Effect' tag.
+            // For now, let's just make sure it doesn't break the renderer. A sprite is safe.
+            // Even better: Use existing `spawnDebugSet` style transient logic?
+            // Let's assume standard decay system handles entities with just positional/visuals if tagged?
+            // Actually, best to just not spawn an empty entity if we don't have a robust particle system yet.
+            // But user wants "visuals". 
+            // Let's add a "Particle" compatible component if possible, or just skip the Entity creation if it causes bugs.
+            // Given "screen becomes weird", it likely spawned an entity with Position but NO Sprite, causing Renderer to crash/glitch.
 
             if (console) console.addSystemMessage("exura!");
         } else {
@@ -3781,7 +3791,7 @@ function castSpell(world: World, ui: UIManager, spellName: string, network?: Net
                         const nameComp = world.getComponent(eId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
                         const loot = generateLoot(enemyType);
-                        createCorpse(world, ePos.x, ePos.y, loot);
+                        createCorpse(world, ePos.x, ePos.y, ePos.z, loot);
                         world.removeEntity(eId);
                     }
                 }
@@ -3822,7 +3832,7 @@ function castSpell(world: World, ui: UIManager, spellName: string, network?: Net
                         const nameComp = world.getComponent(eId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
                         const loot = generateLoot(enemyType);
-                        createCorpse(world, ePos.x, ePos.y, loot);
+                        createCorpse(world, ePos.x, ePos.y, ePos.z, loot);
                         world.removeEntity(eId);
                     }
                 }
@@ -3897,7 +3907,7 @@ function castSpell(world: World, ui: UIManager, spellName: string, network?: Net
                         const nameComp = world.getComponent(closestId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
                         const loot = generateLoot(enemyType);
-                        createCorpse(world, ePos.x, ePos.y, loot);
+                        createCorpse(world, ePos.x, ePos.y, ePos.z, loot);
                         world.removeEntity(closestId);
                     }
                     currentPos = { x: ePos.x, y: ePos.y };
@@ -4035,7 +4045,7 @@ function castSpell(world: World, ui: UIManager, spellName: string, network?: Net
                         const nameComp = world.getComponent(eId, Name);
                         const enemyType = nameComp ? nameComp.value.toLowerCase() : "orc";
                         const loot = generateLoot(enemyType);
-                        createCorpse(world, ePos.x, ePos.y, loot);
+                        createCorpse(world, ePos.x, ePos.y, ePos.z, loot);
                         world.removeEntity(eId);
                     }
                 }
@@ -4228,14 +4238,21 @@ export function generateLoot(enemyType: string = "orc"): ItemInstance[] {
         table.forEach(entry => {
             if (Math.random() < entry.chance) {
                 const count = entry.min ? Math.floor(Math.random() * ((entry.max || 1) - entry.min + 1)) + entry.min : 1;
-                // Since Item component doesn't have count (only Instance does), 
-                // we might need to push multiple items OR we just push 1 for now if stackable isn't supported in loot bag visual.
-                // But Loot Window supports simple list.
-                // Let's push 'count' times? No, that spills to ground.
-                // We'll just push 1 for now, or check if Item has stack logic.
-                // Hack: For gold/stackables, we might want a property?
-                const item = createItemFromRegistry(entry.itemId, count);
-                items.push(new ItemInstance(item, count));
+
+                // Create temp item to check properties
+                const tempItem = createItemFromRegistry(entry.itemId, 1);
+
+                if (tempItem.stackable) {
+                    // Stackable: Push one instance with full count
+                    items.push(new ItemInstance(tempItem, count));
+                } else {
+                    // Not Stackable: Push 'count' separate instances
+                    for (let i = 0; i < count; i++) {
+                        // Re-create item for each instance to ensure unique references if needed (though Item is data class mostly)
+                        // Using same definition is fine, but new Instance wrapper is key.
+                        items.push(new ItemInstance(createItemFromRegistry(entry.itemId, 1), 1));
+                    }
+                }
             }
         });
     }
@@ -4608,10 +4625,10 @@ export function moveItem(world: World, source: any, target: any, ui: UIManager) 
         }
 
         // Wrap in ItemInstance if not already
-        if (properItem.item) {
-            inv.equip(slotName, properItem);
+        if ((properItem as any).item) {
+            inv.equip(slotName, properItem as any);
         } else {
-            inv.equip(slotName, { item: properItem, count: 1, contents: [], charges: 0 });
+            inv.equip(slotName, { item: properItem as any, count: 1, contents: [], charges: 0 } as any);
         }
     }
 

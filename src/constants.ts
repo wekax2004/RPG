@@ -246,6 +246,7 @@ export namespace SPRITES {
     export const ICE_RAPIER = 8058; // Glass cannon
     export const GIANT_SWORD = 406; // Two-handed
     export const MAGIC_SWORD = 8056; // End game
+    export const DAGGER = 8065;      // Added Dagger
 
     // --- WEAPONS: AXES ---
     export const HAND_AXE = 8029;
@@ -263,6 +264,7 @@ export namespace SPRITES {
     export const WAR_HAMMER = 423; // Two-handed
     export const SKULL_STAFF = 424; // Necro staff
     export const THUNDER_HAMMER = 425; // End game
+    export const DRAGON_HAMMER = 142;  // Dragon Hammer
 
     // --- ARMOR SETS ---
     // Leather (Basic)
@@ -559,7 +561,7 @@ export const ITEM_IDS = {
     GOLD_COIN: 40,                // ItemRegistry key for Gold Coin (uIndex 8008)
     APPLE: SPRITES.APPLE,         // 8040
     MEAT: 170,                    // ItemRegistry key for Wolf Meat (uIndex 8041)
-    DAGGER: 42,                   // ItemRegistry key for Short Sword
+    DAGGER: 8065,                 // New Dagger ID
     LEATHER_LEGS: SPRITES.LEATHER_LEGS,   // 432
     LONG_SWORD: 152,              // ItemRegistry key for Iron Sword
     DRAGON_HAMMER: 142            // ItemRegistry key for Warhammer

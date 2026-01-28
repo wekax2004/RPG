@@ -473,13 +473,156 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
         xp: 150,
         spriteIndex: SPRITES.ELF_ARCANIST || 75,
         behavior: 'caster',
+        lootTable: 'elf',
         attackRange: 7,
         keepDistance: 4,
-        lootTable: 'elf',
         fleeThreshold: 0.2,
         corpse: SPRITES.ELF_DEAD || 76,
         resistance: { magic: 0.5 },
         spells: ['fireball', 'heal']
-    }
+    },
+
+    // --- Missing Mobs (Log Fixes) ---
+    'orc spearman': {
+        name: "Orc Spearman",
+        hp: 100,
+        attack: 15,
+        defense: 8,
+        speed: 60,
+        xp: 80,
+        spriteIndex: SPRITES.ORC || 58, // Fixed: ORC_SPEARMAN undefined
+        behavior: 'ranged',
+        lootTable: 'orc',
+        attackRange: 6,
+        keepDistance: 4,
+        fleeThreshold: 0
+    },
+    'orc rider': {
+        name: "Orc Rider",
+        hp: 180,
+        attack: 35,
+        defense: 15,
+        speed: 85, // Fast
+        xp: 180,
+        spriteIndex: SPRITES.ORC_RIDER || 253,
+        behavior: 'aggressive',
+        lootTable: 'orc',
+        fleeThreshold: 0,
+        corpse: SPRITES.ORC_DEAD || 59,
+        equipment: { rhand: SPRITES.ORC_AXE || 100 } // Generic
+    },
+    'orc warlord': { // Alias for space-key
+        name: "Orc Warlord",
+        hp: 1800,
+        attack: 90,
+        defense: 50,
+        speed: 55,
+        xp: 1400,
+        spriteIndex: SPRITES.ORC_WARLORD,
+        behavior: 'aggressive',
+        lootTable: 'boss_orc',
+        fleeThreshold: 0,
+        corpse: SPRITES.ORC_DEAD,
+        isBoss: true,
+        resistance: { physical: 0.2, magic: 0.4 },
+        bossSkills: [
+            { name: 'War Cry', type: 'buff', cooldown: 15 },
+            { name: 'Whirlwind', type: 'aoe', damage: 50, range: 64, cooldown: 8 }
+        ]
+    },
+    'orc warrior': { // Alias
+        name: "Orc Warrior",
+        hp: 120,
+        attack: 20,
+        defense: 12,
+        speed: 60,
+        xp: 110,
+        spriteIndex: SPRITES.ORC || 58,
+        behavior: 'aggressive',
+        lootTable: 'orc',
+        fleeThreshold: 0,
+        corpse: SPRITES.ORC_DEAD
+    },
+    'royal guard': { // Alias
+        name: "Royal Guard",
+        hp: 500,
+        attack: 60,
+        defense: 40,
+        speed: 70,
+        xp: 0,
+        spriteIndex: SPRITES.NPC_GUIDE,
+        behavior: 'neutral',
+        lootTable: 'none',
+        fleeThreshold: 0,
+        corpse: SPRITES.HUMAN_CORPSE
+    },
+
+    // Desert Mobs
+    'larva': {
+        name: "Larva",
+        hp: 60,
+        attack: 10,
+        defense: 4,
+        speed: 40,
+        xp: 35,
+        spriteIndex: SPRITES.LARVA || 7007,
+        behavior: 'aggressive',
+        lootTable: 'worm',
+        fleeThreshold: 0,
+        corpse: SPRITES.SLIME_PUDDLE
+    },
+    'scarab': {
+        name: "Scarab",
+        hp: 120,
+        attack: 25,
+        defense: 20,
+        speed: 75,
+        xp: 90,
+        spriteIndex: SPRITES.SCARAB || 7006,
+        behavior: 'aggressive',
+        lootTable: 'scarab',
+        fleeThreshold: 0.1,
+        corpse: SPRITES.SPIDER_DEAD,
+        resistance: { poison: 1.0 }
+    },
+
+    // Edron NPCs service
+    'henricus': {
+        name: "Henricus", hp: 500, attack: 0, defense: 100, speed: 0, xp: 0,
+        spriteIndex: SPRITES.NPC_HEALER || 261, behavior: 'neutral', lootTable: 'none'
+    },
+    'king tibianus': {
+        name: "King Tibianus", hp: 9999, attack: 500, defense: 500, speed: 0, xp: 0,
+        spriteIndex: SPRITES.NPC_PRIEST || 266, behavior: 'neutral', lootTable: 'none'
+    },
+    'clyde': {
+        name: "Clyde", hp: 100, attack: 0, defense: 20, speed: 0, xp: 0,
+        spriteIndex: SPRITES.NPC_MERCHANT || 260, behavior: 'neutral', lootTable: 'none'
+    },
+    'beggar': {
+        name: "Beggar", hp: 50, attack: 0, defense: 5, speed: 20, xp: 0,
+        spriteIndex: SPRITES.BANDIT || 212, behavior: 'passive', lootTable: 'none'
+    },
+    'willard': {
+        name: "Willard", hp: 150, attack: 0, defense: 30, speed: 0, xp: 0,
+        spriteIndex: SPRITES.NPC_BLACKSMITH || 265, behavior: 'neutral', lootTable: 'none'
+    },
+    'xodet': {
+        name: "Xodet", hp: 150, attack: 0, defense: 30, speed: 0, xp: 0,
+        spriteIndex: SPRITES.NPC_WIZARD || 264, behavior: 'neutral', lootTable: 'none'
+    },
+    'cyclops drone': {
+        name: "Cyclops Drone",
+        hp: 180,
+        attack: 30,
+        defense: 10,
+        speed: 60,
+        xp: 100,
+        spriteIndex: SPRITES.CYCLOPS,
+        behavior: 'aggressive',
+        lootTable: 'orc',
+        fleeThreshold: 0.1,
+        corpse: SPRITES.ORC_DEAD
+    },
 };
 

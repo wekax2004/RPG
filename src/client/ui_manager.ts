@@ -34,15 +34,17 @@ export class UIManager {
     private goldVal: HTMLElement | null = null;
 
     // Compatibility Stubs
-    public shopPanel: HTMLElement = document.createElement('div');
-    public bagPanel: HTMLElement = document.createElement('div');
+    public shopPanel: HTMLElement | null = null;
+    public bagPanel: HTMLElement | null = null;
     public currentMerchant: any = null;
     public activeMerchantId: any | null = null;
 
     // Loot State
     public activeLootEntityId: number | null = null;
-    public activeLootComponent: Lootable | null = null; // Stored reference to the component
+    public activeLootComponent: Lootable | null = null;
     public activePlayerInventory: Inventory | null = null;
+
+    private lastBagString: string = "";
 
     public console: any;
     public world: World | undefined;
@@ -70,6 +72,11 @@ export class UIManager {
         this.lvlVal = document.getElementById('lvl-val');
         this.xpVal = document.getElementById('xp-pct');
         this.goldVal = document.getElementById('gold-val');
+
+        // Initial UI Finding
+        this.bagPanel = document.getElementById('backpack-grid');
+        this.shopPanel = document.getElementById('shop-window');
+        this.lootGrid = document.getElementById('loot-grid');
 
         // Setup Chat Listeners
         if (this.chatInput) {
@@ -229,14 +236,13 @@ export class UIManager {
 
             // Helper to calc pct
             const getPct = (lvl: number, cur: number) => {
-                const req = Math.floor(10 * Math.pow(1.1, lvl));
-                return (cur / req) * 100;
+                const req = Math.floor(50 * Math.pow(1.1, lvl));
+                return Math.min(100, Math.max(0, (cur / req) * 100));
             };
 
-            // Magic uses different formula? In progression.ts: floor(100 * 1.1^lvl)
             const getMagicPct = (lvl: number, cur: number) => {
                 const req = Math.floor(100 * Math.pow(1.1, lvl));
-                return (cur / req) * 100;
+                return Math.min(100, Math.max(0, (cur / req) * 100));
             };
 
             setSkill('fist', skills.fist?.level || 10, getPct(skills.fist?.level || 10, skills.fist?.xp || 0));
@@ -295,26 +301,35 @@ export class UIManager {
 
     public renderBag(inv: Inventory) {
         if (!this.bagPanel) {
-            this.bagPanel = document.getElementById('backpack-grid') || document.createElement('div');
+            this.bagPanel = document.getElementById('backpack-grid');
         }
-        const grid = this.bagPanel; // This is #backpack-grid from main.html
+        const grid = this.bagPanel;
         if (!grid) return;
 
         grid.innerHTML = ''; // Clear current
 
-        // Get Backpack Slot
-        // We need to know which slot holds better container. 
-        // For now, assume 'backpack' slot.
-        const bag = inv.getEquipped('backpack');
+        // console.log(`[UIManager] renderBag: gold: ${inv.gold}`);
 
-        if (bag && bag.contents) {
+        // Get Backpack Slot
+        const bag = inv.equipment.get('backpack');
+
+        if (bag) {
+            const contents = bag.contents || [];
+
+            // Diagnostics: Only log if contents change to avoid Spam
+            const currentString = JSON.stringify(contents.map(i => ({ n: i.item.name, c: i.count })));
+            if (currentString !== this.lastBagString) {
+                console.log(`[UIManager] renderBag: Contents changed! Count: ${contents.length}`);
+                this.lastBagString = currentString;
+            }
+
             // Render Contents
-            bag.contents.forEach((item, index) => {
+            contents.forEach((item, index) => {
+                if (!item || !item.item) return;
+
                 const slot = document.createElement('div');
                 slot.className = 'item-slot';
-                // Drag Data
-                slot.dataset.index = index.toString();
-                slot.dataset.from = 'container';
+                slot.title = item.item.name + (item.count > 1 ? ` (${item.count})` : '');
 
                 // Icon
                 const uIndex = item.item.uIndex;
@@ -326,37 +341,54 @@ export class UIManager {
                     const ctx = canvas.getContext('2d');
                     if (ctx) ctx.drawImage(img, 0, 0, 32, 32);
                     slot.appendChild(canvas);
+                } else {
+                    // Standardized FALLBACK: Text-based icon
+                    const fallback = document.createElement('div');
+                    fallback.innerText = item.item.name.substring(0, 2).toUpperCase();
+                    fallback.style.cssText = 'width: 32px; height: 32px; font-size: 14px; color: #aaa; text-align: center; line-height: 32px; background: #222; border-radius: 4px;';
+                    slot.appendChild(fallback);
+                }
 
-                    if (item.count > 1) {
-                        const countSpan = document.createElement('span');
-                        countSpan.className = 'item-count';
-                        countSpan.innerText = `${item.count}`;
-                        countSpan.style.cssText = 'position: absolute; right: 2px; bottom: 2px; color: white; font-size: 10px; text-shadow: 1px 1px 0 #000;';
-                        slot.appendChild(countSpan);
-                    }
+                if (item.count > 1) {
+                    const countSpan = document.createElement('span');
+                    countSpan.className = 'item-count';
+                    countSpan.innerText = `${item.count}`;
+                    countSpan.style.cssText = 'position: absolute; right: 2px; bottom: 2px; color: white; font-size: 10px; text-shadow: 1px 1px 0 #000; pointer-events: none;';
+                    slot.appendChild(countSpan);
                 }
 
                 // Drag Handling
-                makeItemDraggable(slot, item, { type: 'container', index: index, slot: 'backpack' }); // Basic drag support
+                makeItemDraggable(slot, item, { type: 'container', index: index, slot: 'backpack' });
+
+                // Interaction (Right-Click to Use)
+                slot.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    console.log(`[Inventory] Using item: ${item.item.name}`);
+                    // Dispatch Custom Event "playerAction" that main_v4.ts listens to
+                    const event = new CustomEvent('playerAction', {
+                        detail: {
+                            action: 'consume', // or 'use' generic
+                            item: item.item,
+                            index: index,
+                            fromBag: true
+                        }
+                    });
+                    document.dispatchEvent(event);
+                };
 
                 grid.appendChild(slot);
             });
 
-            // Fill remaining slots to look like 20 slot bag
-            const totalSlots = 20;
-            const filled = bag.contents.length;
-            for (let i = filled; i < totalSlots; i++) {
+            // Fill remaining slots
+            const limit = bag.item.containerSize || 20;
+            for (let i = contents.length; i < limit; i++) {
                 const slot = document.createElement('div');
                 slot.className = 'item-slot empty';
                 grid.appendChild(slot);
             }
         } else {
-            // No bag equipped
-            grid.innerText = "No Container";
-            grid.style.color = "#777";
-            grid.style.fontSize = "10px";
-            grid.style.textAlign = "center";
-            grid.style.padding = "10px";
+            console.log(`[UIManager] renderBag: No backpack equipped.`);
+            grid.innerHTML = '<div style="color: #666; font-size: 10px; padding: 10px; width: 100%; text-align: center;">No Container</div>';
         }
     }
 
@@ -397,6 +429,16 @@ export class UIManager {
 
         const items = this.activeLootComponent.items || [];
 
+        // Add "Take All" button at the top of the grid if there are items
+        if (items.length > 0) {
+            const takeAllBtn = document.createElement('div');
+            takeAllBtn.className = 'take-all-btn';
+            takeAllBtn.innerText = 'TAKE ALL';
+            takeAllBtn.style.cssText = 'grid-column: span 4; background: #444; color: #ffd700; text-align: center; padding: 4px; cursor: pointer; border: 1px solid #666; font-size: 10px; margin-bottom: 5px;';
+            takeAllBtn.onclick = () => this.takeAllLoot();
+            grid.appendChild(takeAllBtn);
+        }
+
         items.forEach((item, index) => {
             const slot = document.createElement('div');
             slot.className = 'item-slot';
@@ -413,14 +455,20 @@ export class UIManager {
                 const ctx = canvas.getContext('2d');
                 if (ctx) ctx.drawImage(img, 0, 0, 32, 32);
                 slot.appendChild(canvas);
+            } else {
+                // Standardized FALLBACK
+                const fallback = document.createElement('div');
+                fallback.innerText = item.item.name.substring(0, 2).toUpperCase();
+                fallback.style.cssText = 'width: 32px; height: 32px; font-size: 14px; color: #aaa; text-align: center; line-height: 32px; background: #222; border-radius: 4px;';
+                slot.appendChild(fallback);
+            }
 
-                if (item.count > 1) {
-                    const countSpan = document.createElement('span');
-                    countSpan.className = 'item-count';
-                    countSpan.innerText = `${item.count}`;
-                    countSpan.style.cssText = 'position: absolute; right: 2px; bottom: 2px; color: white; font-size: 10px; text-shadow: 1px 1px 0 #000;';
-                    slot.appendChild(countSpan);
-                }
+            if (item.count > 1) {
+                const countSpan = document.createElement('span');
+                countSpan.className = 'item-count';
+                countSpan.innerText = `${item.count}`;
+                countSpan.style.cssText = 'position: absolute; right: 2px; bottom: 2px; color: white; font-size: 10px; text-shadow: 1px 1px 0 #000; pointer-events: none;';
+                slot.appendChild(countSpan);
             }
 
             // Click to Loot
@@ -456,28 +504,40 @@ export class UIManager {
         // Try to add to inventory
         if (this.activePlayerInventory.addItemInstance(inventoryInstance)) {
             // Success: 
-            // If the item was fully consumed/moved, remove from source
-            // If partially moved (count remains > 0), update source count
-            if (inventoryInstance.count <= 0 || inventoryInstance !== itemToLoot) {
-                // This logic is slightly complex because addItemInstance might have 
-                // pushed the same object OR modified it. 
-                // With cloning, we check the inventoryInstance.
+            itemToLoot.count = inventoryInstance.count;
+            if (itemToLoot.count <= 0) items.splice(index, 1);
 
-                // If addItemInstance returned true, it means it was handled.
-                // We should remove it from corpse now.
-                items.splice(index, 1);
-            }
-
-            console.log(`[Loot] Success! Item added. Re-rendering bag.`);
-            // Re-render UIs
-            this.renderLoot();
-            this.renderBag(this.activePlayerInventory);
-
+            console.log(`[Loot] Success! Item added. Remaining in corpse: ${itemToLoot.count}`);
             gameEvents.emit(EVENTS.SYSTEM_MESSAGE, `You looted ${itemToLoot.item.name}.`);
         } else {
-            console.log(`[Loot] Failed to add item. Full? Backpack missing?`);
-            gameEvents.emit(EVENTS.SYSTEM_MESSAGE, "You cannot carry this object.");
+            // Check if count was reduced (partial stacking)
+            if (inventoryInstance.count < itemToLoot.count) {
+                itemToLoot.count = inventoryInstance.count;
+                console.log(`[Loot] Partial loot! Remaining: ${itemToLoot.count}`);
+            } else {
+                console.log(`[Loot] Failed to add item. Full?`);
+                gameEvents.emit(EVENTS.SYSTEM_MESSAGE, "You cannot carry this object.");
+            }
         }
+
+        // Always re-render to keep UI in sync
+        this.renderLoot();
+        this.renderBag(this.activePlayerInventory);
+    }
+
+    private takeAllLoot() {
+        if (!this.activeLootComponent || !this.activePlayerInventory) return;
+        const items = this.activeLootComponent.items;
+        if (!items || items.length === 0) return;
+
+        console.log(`[Loot] Taking all ${items.length} items...`);
+
+        // We iterate backwards because we might splice
+        for (let i = items.length - 1; i >= 0; i--) {
+            this.takeLootItem(i);
+        }
+
+        console.log(`[Loot] Take All finished.`);
     }
 }
 

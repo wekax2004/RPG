@@ -1,4 +1,4 @@
-﻿import { SPRITE_MAP } from './data/sprites_map';
+import { SPRITE_MAP } from './data/sprites_map';
 import { SPRITES as IMG, EDRON_ASSETS } from './constants';
 
 export class AssetManager {
@@ -176,7 +176,7 @@ export class AssetManager {
             const resized = document.createElement('canvas');
             resized.width = targetW;
             resized.height = targetH;
-            const ctx = resized.getContext('2d')!;
+            const ctx = resized.getContext('2d', { willReadFrequently: true })!;
 
             // CRITICAL: Clear canvas to ensure transparency (prevents black/gray boxes)
             ctx.clearRect(0, 0, targetW, targetH);
@@ -247,7 +247,7 @@ export class AssetManager {
                     }
 
                     // CASE 2: OPAQUE gray/tan background pixels (the actual gray boxes)
-                    // Target range: grayish (R≈G≈B, 100-220) or tan/beige (R>G>B, warm tones)
+                    // Target range: grayish (R?G?B, 100-220) or tan/beige (R>G>B, warm tones)
                     if (a >= 250) {
                         const avg = (r + g + b) / 3;
 
@@ -298,7 +298,7 @@ export class AssetManager {
                 const cvs = document.createElement('canvas');
                 cvs.width = img.width;
                 cvs.height = img.height;
-                const ctx = cvs.getContext('2d')!;
+                const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
                 ctx.drawImage(img, 0, 0);
                 // NOTE: applyTransparency REMOVED here - now handled by registerCustomSprite
                 // which has access to the skip_transparency flag
@@ -471,7 +471,7 @@ export class AssetManager {
     // =========================================================
     private createSandstone(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         // Base: Warm Sandy Beige
         const BASE = '#dccbba';
         ctx.fillStyle = BASE;
@@ -500,7 +500,7 @@ export class AssetManager {
     // =========================================================
     private createTempleFloor(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         // Base: Light Grey / White Stone
         const BASE = '#e0e0e0';
         ctx.fillStyle = BASE;
@@ -525,7 +525,7 @@ export class AssetManager {
     private createSewerGrate(): HTMLCanvasElement {
         // 1. Draw the floor underneath first (Cobble)
         const cvs = this.createCobble(); // Reuse your existing cobble
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         // 2. Draw the Iron Bars
         const GRATE = '#222';
         const HIGHLIGHT = '#555';
@@ -847,7 +847,7 @@ export class AssetManager {
                         }
 
                         const spriteCvs = this.createCanvas(canvasWidth, canvasHeight);
-                        const ctx = spriteCvs.getContext('2d')!;
+                        const ctx = spriteCvs.getContext('2d', { willReadFrequently: true })!;
 
                         // Disable smoothing for atlas sprites (6000+) to preserve magenta for chroma-key
                         // Enable smoothing for AI sprites (5000-5999) and item sprites (8000+) for downscaling
@@ -1032,7 +1032,7 @@ export class AssetManager {
                 const h = 64;
 
                 const cvs = this.createCanvas(w, h);
-                const ctx = cvs.getContext('2d')!;
+                const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
                 ctx.imageSmoothingEnabled = false;
 
                 // CRITICAL: Clear canvas to ensure transparency (prevents black/gray boxes)
@@ -1114,7 +1114,7 @@ export class AssetManager {
     // =========================================================
     private createGrass(variant: number): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Tibia Green Base (slightly muted, not too bright)
         const BASE = '#3a7a3a';
@@ -1181,7 +1181,7 @@ export class AssetManager {
     // =========================================================
     private createSand(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Tibia Sand Base (warmer, less saturated)
         const BASE = '#c4a060';
@@ -1232,7 +1232,7 @@ export class AssetManager {
     // =========================================================
     private createDirt(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const BASE = '#5d4037'; // Dirt Brown
         ctx.fillStyle = BASE;
@@ -1259,7 +1259,7 @@ export class AssetManager {
     // =========================================================
     private createCobble(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const BASE = '#757575'; // Grey base
         ctx.fillStyle = BASE;
@@ -1290,7 +1290,7 @@ export class AssetManager {
     // =========================================================
     private createWall(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Colors
         const LID_LIGHT = '#aaaaaa';
@@ -1376,7 +1376,7 @@ export class AssetManager {
     // =========================================================
     private createWallVertical(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const FACE_BASE = '#555566';
         const BRICK_LIGHT = '#666677';
@@ -1421,7 +1421,7 @@ export class AssetManager {
     // =========================================================
     private createPlayer(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Colors
         const OUTLINE = '#000000';
@@ -1538,7 +1538,7 @@ export class AssetManager {
     // =========================================================
     private createTree(): HTMLCanvasElement {
         const cvs = this.createCanvas(64, 96); // Taller for 3D effect
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const TRUNK_DARK = '#2a1a10';
         const TRUNK_MID = '#4a3020';
@@ -1660,7 +1660,7 @@ export class AssetManager {
     // =========================================================
     private createRock(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const BASE = '#707070';
         const LIGHT = '#a0a0a0';
@@ -1725,7 +1725,7 @@ export class AssetManager {
     // =========================================================
     private createWater(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const DEEP = '#1a4a6a';
         const MID = '#2a6a8a';
@@ -1759,7 +1759,7 @@ export class AssetManager {
     // =========================================================
     private createWoodFloor(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Base Wood
         const BASE = '#8d6e63';
@@ -1791,7 +1791,7 @@ export class AssetManager {
     // =========================================================
     private createStoneFloor(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Base Stone
         const BASE = '#9e9e9e';
@@ -1829,7 +1829,7 @@ export class AssetManager {
     // =========================================================
     private createBarrel(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -1863,7 +1863,7 @@ export class AssetManager {
     // =========================================================
     private createCrate(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -1901,7 +1901,7 @@ export class AssetManager {
     // =========================================================
     private createTorch(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Handle
         ctx.fillStyle = '#5a4030';
@@ -1931,7 +1931,7 @@ export class AssetManager {
     // =========================================================
     private createGold(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Stack of coins
         for (let i = 0; i < 5; i++) {
@@ -1956,7 +1956,7 @@ export class AssetManager {
     // =========================================================
     private createPotion(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Bottle body
         ctx.fillStyle = '#cc2020';
@@ -1984,7 +1984,7 @@ export class AssetManager {
     // =========================================================
     private createSword(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.save();
         ctx.translate(16, 16);
@@ -2020,7 +2020,7 @@ export class AssetManager {
     // =========================================================
     private createAxe(variant: 'hand' | 'battle' = 'hand'): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.save();
         ctx.translate(16, 16);
@@ -2075,7 +2075,7 @@ export class AssetManager {
     // =========================================================
     private createHelmet(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Base helmet (metal)
         ctx.fillStyle = '#6a5a4a';
@@ -2123,7 +2123,7 @@ export class AssetManager {
     // =========================================================
     private createLegs(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Left leg
         ctx.fillStyle = '#5a4a3a';
@@ -2159,7 +2159,7 @@ export class AssetManager {
     // =========================================================
     private createRat(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -2207,7 +2207,7 @@ export class AssetManager {
     // =========================================================
     private createBat(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // No shadow for flying bat or small subtle one
         ctx.fillStyle = 'rgba(0,0,0,0.15)';
@@ -2250,7 +2250,7 @@ export class AssetManager {
     // =========================================================
     private createWolf(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -2331,7 +2331,7 @@ export class AssetManager {
     // =========================================================
     private createSkeleton(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const BONE = '#e0d8c8';
         const BONE_DARK = '#a09888';
@@ -2394,7 +2394,7 @@ export class AssetManager {
     // =========================================================
     private createSlime(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Shadow (Wider, flatter)
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -2461,7 +2461,7 @@ export class AssetManager {
     // =========================================================
     private createBackpack(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const DARK = '#3e2723';
         const BASE = '#5d4037';
@@ -2511,7 +2511,7 @@ export class AssetManager {
     // =========================================================
     private createShield(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const WOOD_DARK = '#3e2723';
         const WOOD_MID = '#5d4037';
@@ -2552,7 +2552,7 @@ export class AssetManager {
     // =========================================================
     private createNPC(robeColor: string, highlightColor: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Parse colors for shading
         const darken = (hex: string, amt: number) => {
@@ -2714,7 +2714,7 @@ export class AssetManager {
 
     private createCorpse(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Bones / Skull pile
         ctx.fillStyle = '#aaaaaa';
@@ -2738,7 +2738,7 @@ export class AssetManager {
     // =========================================================
     private createArmorPlate(color: string, trim: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Chest
         ctx.fillStyle = color;
@@ -2758,7 +2758,7 @@ export class AssetManager {
 
     private createLegsPlate(color: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = color;
         // Left Leg
@@ -2773,7 +2773,7 @@ export class AssetManager {
 
     private createBoots(color: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = color;
         // Left Boot
@@ -2791,7 +2791,7 @@ export class AssetManager {
     // =========================================================
     private createHelmetGen(color: string, trim: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = color;
         ctx.beginPath(); ctx.arc(16, 16, 10, 0, Math.PI * 2); ctx.fill();
@@ -2804,7 +2804,7 @@ export class AssetManager {
 
     private createShieldGen(color: string, trim: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -2825,7 +2825,7 @@ export class AssetManager {
     // =========================================================
     private createClub(headColor: string, spikes: boolean): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.save();
         ctx.translate(16, 16);
         ctx.rotate(-Math.PI / 4);
@@ -2852,7 +2852,7 @@ export class AssetManager {
 
     private createSwordGen(bladeColor: string, hiltColor: string, complex: boolean): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.save();
         ctx.translate(16, 16);
         ctx.rotate(-Math.PI / 4);
@@ -2877,7 +2877,7 @@ export class AssetManager {
 
     private createBow(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.save();
         ctx.translate(16, 16);
         ctx.rotate(-Math.PI / 4);
@@ -2904,7 +2904,7 @@ export class AssetManager {
     // =========================================================
     private createTool(type: 'shovel' | 'pickaxe' | 'rope' | 'machete'): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.save();
         ctx.translate(16, 16);
 
@@ -2946,7 +2946,7 @@ export class AssetManager {
 
     private createGem(color: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -2968,7 +2968,7 @@ export class AssetManager {
     // ===================================
     private createParcel(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#8d6e63';
         ctx.fillRect(4, 8, 24, 20); // Box
         ctx.fillStyle = '#fff'; // String
@@ -2980,7 +2980,7 @@ export class AssetManager {
 
     private createFood(type: 'meat' | 'rotten'): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = type === 'meat' ? '#ef5350' : '#7cb342';
         ctx.beginPath();
         ctx.ellipse(16, 20, 8, 5, 0, 0, Math.PI * 2);
@@ -2995,7 +2995,7 @@ export class AssetManager {
 
     private createGeneric(color: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, 32, 32);
         // Noise
@@ -3008,7 +3008,7 @@ export class AssetManager {
 
     private createFence(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#795548';
         ctx.fillRect(4, 0, 4, 32); // Post L
         ctx.fillRect(24, 0, 4, 32); // Post R
@@ -3019,7 +3019,7 @@ export class AssetManager {
 
     private createHole(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#000';
         ctx.beginPath();
         ctx.ellipse(16, 16, 10, 8, 0, 0, Math.PI * 2);
@@ -3031,7 +3031,7 @@ export class AssetManager {
     // =========================================================
     public createDwarf(skin: string, clothes: string, beard: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -3087,7 +3087,7 @@ export class AssetManager {
     // =========================================================
     private createRoof(baseColor: string, shadowColor: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Triangular roof shape
         ctx.fillStyle = baseColor;
@@ -3129,7 +3129,7 @@ export class AssetManager {
     // =========================================================
     private createApple(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Apple Body (Red circle)
         ctx.fillStyle = '#d32f2f'; // Red
@@ -3158,7 +3158,7 @@ export class AssetManager {
 
     private createTempleRoof(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48); // Taller for dome
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Dome base (White/Gold)
         ctx.fillStyle = '#f5f5dc';
@@ -3194,7 +3194,7 @@ export class AssetManager {
 
     private createRoofCorner(corner: 'nw' | 'ne' | 'sw' | 'se'): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = '#8b4513';
 
@@ -3238,7 +3238,7 @@ export class AssetManager {
 
     private createChimney(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Chimney body (brick)
         ctx.fillStyle = '#8d6e63';
@@ -3269,7 +3269,7 @@ export class AssetManager {
 
     private createWindow(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Window frame (wood)
         ctx.fillStyle = '#5d4037';
@@ -3292,7 +3292,7 @@ export class AssetManager {
 
     private createDoor(color: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Door frame
         ctx.fillStyle = '#3e2723';
@@ -3324,7 +3324,7 @@ export class AssetManager {
 
     private createWellSprite(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Well base (stone)
         ctx.fillStyle = '#757575';
@@ -3368,7 +3368,7 @@ export class AssetManager {
 
     private createFountainSprite(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Base pool
         ctx.fillStyle = '#87ceeb';
@@ -3407,7 +3407,7 @@ export class AssetManager {
 
     private createSignpost(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Post
         ctx.fillStyle = '#5d4037';
@@ -3427,7 +3427,7 @@ export class AssetManager {
 
     private createLamppost(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Post
         ctx.fillStyle = '#424242';
@@ -3462,7 +3462,7 @@ export class AssetManager {
 
     private createTableSprite(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Table top
         ctx.fillStyle = '#8d6e63';
@@ -3478,7 +3478,7 @@ export class AssetManager {
 
     private createBed(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Bed frame
         ctx.fillStyle = '#5d4037';
@@ -3501,7 +3501,7 @@ export class AssetManager {
 
     private createChestSprite(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Chest body
         ctx.fillStyle = '#8d6e63';
@@ -3529,7 +3529,7 @@ export class AssetManager {
 
     private createGoldPile(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Pile of coins
         ctx.fillStyle = '#ffd700';
@@ -3556,7 +3556,7 @@ export class AssetManager {
 
     private createCoin(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Gold coin
         ctx.fillStyle = '#ffd700';
@@ -3585,7 +3585,7 @@ export class AssetManager {
     // =========================================================
     private createRoofTile(baseColor: string, shadowColor: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 80); // Taller to sit ON TOP of walls
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Base is at 80. tallOffset is 48. Renders dy - 48.
         // Wall Lid is at dy - 16 to dy.
@@ -3624,7 +3624,7 @@ export class AssetManager {
     // =========================================================
     private createWall3D_L2(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 96); // 96px for 2nd Story
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // tallOffset is 64. Renders dy - 64.
         // S2 Lid: y: 0-16. Renders dy - 64 to dy - 48.
@@ -3652,7 +3652,7 @@ export class AssetManager {
     // =========================================================
     private createTownWall(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Lid (Top side)
         ctx.fillStyle = '#555555';
@@ -3678,7 +3678,7 @@ export class AssetManager {
     // =========================================================
     private createWindowTile(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Wall background
         ctx.fillStyle = '#757575';
@@ -3713,7 +3713,7 @@ export class AssetManager {
     // =========================================================
     private createDoorTile(color: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Floor under door
         ctx.fillStyle = '#5d4037';
@@ -3744,7 +3744,7 @@ export class AssetManager {
     // =========================================================
     private create3DWall(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // === LID (Top surface, y=0 to 16) ===
         ctx.fillStyle = '#888899';
@@ -3803,7 +3803,7 @@ export class AssetManager {
     // =========================================================
     private createTempleDome(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 96); // 96px to sit on L2 walls
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Dome in the top 48px
         // Renders dy - 64 to dy - 16. (Perfectly on top of S2 face)
@@ -3844,7 +3844,7 @@ export class AssetManager {
 
     private createWoodenSword(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.save();
         ctx.translate(16, 16);
         ctx.rotate(-Math.PI / 4);
@@ -3874,7 +3874,7 @@ export class AssetManager {
 
     private createSmallBag(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -3908,7 +3908,7 @@ export class AssetManager {
 
     private createOrc(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         const SKIN = '#4caf50'; // Green
         const ARMOR = '#757575'; // Grey iron
@@ -3955,7 +3955,7 @@ export class AssetManager {
 
     private createBear(color: string): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48); // Tall for standing bear
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath(); ctx.ellipse(16, 42, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
@@ -3997,7 +3997,7 @@ export class AssetManager {
 
     private createYeti(): HTMLCanvasElement {
         const cvs = this.createCanvas(48, 48); // Bigger canvas
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath(); ctx.ellipse(24, 44, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
@@ -4035,7 +4035,7 @@ export class AssetManager {
 
     private createScorpion(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath(); ctx.ellipse(16, 24, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
@@ -4079,7 +4079,7 @@ export class AssetManager {
 
     private createSnake(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath(); ctx.ellipse(16, 26, 8, 2, 0, 0, Math.PI * 2); ctx.fill();
@@ -4111,7 +4111,7 @@ export class AssetManager {
 
     private createSpider(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath(); ctx.ellipse(16, 22, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
@@ -4153,7 +4153,7 @@ export class AssetManager {
     createStonePillar(): HTMLCanvasElement {
         const cvs = document.createElement('canvas');
         cvs.width = 32; cvs.height = 32;
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Base/Bottom
         ctx.fillStyle = '#333';
@@ -4181,7 +4181,7 @@ export class AssetManager {
     createStairs(up: boolean): HTMLCanvasElement {
         const cvs = document.createElement('canvas');
         cvs.width = 32; cvs.height = 32;
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
 
         // Base Floor
         ctx.fillStyle = '#795548'; // Brown earth
@@ -4210,7 +4210,7 @@ export class AssetManager {
 
     private createMeat(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#b71c1c'; // Dark red
         ctx.beginPath(); ctx.ellipse(16, 16, 10, 6, 0.2, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff'; // Bone
@@ -4220,7 +4220,7 @@ export class AssetManager {
 
     private createPavementLight(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#eee';
         ctx.fillRect(0, 0, 32, 32);
         ctx.strokeStyle = '#ccc';
@@ -4231,7 +4231,7 @@ export class AssetManager {
     private createWhiteWall(type: 'V' | 'H' | 'TL' | 'TR' | 'BL' | 'BR'): HTMLCanvasElement {
         // Enforce 32x64 for Tall Walls (Global Rules)
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         const BASE = '#f0f0f0';
         const SHADE = '#cccccc';
         const LINE = '#aaaaaa';
@@ -4277,7 +4277,7 @@ export class AssetManager {
 
     private createFountain(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#aaa';
         ctx.beginPath(); ctx.arc(16, 16, 14, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#44f';
@@ -4289,7 +4289,7 @@ export class AssetManager {
 
     private createMagicFieldBlue(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         const grad = ctx.createRadialGradient(16, 16, 2, 16, 16, 14);
         grad.addColorStop(0, 'rgba(0, 0, 255, 0.8)');
         grad.addColorStop(1, 'rgba(0, 0, 255, 0)');
@@ -4300,7 +4300,7 @@ export class AssetManager {
 
     private createFloorCheckered(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 16, 16); ctx.fillRect(16, 16, 16, 16);
         ctx.fillStyle = '#fff'; ctx.fillRect(16, 0, 16, 16); ctx.fillRect(0, 16, 16, 16);
         return cvs;
@@ -4308,7 +4308,7 @@ export class AssetManager {
 
     private createFloorStone(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#888'; ctx.fillRect(0, 0, 32, 32);
         ctx.strokeStyle = '#666'; ctx.strokeRect(1, 1, 30, 30);
         return cvs;
@@ -4316,7 +4316,7 @@ export class AssetManager {
 
     private createFloorWood(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#5d4037'; ctx.fillRect(0, 0, 32, 32);
         ctx.strokeStyle = '#3e2723';
         for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * 8, 0); ctx.lineTo(i * 8, 32); ctx.stroke(); }
@@ -4325,7 +4325,7 @@ export class AssetManager {
 
     private createStreetLamp(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 64);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#333'; ctx.fillRect(14, 10, 4, 50); // Pole
         ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(16, 15, 6, 0, Math.PI * 2); ctx.fill(); // Glow
         ctx.strokeStyle = '#333'; ctx.strokeRect(10, 10, 12, 10); // Glass frame
@@ -4334,7 +4334,7 @@ export class AssetManager {
 
     private createKnightStatue(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 48);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#aaa'; ctx.fillRect(8, 32, 16, 16); // Plinth
         ctx.fillStyle = '#ccc'; ctx.fillRect(10, 10, 12, 22); // Body
         ctx.fillStyle = '#ddd'; ctx.beginPath(); ctx.arc(16, 8, 5, 0, Math.PI * 2); ctx.fill(); // Head
@@ -4343,7 +4343,7 @@ export class AssetManager {
 
     private createTrashCan(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#5d4037'; ctx.fillRect(8, 8, 16, 20);
         ctx.strokeStyle = '#3e2723'; ctx.strokeRect(8, 8, 16, 20);
         return cvs;
@@ -4351,7 +4351,7 @@ export class AssetManager {
 
     private createPottedFlower(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#a1887f'; ctx.fillRect(10, 20, 12, 10); // Pot
         ctx.fillStyle = '#f00'; ctx.beginPath(); ctx.arc(16, 14, 4, 0, Math.PI * 2); ctx.fill(); // Flower
         ctx.fillStyle = '#0a0'; ctx.fillRect(15, 18, 2, 4); // Stem
@@ -4360,7 +4360,7 @@ export class AssetManager {
 
     private createLocker(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#555'; ctx.fillRect(4, 4, 24, 24);
         ctx.strokeStyle = '#333'; ctx.strokeRect(4, 4, 24, 24);
         ctx.fillStyle = '#777'; ctx.fillRect(8, 8, 16, 4); // Slot
@@ -4369,7 +4369,7 @@ export class AssetManager {
 
     private createBankSafe(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#222'; ctx.fillRect(2, 2, 28, 28);
         ctx.strokeStyle = '#ff0'; ctx.lineWidth = 2; ctx.strokeRect(2, 2, 28, 28);
         ctx.beginPath(); ctx.arc(16, 16, 6, 0, Math.PI * 2); ctx.stroke(); // Dial
@@ -4378,7 +4378,7 @@ export class AssetManager {
 
     private createBooks(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         const colors = ['#f00', '#00f', '#0a0', '#ff0'];
         for (let i = 0; i < 4; i++) {
             ctx.fillStyle = colors[i]; ctx.fillRect(4 + i * 6, 10, 5, 20);
@@ -4388,7 +4388,7 @@ export class AssetManager {
 
     private createBlackboard(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#222'; ctx.fillRect(2, 6, 28, 20);
         ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 2; ctx.strokeRect(2, 6, 28, 20);
         ctx.fillStyle = '#fff'; ctx.font = '8px Arial'; ctx.fillText('E=mc^2', 6, 18);
@@ -4397,7 +4397,7 @@ export class AssetManager {
 
     private createArchway(): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#f0f0f0'; ctx.fillRect(0, 0, 32, 32);
         ctx.globalCompositeOperation = 'destination-out';
         ctx.beginPath(); ctx.arc(16, 24, 12, Math.PI, 0); ctx.lineTo(28, 32); ctx.lineTo(4, 32); ctx.closePath(); ctx.fill();
@@ -4407,7 +4407,7 @@ export class AssetManager {
     // Renamed to avoid overlap
     private createDoorEdron(locked: boolean, orientation: 'H' | 'V'): HTMLCanvasElement {
         const cvs = this.createCanvas(32, 32);
-        const ctx = cvs.getContext('2d')!;
+        const ctx = cvs.getContext('2d', { willReadFrequently: true })!;
         ctx.fillStyle = '#5d4037';
         if (orientation === 'H') ctx.fillRect(0, 10, 32, 12);
         else ctx.fillRect(10, 0, 12, 32);

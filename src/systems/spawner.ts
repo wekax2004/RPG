@@ -1,7 +1,7 @@
 
 import { World } from '../engine';
-import { Spawner, Position, Health } from '../components';
-import { createEnemy } from '../game';
+import { Spawner, Position, Health, PlayerControllable } from '../components';
+import { createEnemy } from '../game_v4';
 
 export function spawnerSystem(world: World, dt: number) {
     // dt is in ms, we need seconds for timer
@@ -12,6 +12,21 @@ export function spawnerSystem(world: World, dt: number) {
     for (const id of spawners) {
         const spawner = world.getComponent(id, Spawner)!;
         const pos = world.getComponent(id, Position)!;
+
+        // OPTIMIZATION: Check distance to player
+        const players = world.query([Position, PlayerControllable]); // Should include PlayerControllable
+        if (players.length > 0) {
+            const pId = players[0];
+            const pPos = world.getComponent(pId, Position);
+            if (pPos) {
+                const dx = pPos.x - pos.x;
+                const dy = pPos.y - pos.y;
+                const distInfo = Math.sqrt(dx * dx + dy * dy);
+                if (distInfo > 1500) { // ~1.5 screens away
+                    continue; // Skip processing/spawning for distant spawners
+                }
+            }
+        }
 
         // check if active entity is alive
         let isAlive = false;

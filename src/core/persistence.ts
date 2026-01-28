@@ -1,5 +1,5 @@
 import { World } from '../engine'; // Added World
-import { PlayerControllable, Position, Health, Mana, Experience, Inventory, Skills, ItemInstance, Item } from '../components';
+import { PlayerControllable, Position, Health, Mana, Experience, Inventory, Skills, ItemInstance, Item, QuestLog } from '../components';
 import { ItemRegistry } from '../data/items';
 import { WorldMap } from './map';
 
@@ -11,7 +11,8 @@ export interface SaveData {
         health: { current: number, max: number };
         mana: { current: number, max: number };
         xp: { current: number, next: number, level: number };
-        skills: any; // Serialize Skills object
+        skills: any;
+        questLog: { quests: any[], completedQuestIds: string[] };
         inventory: {
             gold: number;
             cap: number;
@@ -31,6 +32,7 @@ export function saveGame(world: World) {
     const mana = world.getComponent(pEnt, Mana);
     const xp = world.getComponent(pEnt, Experience);
     const skills = world.getComponent(pEnt, Skills);
+    const qLog = world.getComponent(pEnt, QuestLog); // Get QuestLog
     const inv = world.getComponent(pEnt, Inventory)!;
 
     // Serialize Inventory
@@ -39,7 +41,7 @@ export function saveGame(world: World) {
         if (slot !== 'backpack') {
             equippedItems.push({
                 slot: slot,
-                itemIdx: inst.item.uIndex !== undefined ? inst.item.uIndex : inst.item.id, // Use ID if uIndex missing
+                itemIdx: inst.item.uIndex !== undefined ? inst.item.uIndex : inst.item.id,
                 count: inst.count
             });
         }
@@ -66,7 +68,8 @@ export function saveGame(world: World) {
                 next: xp ? xp.next : 100,
                 level: xp ? xp.level : 1
             },
-            skills: skills ? JSON.parse(JSON.stringify(skills)) : {}, // Simple clone
+            skills: skills ? JSON.parse(JSON.stringify(skills)) : {},
+            questLog: qLog ? JSON.parse(JSON.stringify(qLog)) : { quests: [], completedQuestIds: [] }, // Serialize Quests
             inventory: {
                 gold: inv.gold,
                 cap: inv.cap,
@@ -117,11 +120,24 @@ export function loadGame(world: World): boolean {
             xp.level = data.player.xp.level;
         }
 
-        // Restore Skills (Manual copy to preserve references if needed, but simple replace works for data obj)
+        // Restore Skills
         const skills = world.getComponent(pEnt, Skills);
         if (skills && data.player.skills) {
             Object.assign(skills, data.player.skills);
         }
+
+        // Restore QuestLog
+        let qLog = world.getComponent(pEnt, QuestLog);
+        if (!qLog) {
+            qLog = new QuestLog();
+            world.addComponent(pEnt, qLog);
+        }
+        if (data.player.questLog) {
+            // Re-assign arrays to ensure they are reactive if using a proxy (ECS usually plain objects)
+            qLog.quests = data.player.questLog.quests || [];
+            qLog.completedQuestIds = data.player.questLog.completedQuestIds || [];
+        }
+
 
         // Restore Inventory
         const inv = world.getComponent(pEnt, Inventory);
@@ -138,8 +154,8 @@ export function loadGame(world: World): boolean {
                         itemDef.name,
                         itemDef.slot || "none",
                         itemDef.uIndex || 0,
-                        itemDef.attack || 0, // attack
-                        itemDef.price || 0, // price
+                        itemDef.attack || 0,
+                        itemDef.price || 0,
                         itemDef.description || "",
                         itemDef.type === "weapon" ? "melee" : "none",
                         itemDef.rarity || "common",
@@ -161,31 +177,11 @@ export function loadGame(world: World): boolean {
             });
 
             // Re-fill backpack
-            // 1. Create Backpack Item
-            // 2. Fill it
-            // 3. Equip it
-            // Ideally we need the 'Backpack' item definition itself.
-            // Let's assume ID 0 or name 'Backpack' exists? 
-            // Better: Check if we have a default backpack in Registry? 
-            // For now, let's look for "Backpack" in definitions or just reuse the code's default starter bag approach.
-            // We will create a fresh Bag item instance.
-            // But wait, ItemRegistry needs to be searched for "Backpack".
-
-            // HACK: Start with generic backpack if not found
             let bagDef = Object.values(ItemRegistry).find(i => i.name === "Backpack");
             if (!bagDef) {
-                // Fallback to searching by type container?
-                // Or just assume the loaded data implies a backpack exists.
-                // We'll skip creating the bag ItemWrapper if we can just set contents on the slot.
-                // BUT inv.getEquipped('backpack') expects an ItemInstance.
-                // Let's find "Backpack" or use first container.
-                bagDef = ItemRegistry[0]; // Dangerous.
+                bagDef = ItemRegistry[0];
             }
 
-            // Re-construct the bag
-            // Actually, we should probably save the Bag Item ID too.
-            // Simplify: We assume player ALWAYS has a backpack in 'backpack' slot for now.
-            // We'll create a new ItemInstance for it.
             if (bagDef) {
                 const bagItem = new Item(
                     bagDef.name,
@@ -197,16 +193,16 @@ export function loadGame(world: World): boolean {
                     bagDef.type === "weapon" ? "melee" : "none",
                     bagDef.rarity || "common",
                     bagDef.defense || 0,
-                    0, // armor
-                    0, // speed
-                    0, // bonusHp
-                    0, // bonusMana
-                    true, // isContainer
-                    bagDef.type === "container" ? 20 : 0, // containerSize assumption
-                    undefined, // glowColor
-                    0, // glowRadius
-                    0, // frame
-                    0, // direction
+                    0,
+                    0,
+                    0,
+                    0,
+                    true,
+                    bagDef.type === "container" ? 20 : 0,
+                    undefined,
+                    0,
+                    0,
+                    0,
                     bagDef.uIndex || 0
                 );
                 const bagInst = new ItemInstance(bagItem, 1);
@@ -224,16 +220,16 @@ export function loadGame(world: World): boolean {
                             iDef.type === "weapon" ? "melee" : "none",
                             iDef.rarity || "common",
                             iDef.defense || 0,
-                            0, // armor
-                            0, // speed
-                            0, // bonusHp
-                            0, // bonusMana
+                            0,
+                            0,
+                            0,
+                            0,
                             iDef.type === "container",
-                            0, // containerSize
-                            undefined, // glowColor
-                            0, // glowRadius
-                            0, // frame
-                            0, // direction
+                            0,
+                            undefined,
+                            0,
+                            0,
+                            0,
                             iDef.uIndex || 0
                         );
                         bagInst.contents.push(new ItemInstance(item, b.count));

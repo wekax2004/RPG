@@ -6,7 +6,11 @@ import { MONSTER_LOOT, LootEntry } from '../data/loot';
 import { createItemFromRegistry } from '../data/items';
 import { addExperience } from './progression';
 
-export const combatSystem = (world: any) => {
+import { AudioController } from '../audio';
+import { UIManager } from '../client/ui_manager';
+import { InputHandler } from '../engine';
+
+export const combatSystem = (world: any, input: InputHandler, audio: AudioController, ui: UIManager) => {
     const now = performance.now();
 
     // Phase 2 Combat Logic
@@ -75,6 +79,9 @@ export const combatSystem = (world: any) => {
                     }
                 }
             }
+
+            // Audio Feedback
+            if (audio) audio.playWeaponSound(weaponType);
 
             // Gain XP based on Weapon Type
             // @ts-ignore

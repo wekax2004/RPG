@@ -30,8 +30,11 @@ function createWindow() {
     const isDev = !app.isPackaged; // or use process.env.NODE_ENV
 
     // For this environment, we can assume localhost for dev if arguments suggest, but let's stick to standard check
-    // Actually, previously we used:
-    win.loadURL('http://localhost:5173');
+    if (isDev) {
+        win.loadURL('http://localhost:5173');
+    } else {
+        win.loadFile(path.join(__dirname, '../dist/index.html'));
+    }
 
     // --- Networking ---
     startClient(win);
