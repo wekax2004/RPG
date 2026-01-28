@@ -53,13 +53,20 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [4/4] Launching Game...
+echo [4/4] Starting Server and Game...
+echo [*] Starting Server (in background window)...
+start "Retro RPG Server" npm run start:server
+
+echo [*] Waiting for server to initialize...
+timeout /t 5 /nobreak
+
 if exist "release\win-unpacked\Retro RPG.exe" (
+    echo [*] Launching Client...
     start "" "release\win-unpacked\Retro RPG.exe"
 ) else (
     echo [ERROR] Executable not found at release\win-unpacked\Retro RPG.exe
     pause
 )
 
-echo Done.
+echo Done. Do not close the Server window while playing!
 pause
