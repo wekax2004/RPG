@@ -3019,7 +3019,7 @@ export function createEnemy(world: World, x: number, y: number, type: string = "
         world.addComponent(e, new Sprite(def.spriteIndex, 32));
         world.addComponent(e, new AI(
             def.speed,
-            'melee',
+            def.behavior || 'melee',
             40,
             2.0,
             200,
