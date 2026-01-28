@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "start:server": "npx tsx src/server/server.ts",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "electron": "launch.bat",
     "electron:dev": "concurrently -k \"npm run dev\" \"npm run electron\"",
@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
-    "electron": "^39.2.7",
+    "electron": "^30.0.0",
     "electron-builder": "^26.0.12",
     "ts-node": "^10.9.2",
     "typescript": "^5.2.2",

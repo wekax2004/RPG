@@ -51,7 +51,6 @@ export function updateMonsterAI(world: World, currentTime: number, player: Playe
                     }
                 }
                 // TOO FAR? Chase!
-                // TOO FAR? Chase!
                 else if (dist > ai.attackRange) {
                     if (currentTime - ai.lastWanderTime >= MONSTER_MOVE_COOLDOWN) {
                         if (map) moveTowardsPlayerSmart(world, id, pos, player, currentTime, map);
@@ -61,16 +60,13 @@ export function updateMonsterAI(world: World, currentTime: number, player: Playe
 
                 // ATTACK LOGIC
                 if (dist <= ai.attackRange) {
-                    if (ai.behavior === 'neutral' || ai.behavior === 'passive') {
-                        // Do not attack
-                    } else {
-                        const attackInterval = 1000 / stats.attackSpeed;
-                        if (currentTime - combat.lastAttackTime >= attackInterval) {
-                            if (ai.behavior === 'ranged') {
-                                performRangedAttack(world, id, player, stats, combat, name, currentTime);
-                            } else {
-                                performCasterAttack(world, id, player, stats, combat, name, currentTime, ai);
-                            }
+
+                    const attackInterval = 1000 / stats.attackSpeed;
+                    if (currentTime - combat.lastAttackTime >= attackInterval) {
+                        if (ai.behavior === 'ranged') {
+                            performRangedAttack(world, id, player, stats, combat, name, currentTime);
+                        } else {
+                            performCasterAttack(world, id, player, stats, combat, name, currentTime, ai);
                         }
                     }
                 }

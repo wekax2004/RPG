@@ -1,4 +1,4 @@
-import { player, world } from "../main";
+import { player, world } from "../main_v4";
 import { ITEM_IDS } from "../constants";
 import { ShopOffer } from "../data/shops";
 import { Inventory, ItemInstance, Item as ItemComp } from "../components";

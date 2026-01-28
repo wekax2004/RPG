@@ -125,7 +125,7 @@ export class AI {
 
     constructor(
         public speed: number = 30,
-        public behavior: 'melee' | 'ranged' | 'flee' | 'caster' = 'melee',
+        public behavior: 'melee' | 'ranged' | 'flee' | 'caster' | 'neutral' | 'passive' = 'melee',
         public attackRange: number = 40,
         public attackCooldown: number = 2.0,
         public detectionRadius: number = 200,      // Range to detect player
