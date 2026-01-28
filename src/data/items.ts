@@ -224,8 +224,7 @@ export function createItemFromRegistry(id: number | string, count: number = 1): 
             def.defense || 0,
             def.armor || 0,
             def.speed || 0,
-            def.speed || 0,
-            0, 0,
+            0, 0, // bonusHp, bonusMana
             def.type === 'container', def.type === 'container' ? 20 : 0,
             def.glowColor, def.glowRadius || 0,
             0, /* frame */
@@ -234,7 +233,9 @@ export function createItemFromRegistry(id: number | string, count: number = 1): 
             "", /* icon */
             def.isRune || false,
             def.runeSpellName || "",
-            def.charges || 0
+            def.type || "misc", /* Item Type (food, potion, etc) */
+            def.charges || 0,
+            def.stackable || false
         );
     }
     return new Item("Unknown Item", "inventory", 0);

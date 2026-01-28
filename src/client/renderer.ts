@@ -239,14 +239,13 @@ export class PixelRenderer {
                         if (ent.name) {
                             this.ctx.font = '10px monospace';
                             this.ctx.textAlign = 'center';
+                            this.ctx.textBaseline = 'bottom';
                             const cx = baseX + 16;
-                            const cy = renderY - 12;
+                            const cy = renderY - 22; // Moved UP further
 
                             // Name
                             this.ctx.fillStyle = '#000';
                             this.ctx.fillText(ent.name, cx + 1, cy + 1);
-                            this.ctx.fillStyle = '#fff'; // Green? No, white for name
-                            if (ent.tint) this.ctx.fillStyle = ent.tint.color; // Match tint? No, stick to white/green
                             this.ctx.fillStyle = '#0f0'; // Tibia Green Names
                             this.ctx.fillText(ent.name, cx, cy);
 
@@ -256,7 +255,7 @@ export class PixelRenderer {
                                 const barW = 26;
                                 const barH = 4;
                                 const bx = cx - barW / 2;
-                                const by = cy + 2;
+                                const by = cy + 6; // Fixed Gap below Name baseline
 
                                 // Bg
                                 this.ctx.fillStyle = '#000';

@@ -382,7 +382,11 @@ export class TibiaMapGenerator {
             const hubX = grateX - 5;
             const hubY = grateY - 5;
 
-            this.digRoom(hubX, hubY, hubW, hubH, 8, SPRITES.FLOOR_STONE, SPRITES.WALL_STONE_H);
+            // 1. Central Room (Under Grate) - Use COBBLE for Sewer Biome (prevents Dungeon spawns)
+            this.digRoom(hubX, hubY, hubW, hubH, 8, SPRITES.COBBLE, SPRITES.WALL_STONE_H);
+
+            // Removed manual "Minion" spawns (Rats/Slimes) to allow Biome Rules (SEWER) to handle it naturally without overpopulation.
+            // Biome Rule for COBBLE + Z=8 = SEWER (Rats, Slimes, Bats)
 
             // Grate Transitions
             this.transitions.add({
@@ -405,29 +409,29 @@ export class TibiaMapGenerator {
             });
 
             // Hub Monsters - Slimes (Weak)
-            this.spawnMonstersInRect(hubX, hubY, hubW, hubH, 8, SPRITES.SLIME, "Sewer Slime", 1.0, 3);
+            // Manual Slime spawn removed to rely on Biome Rules
 
             // 2. Corridors & Side Rooms
             // North Corridor -> Rat Room
             const northLen = 15;
-            this.digRoom(grateX - 1, hubY - northLen, 3, northLen, 8, SPRITES.FLOOR_STONE, SPRITES.WALL_STONE_H); // Tunnel
+            this.digRoom(grateX - 1, hubY - northLen, 3, northLen, 8, SPRITES.COBBLE, SPRITES.WALL_STONE_H); // Tunnel
             const ratRoomW = 12;
             const ratRoomH = 12;
-            this.digRoom(grateX - 6, hubY - northLen - ratRoomH, ratRoomW, ratRoomH, 8, SPRITES.FLOOR_STONE, SPRITES.WALL_STONE_H);
+            this.digRoom(grateX - 6, hubY - northLen - ratRoomH, ratRoomW, ratRoomH, 8, SPRITES.COBBLE, SPRITES.WALL_STONE_H);
 
             // Spawn Rats
-            this.spawnMonstersInRect(grateX - 6, hubY - northLen - ratRoomH, ratRoomW, ratRoomH, 8, SPRITES.RAT, "Giant Rat", 0.8, 5);
+            // Manual Rat spawn removed
 
             // 3. Boss Corridor (East)
             const eastLen = 20;
-            this.digRoom(hubX + hubW, grateY - 1, eastLen, 3, 8, SPRITES.FLOOR_STONE, SPRITES.WALL_STONE_H);
+            this.digRoom(hubX + hubW, grateY - 1, eastLen, 3, 8, SPRITES.COBBLE, SPRITES.WALL_STONE_H);
 
             // Boss Room
             const bossRoomX = hubX + hubW + eastLen;
             const bossRoomY = grateY - 6;
             const bossRoomW = 14;
             const bossRoomH = 14;
-            this.digRoom(bossRoomX, bossRoomY, bossRoomW, bossRoomH, 8, SPRITES.FLOOR_STONE, SPRITES.WALL_STONE_H);
+            this.digRoom(bossRoomX, bossRoomY, bossRoomW, bossRoomH, 8, SPRITES.COBBLE, SPRITES.WALL_STONE_H);
 
             // Spawn Boss - Sewer King
             this.spawns.push({

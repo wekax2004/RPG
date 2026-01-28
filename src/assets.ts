@@ -606,6 +606,7 @@ export class AssetManager {
         this.images[201] = this.createWolf();    // Wolf
         this.images[202] = this.createSkeleton();// Skeleton
         this.images[203] = this.createSlime();   // Slime
+        this.images[213] = this.createBat();     // Bat
         this.images[202] = this.createSkeleton(); // Skeleton
 
         // ===== TERRAIN =====
@@ -2196,6 +2197,49 @@ export class AssetManager {
         ctx.moveTo(8, 18);
         ctx.quadraticCurveTo(4, 14, 4, 20);
         ctx.stroke();
+
+        this.addOutline(ctx, cvs);
+        return cvs;
+    }
+
+    // =========================================================
+    // BAT (Monster 32x32)
+    // =========================================================
+    private createBat(): HTMLCanvasElement {
+        const cvs = this.createCanvas(32, 32);
+        const ctx = cvs.getContext('2d')!;
+
+        // No shadow for flying bat or small subtle one
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.beginPath();
+        ctx.ellipse(16, 28, 6, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Body (Small, dark)
+        ctx.fillStyle = '#222222';
+        ctx.beginPath();
+        ctx.ellipse(16, 12, 4, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Wings (Dusk Purple/Black)
+        ctx.fillStyle = '#331133';
+        // Left Wing
+        ctx.beginPath();
+        ctx.moveTo(12, 12);
+        ctx.quadraticCurveTo(4, 4, 2, 16);
+        ctx.quadraticCurveTo(8, 14, 12, 16);
+        ctx.fill();
+        // Right Wing
+        ctx.beginPath();
+        ctx.moveTo(20, 12);
+        ctx.quadraticCurveTo(28, 4, 30, 16);
+        ctx.quadraticCurveTo(24, 14, 20, 16);
+        ctx.fill();
+
+        // Eyes (Tiny Red)
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(14, 10, 1, 1);
+        ctx.fillRect(17, 10, 1, 1);
 
         this.addOutline(ctx, cvs);
         return cvs;

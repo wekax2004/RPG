@@ -395,16 +395,37 @@ export function generateOverworld(width: number, height: number, seed: number): 
 
     // Helper to spawn a group of mobs around a center
     const spawnMobGroup = (centerX: number, centerY: number, radius: number, count: number, type: string) => {
-        for (let i = 0; i < count; i++) {
+        // Reduced count for density balance (User Request)
+        // Lowered to 0.3 (30%) based on feedback "no change seen"
+        const density = 0.3;
+        const actualCount = Math.max(1, Math.floor(count * density));
+
+        for (let i = 0; i < actualCount; i++) {
             const angle = rng.next() * Math.PI * 2;
             const dist = rng.next() * radius;
             const mx = Math.floor(centerX + Math.cos(angle) * dist);
             const my = Math.floor(centerY + Math.sin(angle) * dist);
 
+            // SAFE ZONE CHECK
+            // Town Center is (width/2, height/2). Town Radius is 24.
+            // Add buffer of 10 tiles.
+            const dx = mx - width / 2;
+            const dy = my - height / 2;
+            const distFromTown = Math.sqrt(dx * dx + dy * dy);
+
+            if (distFromTown < (24 + 10)) continue; // Skip spawn
+
             if (mx > 0 && mx < width && my > 0 && my < height) {
                 const idx = my * width + mx;
                 if (!stoneWallIndices.has(idx) && !tiles[idx].has(SPRITES.WATER)) {
-                    entities.push({ type: 'enemy', x: mx * 32, y: my * 32, enemyType: type });
+                    // Create SPAWNER instead of Enemy
+                    entities.push({
+                        type: 'spawner',
+                        x: mx * 32,
+                        y: my * 32,
+                        enemyType: type,
+                        interval: 60 + (rng.next() * 60) // 1-2 minutes random
+                    });
                 }
             }
         }
@@ -443,7 +464,14 @@ export function generateOverworld(width: number, height: number, seed: number): 
             // Spawn Orcs
             spawnMobGroup(ox, oy, 12, 15, 'orc');
             // Warlord
-            entities.push({ type: 'boss', x: ox * 32, y: oy * 32, enemyType: 'orc_warlord' });
+            // Boss Spawner: 3-4 minutes (180-240s)
+            entities.push({
+                type: 'spawner',
+                x: ox * 32,
+                y: oy * 32,
+                enemyType: 'orc_warlord',
+                interval: 240
+            });
             console.log(`[MapGen] Orc Fortress generated at ${ox},${oy}`);
             orcCount++;
         }
@@ -700,7 +728,7 @@ export function generateDungeon(width: number, height: number, seed: number, typ
     }
 
     // Spawn Mobs in Dungeon
-    const mobCount = 15; // Small dungeon
+    const mobCount = 8; // Reduced from 15 for better balance
     for (let i = 0; i < mobCount; i++) {
         let spawned = false;
         let attempts = 0;
@@ -733,10 +761,11 @@ export function generateDungeon(width: number, height: number, seed: number, typ
                 }
 
                 entities.push({
-                    type: 'enemy',
+                    type: 'spawner',
                     x: mx * 32,
                     y: my * 32,
-                    enemyType: mobType
+                    enemyType: mobType,
+                    interval: 60 + (rng.next() * 60)
                 });
                 spawned = true;
             }
@@ -763,10 +792,11 @@ export function generateDungeon(width: number, height: number, seed: number, typ
 
             if (bossType) {
                 entities.push({
-                    type: 'boss',
+                    type: 'spawner',
                     x: bx * 32,
                     y: by * 32,
-                    enemyType: bossType
+                    enemyType: bossType,
+                    interval: 240 // 4 minutes
                 });
                 // NOTE: Aric is now spawned ONCE at line 151, not here.
                 console.log(`[MapGen] Spawned ${bossType} boss at ${bx},${by}`);

@@ -1,5 +1,5 @@
 import { World, Entity } from "./engine";
-import { Position, Stats, Name, Health, CombatState, AI, Velocity, Facing, TileMap, Projectile } from "./components";
+import { Position, Stats, Name, Health, CombatState, AI, Velocity, Facing, TileMap, Projectile, Sprite } from "./components";
 import { SPRITES } from './constants';
 import { Player } from "./core/player";
 import { spawnFloatingText, spawnBloodEffect } from "./effects";

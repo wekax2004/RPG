@@ -48,7 +48,7 @@ export class UIManager {
     public world: World | undefined;
 
     // Loot Stub
-    public activeLootEntityId: number | null = null;
+    // Loot Stub
     public lootPanel: HTMLElement = document.createElement('div');
     public lootGrid: HTMLElement | null = null;
 
@@ -95,6 +95,11 @@ export class UIManager {
                 document.dispatchEvent(event);
             });
         }
+
+        // 3. Toggle Chat Event (Global shortcut)
+        document.addEventListener('toggle-chat', () => {
+            this.toggleChat();
+        });
     }
 
     public updateInventory(inv: any): void { }
@@ -364,6 +369,11 @@ export class UIManager {
 
     // Aliases/Stubs for game.ts compatibility
     public showDialogue(text: string, options?: any) { this.showDialog(text, options); }
+    public hideDialogue() {
+        // Hide dialog logic (stub)
+        const d = document.getElementById('dialogue-box');
+        if (d) d.style.display = 'none';
+    }
     public toggleShop(...args: any[]) { }
     public openLoot(lootable: Lootable, id: number, pInv: Inventory) {
         this.activeLootEntityId = id;
@@ -436,12 +446,27 @@ export class UIManager {
         if (index >= items.length) return;
 
         const itemToLoot = items[index];
+        if (!itemToLoot || itemToLoot.count <= 0) return;
+
         console.log(`[Loot] Trying to loot: ${itemToLoot.item.name} (Count: ${itemToLoot.count})`);
 
+        // Clone for inventory to prevent shared reference with the corpse/loot array
+        const inventoryInstance = itemToLoot.clone();
+
         // Try to add to inventory
-        if (this.activePlayerInventory.addItemInstance(itemToLoot)) {
-            // Success: Remove from corpse
-            items.splice(index, 1);
+        if (this.activePlayerInventory.addItemInstance(inventoryInstance)) {
+            // Success: 
+            // If the item was fully consumed/moved, remove from source
+            // If partially moved (count remains > 0), update source count
+            if (inventoryInstance.count <= 0 || inventoryInstance !== itemToLoot) {
+                // This logic is slightly complex because addItemInstance might have 
+                // pushed the same object OR modified it. 
+                // With cloning, we check the inventoryInstance.
+
+                // If addItemInstance returned true, it means it was handled.
+                // We should remove it from corpse now.
+                items.splice(index, 1);
+            }
 
             console.log(`[Loot] Success! Item added. Re-rendering bag.`);
             // Re-render UIs

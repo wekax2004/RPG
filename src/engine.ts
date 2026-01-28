@@ -78,6 +78,18 @@ export class InputHandler {
         window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
+
+        // 5. Canvas Click Focus (Return focus to game if UI capture occurred)
+        window.addEventListener('mousedown', (e) => {
+            const canvas = document.getElementById('gameCanvas');
+            if (e.target === canvas || (canvas && canvas.contains(e.target as Node))) {
+                // Blur active element if it's an input or textarea
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                    (active as HTMLElement).blur();
+                }
+            }
+        });
     }
 
     isDown(code: string): boolean {

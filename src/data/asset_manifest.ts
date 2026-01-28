@@ -57,6 +57,49 @@ export const MANIFEST: ManifestItem[] = [
     },
     // --- TERRAIN OVERRIDES ---
     {
+        id: "floor_stone_std",
+        name: "Stone Floor",
+        type: "other",
+        imagePath: "tiles/edron/floor_stone.png",
+        postProcess: "skip_transparency",
+        spriteId: 15, // SPRITES.FLOOR_STONE
+        stats: {}
+    },
+    {
+        id: "wall_stone_std",
+        name: "Stone Wall",
+        type: "other",
+        imagePath: "sprites/wall.png", // Using standard wall
+        postProcess: "remove_black|skip_transparency",
+        spriteId: 17, // SPRITES.STONE_WALL
+        stats: {}
+    },
+    // --- GENERATED SEWER ASSETS ---
+    {
+        id: "sewer_hole",
+        name: "Sewer Hole",
+        type: "other",
+        imagePath: "sprites/sewer_assets.png",
+        spriteId: 125, // SPRITES.HOLE
+        stats: {}
+    },
+    {
+        id: "rope_spot_std",
+        name: "Rope Spot",
+        type: "other",
+        imagePath: "sprites/sewer_assets.png",
+        spriteId: 126, // SPRITES.ROPE_SPOT
+        stats: {}
+    },
+    {
+        id: "stairs_stone_down",
+        name: "Stone Stairs Down",
+        type: "other",
+        imagePath: "sprites/sewer_assets.png",
+        spriteId: 283, // SPRITES.STAIRS_DOWN
+        stats: {}
+    },
+    {
         id: "cobblestone_custom",
         name: "Custom Cobblestone",
         type: "other",

@@ -26,7 +26,7 @@ import {
     VOCATIONS, Target, Teleporter, LightSource, Consumable, NetworkItem, Decay, Lootable, Destination, CorpseDefinition,
     SpellBook, SkillPoints, ActiveSpell, StatusEffect, Passives, ItemRarity, RARITY_MULTIPLIERS, RARITY_COLORS, StatusOnHit, Locked,
     DungeonEntrance, DungeonExit, Collider, Corpse, RegenState, ItemInstance, Stats, CombatState, Tint, NPC, Tile as CompTile, TileItem as CompTileItem,
-    BossAI, MobResistance, SplitOnDeath, Hotbar
+    BossAI, MobResistance, SplitOnDeath, Hotbar, Spawner
 } from './components';
 
 import { spawnFloatingText, spawnBloodEffect } from './effects';
@@ -225,7 +225,7 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager, input:
     }
 
     // Check Range (Melee = 40px)
-    const range = 32;
+    const range = 40; // Increased to match attackRadius (allow hitting adjacent tiles)
     const dx = tPos.x - pPos.x;
     const dy = tPos.y - pPos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -233,12 +233,8 @@ export function autoAttackSystem(world: World, dt: number, ui: UIManager, input:
     // Cancel Chase if User Moves Manually
     const vel = world.getComponent(player, Velocity);
     if (Math.abs(input.getDirection().x) > 0 || Math.abs(input.getDirection().y) > 0) {
-        // User is steering, don't auto-chase (optional: clear target?)
-        // For Tibia style: Manual move STOPS auto-attack/chase usually? 
-        // Or just pauses it? Let's Break Target for full control.
-        targetComp.targetId = null;
-        if ((ui as any).console) (ui as any).console.addSystemMessage("Target lost (moved).");
-        return;
+        // User is steering, stop auto-chase (destination) but KEEP targetId for auto-attack in range
+        world.removeComponent(player, Destination);
     }
 
     if (dist <= range) {
@@ -306,13 +302,17 @@ export function inputSystem(world: World, input: InputHandler) {
                             y: Math.abs(moveY) > 0.5 ? Math.sign(moveY) : 0
                         };
                         isMoving = true;
-                        // console.log(`[Chase] Chasing Target ${targetComp.targetId} (Dist: ${dist.toFixed(1)})`);
                     }
                 } else {
-                    // Target dead? Stop chasing.
+                    // Target dead or missing? Stop chasing.
                     targetComp.targetId = null;
                 }
             }
+        }
+
+        // 4. CHAT TOGGLE (Enter Key)
+        if (input.isJustPressed('Enter')) {
+            document.dispatchEvent(new CustomEvent('toggle-chat'));
         }
 
         // --- 4. CLICK-TO-MOVE LOGIC ---
@@ -520,20 +520,26 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
 
                             if (pInv) {
                                 let looted = "";
-                                for (const item of loot) {
-                                    const id = (typeof item === 'number') ? item : item.id;
-                                    const count = (typeof item === 'object' && item.count) ? item.count : 1;
-                                    const newItem = createItemFromRegistry(id, count);
-                                    if (newItem && newItem.uIndex !== 0) {
-                                        pInv.addItem(newItem);
-                                        looted += `${count}x ${newItem.name}, `;
-                                    }
+                                // Filter out items that were successfully added
+                                if (topItem.properties) {
+                                    topItem.properties.loot = topItem.properties.loot.filter((item: any) => {
+                                        const id = (typeof item === 'number') ? item : item.id;
+                                        const count = (typeof item === 'object' && item.count) ? item.count : 1;
+                                        const newItem = createItemFromRegistry(id, count);
+                                        if (newItem && newItem.uIndex !== 0) {
+                                            if (pInv.addItem(newItem)) {
+                                                looted += `${count}x ${newItem.name}, `;
+                                                return false; // Remove from chest
+                                            }
+                                        }
+                                        return true; // Keep in chest (full)
+                                    });
                                 }
                                 if ((ui as any).console && looted) (ui as any).console.addSystemMessage(`Looted: ${looted}`);
                             }
-                            topItem.id = SPRITES.CHEST_OPEN;
-                            if (topItem.properties) topItem.properties.loot = [];
-                            if (topItem.inventory) topItem.inventory = [];
+                            if (topItem.properties && topItem.properties.loot.length === 0) {
+                                topItem.id = SPRITES.CHEST_OPEN;
+                            }
                         } else {
                             if ((ui as any).console) (ui as any).console.addSystemMessage("The chest is empty.");
                             topItem.id = SPRITES.CHEST_OPEN;
@@ -1552,26 +1558,24 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
                                 }
                                 // Stairs Down (438) / Hole (594) / Sewer Grate (312)
                                 if (item.id === 438 || item.id === 594 || item.id === 312) {
-                                    if (item.properties && typeof item.properties.destinationZ === 'number') {
+                                    if (item.properties?.destinationZ !== undefined) {
                                         pos.z = item.properties.destinationZ;
-                                        console.log(`[Floor] Custom Jump -> Z=${pos.z}`);
                                     } else {
                                         pos.z = Math.min(15, pos.z + 1);
-                                        console.log(`[Floor] Down (Stairs/Hole/Grate) -> Z=${pos.z}`);
                                     }
+                                    console.log(`[Floor] Down (Stairs/Hole/Grate) -> Z=${pos.z}`);
                                     break; // Only trigger one transition per frame
                                 }
                                 // Stairs Up (1391) / Ladder Up (1386)
                                 if (item.id === 1391 || item.id === 1386) {
-                                    if (item.properties && typeof item.properties.destinationZ === 'number') {
+                                    if (item.properties?.destinationZ !== undefined) {
                                         pos.z = item.properties.destinationZ;
-                                        console.log(`[Floor] Custom Jump -> Z=${pos.z}`);
                                     } else {
                                         pos.z = Math.max(0, pos.z - 1);
-                                        console.log(`[Floor] Up (Stairs/Ladder) -> Z=${pos.z}`);
                                     }
-                                    break;
+                                    console.log(`[Floor] Up (Stairs/Ladder) -> Z=${pos.z}`);
                                 }
+                                break;
                             }
                         }
                     }
@@ -1579,12 +1583,13 @@ export function movementSystem(world: World, dt: number, audio: AudioController,
             }
         }
     }
-
-
-
-    // --- RENDERING ---
-    // NOTE: Assets already exported at top of file via `export * from './assets'` - removed redundant nested import
 }
+
+
+
+// --- RENDERING ---
+// NOTE: Assets already exported at top of file via `export * from './assets'` - removed redundant nested import
+
 
 export function combatSystem(world: World, input: InputHandler, audio: AudioController, ui: UIManager, network?: any, pvpEnabled: boolean = false) {
     // Auto-Attack (Target Locked)
@@ -1606,7 +1611,7 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
                 const pPos = world.getComponent(playerEntity, Position)!;
                 const dx = (tPos.x + 8) - (pPos.x + 8);
                 const dy = (tPos.y + 8) - (pPos.y + 8);
-                if (Math.abs(dx) <= 24 && Math.abs(dy) <= 24) {
+                if (Math.abs(dx) <= 40 && Math.abs(dy) <= 40) {
                     autoAttack = true;
                 }
             }
@@ -1629,8 +1634,8 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
     const skills = world.getComponent(playerEntity, Skills);
     const xp = world.getComponent(playerEntity, Experience);
 
-    const targetX = pos.x + 8 + (pc.facingX * 24);
-    const targetY = pos.y + 8 + (pc.facingY * 24);
+    const targetX = pos.x + 8 + (pc.facingX * 32);
+    const targetY = pos.y + 8 + (pc.facingY * 32);
 
     let damage = 0; // Base
     let skillLevel = 10;
@@ -1704,7 +1709,7 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
     }
 
 
-    const attackRadius = 24;
+    const attackRadius = 40; // Increased from 24 to allow adjacent hits (32px)
 
     const enemies = world.query([Health, Position]);
     let hit = false;
@@ -1850,7 +1855,7 @@ export function combatSystem(world: World, input: InputHandler, audio: AudioCont
                     } else {
                         // Only spawn corpse if NOT splitting (or maybe both? Slimes usually leave puddles?)
                         // If split, the pieces are the remains.
-                        createCorpse(world, ePos.x, ePos.y, loot, corpseSprite);
+                        createCorpse(world, ePos.x, ePos.y, ePos.z, loot, corpseSprite);
                     }
 
                     world.removeEntity(targetId);
@@ -2435,7 +2440,7 @@ export function enemyCombatSystem(world: World, dt: number, ui: UIManager, audio
                     // For now assume Melee = Physical.
                     const resistance = world.getComponent(playerEntity, MobResistance); // Player is the target here
                     if (resistance) {
-                        if (resistance.physicalImmune) {
+                        if (resistance.physical) {
                             damage = 0; // Reduce damage to 0 if player is immune
                             spawnFloatingText(world, pPos.x, pPos.y, "IMMUNE", '#ffff00');
                         } else {
@@ -2542,33 +2547,33 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon' | 'edron',
             for (let x = 0; x < width; x++) {
                 for (let y = 0; y < height; y++) {
                     const t = edronMap.getTile(x, y, z);
-                    if (t && t.mob) {
-                        const name = t.mob;
-
-                        // HOSTILE MOBS
-                        if (['Rat', 'Wolf', 'Bear', 'Orc', 'Skeleton', 'Cyclops', 'Bandit', 'Slime', 'Snake', 'Spider', 'Bat', 'Ghost', 'Troll', 'Minotaur', 'Dragon', 'big_zombie'].includes(name)) {
+                    if (t) {
+                        if (t.mob) {
+                            // CONVERSION: Use Spawner entity for all map-based mobs
+                            // This ensures they interact with the Respawn System
                             entities.push({
-                                type: 'enemy', // Game loop handles 'enemy' type via createEnemy
+                                type: 'spawner', // Changed from 'mob'
                                 x: x * 32,
                                 y: y * 32,
-                                z: z, // Captured Z level
-                                enemyType: name.toLowerCase(), // 'rat', 'wolf', etc.
-                                difficulty: 1.0
+                                z: z,
+                                enemyType: t.mob.toLowerCase(), // Spawner expects 'enemyType'
+                                interval: 60 + (Math.random() * 60) // Random respawn 1-2 mins
                             });
                         }
-                        // FRIENDLY NPCs
-                        else {
-                            let npcType = 'guide';
-                            let spriteId = SPRITES.NPC_GUIDE;
+                        if (t.npc) {
+                            let name = "Villager";
+                            let npcType = "guide";
+                            let spriteId = SPRITES.NPC_GUIDE; // Default sprite
 
-                            if (name === 'Clyde') { npcType = 'merchant'; spriteId = SPRITES.NPC_BANKER; }
-                            else if (name === 'Xodet') { npcType = 'merchant'; spriteId = SPRITES.NPC_WIZARD; }
-                            else if (name === 'Willard') { npcType = 'merchant'; spriteId = SPRITES.NPC_BLACKSMITH; }
-                            else if (name === 'Henricus') { npcType = 'healer'; spriteId = SPRITES.NPC_PRIEST; }
-                            else if (name === 'Beggar') { npcType = 'guide'; spriteId = SPRITES.NPC_BEGGAR; }
-
-                            else if (name === 'King Tibianus') { npcType = 'guide'; spriteId = 7000; }
-                            else if (name === 'Royal Guard') { npcType = 'guide'; spriteId = 7001; }
+                            // Check for specific NPC names from the original logic
+                            if (t.npc === 'Clyde') { npcType = 'merchant'; spriteId = SPRITES.NPC_BANKER; name = 'Clyde'; }
+                            else if (t.npc === 'Xodet') { npcType = 'merchant'; spriteId = SPRITES.NPC_WIZARD; name = 'Xodet'; }
+                            else if (t.npc === 'Willard') { npcType = 'merchant'; spriteId = SPRITES.NPC_BLACKSMITH; name = 'Willard'; }
+                            else if (t.npc === 'Henricus') { npcType = 'healer'; spriteId = SPRITES.NPC_PRIEST; name = 'Henricus'; }
+                            else if (t.npc === 'Beggar') { npcType = 'guide'; spriteId = SPRITES.NPC_BEGGAR; name = 'Beggar'; }
+                            else if (t.npc === 'King Tibianus') { npcType = 'guide'; spriteId = 7000; name = 'King Tibianus'; }
+                            else if (t.npc === 'Royal Guard') { npcType = 'guide'; spriteId = 7001; name = 'Royal Guard'; }
+                            else { name = t.npc; } // Use t.npc as name if not a special case
 
                             entities.push({
                                 type: 'npc',
@@ -2583,7 +2588,7 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon' | 'edron',
                     }
                 }
             }
-        }
+        } // Close Z Loop
 
         mapData = {
             width,
@@ -2645,6 +2650,20 @@ export function switchMap(world: World, type: 'overworld' | 'dungeon' | 'edron',
             createEarthEnemy(world, ent.x, ent.y, ent.enemyType, ent.difficulty);
         } else if (ent.type === 'mob') {
             createMonsterFromSprite(world, ent.x, ent.y, ent.mobType, (ent as any).customName || "Monster", (ent as any).difficulty || 1.0, ent.z ?? 7);
+        } else if (ent.type === 'spawner') {
+            const s = world.createEntity();
+            // Use provided Z or default to 7
+            const z = ent.z !== undefined ? ent.z : 7;
+            world.addComponent(s, new Position(ent.x, ent.y, z));
+            // Create Spawner Component
+            // (mobType, interval, timer=0, activeEntityId=-1, maxCount=1, z)
+            // Spawn Immediately? timer = 0.
+            // Or random offset? timer = Math.random() * interval
+            const interval = ent.interval || 60;
+            world.addComponent(s, new Spawner(ent.enemyType, interval, 0, -1, 1, z));
+
+            // Debug visual? (Invisible normally)
+            // if (DEBUG) world.addComponent(s, new Sprite(SPRITES.SKULL, 16)); 
         } else if (ent.type === 'item') {
             const itemInstance = new ItemInstance(new Item(ent.name, ent.slot, ent.uIndex, ent.attack));
             createItem(world, ent.x, ent.y, itemInstance);
@@ -2992,119 +3011,9 @@ export function toolSystem(world: World, input: InputHandler, ui: UIManager) {
 }
 
 
-export function createPlayer(world: World, x: number, y: number, input: InputHandler, vocationKey: string = 'knight') {
-    const e = world.createEntity();
-    world.addComponent(e, new Position(x, y, 6)); // Z=6 = Elevated city floor
-    world.addComponent(e, new Velocity(0, 0));
 
-    // Set sprite based on vocation
-    const vocationSpriteMap: Record<string, number> = {
-        'knight': SPRITES.PLAYER,  // 0 - Knight in full armor
-        'mage': SPRITES.MAGE,      // 1 - Blue wizard robes
-        'ranger': SPRITES.RANGER,  // 2 - Green leather with bow
-        'paladin': SPRITES.GUARD   // 5 - White/gold armor (use Guard sprite for now)
-    };
-    const spriteIndex = vocationSpriteMap[vocationKey] ?? SPRITES.PLAYER;
-    world.addComponent(e, new Sprite(spriteIndex, 32));
 
-    world.addComponent(e, new PlayerControllable());
-    world.addComponent(e, new Inventory());
-    world.addComponent(e, new Health(200, 200));
-    world.addComponent(e, new Experience(0, 100, 1));
-    world.addComponent(e, new Mana(50, 50));
-    world.addComponent(e, new Facing(0, 1));
-    world.addComponent(e, new QuestLog());
-    // Lantern: Dimmer to avoid blinding
-    world.addComponent(e, new LightSource(64, '#cc8844', true));
-
-    // Magic System State
-    const sb = new SpellBook();
-    if (!sb.knownSpells.has("Fireball")) sb.knownSpells.set("Fireball", 1);
-    world.addComponent(e, sb);
-    world.addComponent(e, new ActiveSpell('adori flam')); // Default Fireball
-
-    world.addComponent(e, new SkillPoints(0, 0));
-    world.addComponent(e, new Stats(10, 5, 0.5)); // 2.0s Cooldown (Tibia Standard)
-    world.addComponent(e, new CombatState());
-    world.addComponent(e, new Target(null));
-    world.addComponent(e, new RegenState());
-
-    // RPG Depth
-    const vocData = VOCATIONS[vocationKey] || VOCATIONS.knight;
-    world.addComponent(e, new Skills());
-    world.addComponent(e, new Passives()); // New Passive System
-    world.addComponent(e, new Vocation(vocData.name, vocData.hpGain, vocData.manaGain, vocData.capGain));
-
-    // Update stats based on vocation
-    const hp = world.getComponent(e, Health)!;
-    hp.max = vocData.startHp;
-    hp.current = vocData.startHp;
-
-    const mana = world.getComponent(e, Mana)!;
-    mana.max = vocData.startMana;
-    mana.current = vocData.startMana;
-
-    // Equipment Interaction
-    const inv = world.getComponent(e, Inventory)!;
-    inv.gold = 100; // Start with some gold
-    ensureStartingEquipment(world, e); // Ensure gear (New or Partial Save)
-    world.addComponent(e, new Collider(20, 12, 6, 20)); // 20x12 box at bottom center
-
-    return e;
-}
-
-export function ensureStartingEquipment(world: World, e: number) {
-    const inv = world.getComponent(e, Inventory);
-    if (!inv) return;
-
-    // === KNIGHT STARTING EQUIPMENT ===
-    // Check and Equip individually to handle partial saves/updates
-
-    // 1. Small Bag
-    if (!inv.getEquipped('backpack')) {
-        const bagItem = new Item("Small Bag", "backpack", SPRITES.SMALL_BAG, 0, 30, "A small leather bag. Limited storage.", "none", "common", 0, 0, 0, 0, 0, true, 8);
-        const bagInst = new ItemInstance(bagItem, 1);
-
-        // Add starting consumables to bag
-        const apple = new Item("Apple", "none", SPRITES.APPLE, 0, 2, "Restores 10 HP.", "none", "common");
-        const potion = new Item("Health Potion", "none", SPRITES.POTION, 0, 50, "Restores 50 HP.", "none", "common");
-        bagInst.contents.push(new ItemInstance(apple, 5)); // 5 Apples
-        bagInst.contents.push(new ItemInstance(potion, 2)); // 2 Health Potions
-
-        inv.equip('backpack', bagInst);
-        console.log("[Game] Retroactively equipped Backpack.");
-    }
-
-    // 2. Knight's Weapon: Wooden Sword
-    if (!inv.getEquipped('rhand')) {
-        const weapon = new Item("Wooden Sword", "rhand", SPRITES.WOODEN_SWORD, 8, 20, "A practice sword. Deals 8 damage.", "sword", "common", 0);
-        inv.equip('rhand', new ItemInstance(weapon, 1));
-        console.log("[Game] Retroactively equipped Wooden Sword.");
-    }
-
-    // 3. Knight's Armor: Leather Armor
-    if (!inv.getEquipped('body')) {
-        const armor = new Item("Leather Armor", "body", SPRITES.LEATHER_ARMOR, 0, 50, "Basic leather protection.", "none", "common", 4);
-        inv.equip('body', new ItemInstance(armor, 1));
-        console.log("[Game] Retroactively equipped Leather Armor.");
-    }
-
-    // 4. Knight's Shield: Wooden Shield
-    if (!inv.getEquipped('lhand')) {
-        const shield = new Item("Wooden Shield", "lhand", SPRITES.WOODEN_SHIELD, 0, 40, "A simple wooden shield.", "none", "common", 5);
-        inv.equip('lhand', new ItemInstance(shield, 1));
-        console.log("[Game] Retroactively equipped Wooden Shield.");
-    }
-
-    // 5. Knight's Boots: Leather Boots
-    if (!inv.getEquipped('boots')) {
-        const boots = new Item("Leather Boots", "boots", SPRITES.LEATHER_BOOTS, 0, 25, "Simple leather boots.", "none", "common", 1);
-        inv.equip('boots', new ItemInstance(boots, 1));
-        console.log("[Game] Retroactively equipped Leather Boots.");
-    }
-}
-
-function createEnemy(world: World, x: number, y: number, type: string = "orc", difficulty: number = 1.0, z: number = 7) {
+export function createEnemy(world: World, x: number, y: number, type: string = "orc", difficulty: number = 1.0, z: number = 7) {
     const e = world.createEntity();
     world.addComponent(e, new Position(x, y, z));
     world.addComponent(e, new Velocity(0, 0));
@@ -3572,6 +3481,14 @@ export function handleChat(world: World, text: string, ui: UIManager) {
         return;
     }
 
+    // Reset Command
+    if (cleanText.toLowerCase() === '/reset') {
+        if ((ui as any).console) (ui as any).console.addSystemMessage("Resetting Game Data...");
+        localStorage.removeItem('retro-rpg-save-v3');
+        setTimeout(() => location.reload(), 1000);
+        return;
+    }
+
     // Spawn Command: /spawn minotaur_archer
     if (cleanText.toLowerCase().startsWith('/spawn ')) {
         const mobKey = cleanText.substring(7).trim(); // "minotaur_archer"
@@ -3654,6 +3571,7 @@ export function deathSystem(world: World, ui: UIManager, spawnX: number = TEMPLE
                 if (pos) {
                     pos.x = spawnX;
                     pos.y = spawnY;
+                    pos.z = 7; // Reset to Surface
                 }
                 const mana = world.getComponent(id, Mana);
                 if (mana) mana.current = mana.max;
@@ -4520,7 +4438,7 @@ function equipmentLightSystem(world: World) {
 
 
 
-function createCorpse(world: World, x: number, y: number, loot: ItemInstance[] = [], spriteId: number = 22) {
+function createCorpse(world: World, x: number, y: number, z: number, loot: ItemInstance[] = [], spriteId: number = 22) {
     // Spawn death particles (blood/smoke burst)
     for (let i = 0; i < 12; i++) {
         const p = world.createEntity();
@@ -4534,7 +4452,7 @@ function createCorpse(world: World, x: number, y: number, loot: ItemInstance[] =
     }
 
     const e = world.createEntity();
-    world.addComponent(e, new Position(x, y));
+    world.addComponent(e, new Position(x, y, z));
     // Use generic BONES sprite (22) or Custom
     world.addComponent(e, new Sprite(spriteId, 16));
     world.addComponent(e, new Decay(300)); // 300s decay (5 mins)
@@ -4957,92 +4875,32 @@ export function stairsSystem(world: World, ui: UIManager) {
     if (!tile) return;
 
     // Check for Down
-    const STAIRS_DOWN = [77, 283, 594]; // 77=Gen, 283=Const, 594=Hole
-    const hasDown = tile.items.some(i => STAIRS_DOWN.includes(i.id)) || STAIRS_DOWN.includes(tile.baseId);
+    const STAIRS_DOWN = [77, 283, 312, 594]; // 77=Gen, 283=Const, 312=Grate, 594=Hole
+    const downItem = tile.items.find(i => STAIRS_DOWN.includes(i.id));
 
-    if (hasDown) {
+    if (downItem) {
         // Go Down
-        pos.z++;
+        if (downItem.properties?.destinationZ !== undefined) {
+            pos.z = downItem.properties.destinationZ;
+        } else {
+            pos.z++;
+        }
         if ((ui as any).console) (ui as any).console.addSystemMessage("You descend deeper...");
         return;
     }
 
+
     // Check for Up
     const STAIRS_UP = [284, 1386, 1391]; // 284=Const, 1386=Ladder, 1391=StoneUp
-    const hasUp = tile.items.some(i => STAIRS_UP.includes(i.id)) || STAIRS_UP.includes(tile.baseId);
+    const upItem = tile.items.find(i => STAIRS_UP.includes(i.id));
 
-    if (hasUp) {
+    if (upItem) {
         // Go Up
-        pos.z--;
+        if (upItem.properties?.destinationZ !== undefined) {
+            pos.z = upItem.properties.destinationZ;
+        } else {
+            pos.z--;
+        }
         if ((ui as any).console) (ui as any).console.addSystemMessage("You climb up.");
-    }
-}
-
-// ============================================================
-// PLAYER FACTORY
-// ============================================================
-export function createPlayer(world: World, x: number, y: number, input: InputHandler, vocationId: string = 'knight'): Entity {
-    const p = world.createEntity();
-    // Center in tile
-    world.addComponent(p, new Position(x, y));
-    world.addComponent(p, new Velocity(0, 0));
-    world.addComponent(p, new Sprite(16, 32)); // ID 16 = Hero
-    world.addComponent(p, new PlayerControllable());
-    world.addComponent(p, new Name("Player"));
-
-    // Vocation & Stats
-    const vocId = vocationId as keyof typeof VOCATIONS;
-    const voc = VOCATIONS[vocId] || VOCATIONS.knight;
-
-    world.addComponent(p, new Vocation(vocId));
-    world.addComponent(p, new Health(voc.baseHp, voc.baseHp));
-    world.addComponent(p, new Mana(voc.baseMana, voc.baseMana));
-    world.addComponent(p, new Stats(10, 10, voc.capacity)); // Base stats
-    world.addComponent(p, new Experience(1, 0, 100));
-    world.addComponent(p, new Skills()); // Magic Level, Fishing, etc.
-
-    // Systems
-    world.addComponent(p, new Inventory());
-    world.addComponent(p, new LightSource(64, '#ffffff', false)); // Basic light
-    world.addComponent(p, new Hotbar()); // Hotbar System
-    // world.addComponent(p, new QuestLog()); // Quests
-
-    // Starting Gear
-    ensureStartingEquipment(world, p);
-
-    console.log(`[Game] Created Player (Vocation: ${vocId}) at ${x},${y}`);
-    return p;
-}
-
-export function ensureStartingEquipment(world: World, pid: number) {
-    const inv = world.getComponent(pid, Inventory);
-    if (!inv) return;
-
-    // Helper to quick-equip
-    const equipIfEmpty = (slot: string, itemId: number) => {
-        if (!inv.getEquipped(slot)) {
-            const item = createItemFromRegistry(itemId);
-            if (item.id !== 0) inv.equip(slot, new ItemInstance(item));
-        }
-    };
-
-    // Basic Set
-    equipIfEmpty('body', SPRITES.ARMOR || 43);
-    equipIfEmpty('legs', SPRITES.LEGS || 45);
-    equipIfEmpty('right', SPRITES.SWORD || 42); // Weapon
-    equipIfEmpty('left', SPRITES.SHIELD || 46); // Shield
-
-    // Backpack
-    if (!inv.getEquipped('backpack')) {
-        const bagItem = createItemFromRegistry(SPRITES.BACKPACK || 8043);
-        if (bagItem.id !== 0) {
-            const bagInst = new ItemInstance(bagItem);
-            // Default contents
-            bagInst.contents = [
-                new ItemInstance(createItemFromRegistry(SPRITES.APPLE || 8040), 3),
-                new ItemInstance(createItemFromRegistry(SPRITES.TORCH || 32))
-            ];
-            inv.equip('backpack', bagInst);
-        }
     }
 }

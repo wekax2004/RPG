@@ -228,7 +228,9 @@ export class Item {
         // Rune Properties
         public isRune: boolean = false,
         public runeSpellName: string = "",
-        public charges: number = 0
+        public type: string = "misc", // Added type (food, potion, etc)
+        public charges: number = 0,
+        public stackable: boolean = false // Added stackable property
     ) { }
 }
 
@@ -248,6 +250,15 @@ export class ItemInstance {
         if (charges === 0 && item.charges) {
             this.charges = item.charges;
         }
+    }
+
+    clone(): ItemInstance {
+        const c = new ItemInstance(this.item, this.count, [], this.charges);
+        // Deep clone contents if any
+        if (this.contents && this.contents.length > 0) {
+            c.contents = this.contents.map(item => item.clone());
+        }
+        return c;
     }
 }
 
@@ -363,34 +374,46 @@ export class Inventory {
     }
 
     addItemInstance(instance: ItemInstance): boolean {
+        // 1. Get the bag item instance
         const bag = this.equipment.get('backpack');
-        // If no backpack, fail or add to "storage" (deprecated)?
-        // For Phase 3: Must have backpack.
+
         if (!bag) {
-            // Check if we can equip it directly? (e.g. it IS a backpack)
-            if (instance.item.name === 'Backpack') {
+            // No backpack equipped: Can we equip this item as a backpack?
+            if (instance.item.slotType === 'backpack' || instance.item.isContainer) {
                 this.equip('backpack', instance);
                 return true;
             }
-            return false; // No space
+            return false; // No where to put it
         }
 
-        // Add to bag contents
-        // Check stackability
-        const stackMatch = bag.contents.find(i => i.item.name === instance.item.name);
-        if (stackMatch) {
-            stackMatch.count += instance.count;
-            return true;
+        // 2. Stacking Logic: Iterate all slots to find all potential stacks to fill
+        if (instance.item.stackable) {
+            const maxStack = 100;
+            if (!bag.contents) bag.contents = []; // Defensive
+
+            for (const existingItem of bag.contents) {
+                if (existingItem && existingItem.item.name === instance.item.name && existingItem.count < maxStack) {
+                    const roomInStack = maxStack - existingItem.count;
+                    const amountToAdd = Math.min(roomInStack, instance.count);
+
+                    existingItem.count += amountToAdd;
+                    instance.count -= amountToAdd;
+
+                    if (instance.count <= 0) return true; // Fully consumed
+                }
+            }
         }
 
-        // Add new
-        if (bag.contents.length < 20) {
+        // 3. New Slot Logic: If count remains, add as new slot if room exists
+        const limit = bag.item.containerSize || 20;
+        if (bag.contents.length < limit) {
             bag.contents.push(instance);
             return true;
         }
 
-        return false; // Full
+        return false; // No room or invalid state
     }
+
 }
 
 export class Health {
@@ -409,6 +432,17 @@ export class Particle {
         public size: number,
         public vx: number,
         public vy: number
+    ) { }
+}
+
+export class Spawner {
+    constructor(
+        public mobType: string,
+        public interval: number, // Seconds
+        public timer: number = 0,
+        public activeEntityId: number = -1, // ID of currently alive mob, -1 if none
+        public maxCount: number = 1,
+        public z: number = 7
     ) { }
 }
 

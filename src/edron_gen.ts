@@ -721,7 +721,8 @@ export function generateEdronMap(width: number, height: number): WorldMap3D {
             const dist = Math.sqrt(dx * dx + dy * dy);
 
             // Chance to spawn
-            if (Math.random() > 0.02) continue; // 2% chance
+            // Reduced from 0.02 (2%) to 0.003 (0.3%) for density balance
+            if (Math.random() > 0.003) continue;
 
             // Biome Check
             const isSand = t.baseId === SPRITES.SAND;
@@ -801,7 +802,10 @@ function generateEdronSewers(map: WorldMap3D, cx: number, cy: number, grateX: nu
                         // Inside room
                         // Mobs?
                         if (addMobs && Math.random() < 0.25) { // 25% chance for mob
-                            t.mob = Math.random() > 0.4 ? "Slime" : "Rat";
+                            const rng = Math.random();
+                            if (rng < 0.3) t.mob = "Rat";
+                            else if (rng < 0.6) t.mob = "Bat";
+                            else t.mob = "Slime";
                         }
                     }
                 }

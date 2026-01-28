@@ -68,6 +68,19 @@ export const MOB_REGISTRY: Record<string, MobDef> = {
         fleeThreshold: 0.15,
         corpse: SPRITES.RAT_DEAD || 23
     },
+    'bat': {
+        name: "Bat",
+        hp: 15,
+        attack: 3,
+        defense: 1,
+        speed: 100,
+        xp: 5,
+        spriteIndex: SPRITES.BAT,
+        behavior: 'aggressive',
+        lootTable: 'none',
+        fleeThreshold: 0.3,
+        corpse: 0
+    },
     'wolf': {
         name: "Wolf",
         hp: 60,

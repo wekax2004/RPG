@@ -383,7 +383,7 @@ function clearSlotVisual(slot: HTMLElement): void {
  * @param element - HTML element representing the item
  * @param item - Item data
  */
-export function makeItemDraggable(element: HTMLElement, inst: ItemInstance): void {
+export function makeItemDraggable(element: HTMLElement, inst: ItemInstance, context?: any): void {
     element.setAttribute('draggable', 'true');
     element.style.cursor = 'grab';
 
@@ -403,7 +403,8 @@ export function makeItemDraggable(element: HTMLElement, inst: ItemInstance): voi
             speed: item.speed,
             icon: item.icon,
             uIndex: item.uIndex,
-            contents: inst.contents
+            contents: inst.contents,
+            ...context // Merge context (slot, index, from)
         };
 
         e.dataTransfer.setData('text/plain', JSON.stringify(itemData));

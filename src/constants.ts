@@ -131,6 +131,7 @@ export namespace SPRITES {
     export const SKELETON = 202;
     export const SLIME = 203;
     export const BEAR = 204;
+    export const BAT = 213;
 
     // MOBS
     // MOBS & VARIANTS
@@ -167,6 +168,9 @@ export namespace SPRITES {
     export const ICE_BOW = 275;
     export const CRAB = 276;
     export const SIREN = 277;
+    export const ELF_ARCANIST = 75;
+    export const MINOTAUR_ARCHER = 67;
+    export const CROSSBOW = 34;
 
     // NEW MOBS
     export const BANDIT = 212;
@@ -201,6 +205,8 @@ export namespace SPRITES {
     export const HUMAN_CORPSE = 298; // Bandit/Necro
     export const ZOMBIE_DEAD = 22; // Reuse BONES for now or 299
     export const SLIME_PUDDLE = 26; // Reuse
+    export const MINOTAUR_DEAD = 297; // Reuse ORC_DEAD for now
+    export const ELF_DEAD = 298;      // Reuse HUMAN_CORPSE
 
     // --- BIOME TILES ---
     export const SNOW = 310;
@@ -285,6 +291,10 @@ export namespace SPRITES {
     export const KEY_MINE = 451;
 
     // --- MISC ITEMS / LOOT ---
+    export const IRON_MACE = 141;
+    export const PLATE_ARMOR = 2;
+    export const ORC_SHIELD = 167;
+    export const IRON_HELMET = 150;
 
     export const WOLF_PELT = 8041;
     export const BEAR_FUR = 161;

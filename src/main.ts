@@ -26,13 +26,14 @@ import {
     toolSystem,
     generateLoot,
     textRenderSystem,
-    createPlayer,
+
     updateEffects,
     handleChat,
     hotbarSystem,
     stairsSystem
 } from './game';
 import { updateMonsterAI } from './ai';
+import { spawnerSystem } from './systems/spawner';
 import { createItemFromRegistry } from './data/items';
 import { PHYSICS } from './physics';
 import { AudioController } from './audio';
@@ -43,7 +44,8 @@ import { useItem } from './core/interaction';
 import { initEquipmentUI } from './ui';
 import { recalculateStats } from './equipment';
 import { saveGame, loadGame } from './core/persistence';
-import { game, createPlayer, ensureStartingEquipment } from './game';
+
+import { createPlayer, ensureStartingEquipment } from './core/player_factory';
 import { damageTextManager } from './client/damage_text';
 import { setupShopSystem } from './ui/shop';
 import { ManifestLoader } from './systems/ManifestLoader';
@@ -494,6 +496,7 @@ function loop() {
             teleportSystem(world, ui);
             decaySystem(world, dt);
             updateEffects(dt); // New Tibia Effects
+            spawnerSystem(world, dt * 1000); // Expects ms
         } catch (e) {
             console.error("[Update Error]", e);
         }
