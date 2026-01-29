@@ -10,10 +10,22 @@ if exist ".git" goto :UPDATE
 if exist "package.json" goto :UPDATE
 
 echo [!] Not in a git repository. Checking for subfolder...
-if exist "retro-rpg" (
-    echo [*] Found 'retro-rpg' folder. Entering...
+if exist "retro-rpg\package.json" (
+    echo [*] Found valid 'retro-rpg' folder. Entering...
     cd retro-rpg
     goto :UPDATE
+)
+
+if exist "retro-rpg" (
+    echo [!] Found 'retro-rpg' folder but it looks corrupted (missing package.json).
+    echo [*] Recursively deleting broken folder...
+    rmdir /s /q "retro-rpg"
+    if exist "retro-rpg" (
+        echo [ERROR] Failed to delete folder. Please delete 'retro-rpg' manually and try again.
+        pause
+        exit /b
+    )
+    echo [*] Deleted. Retrying clone...
 )
 
 echo [!] No existing installation found.
