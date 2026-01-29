@@ -36,7 +36,10 @@
       "output": "release"
     },
     "win": {
-      "target": "dir",
+      "target": [
+        "nsis",
+        "dir"
+      ],
       "forceCodeSigning": false
     }
   },

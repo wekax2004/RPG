@@ -60,6 +60,9 @@ start "Retro RPG Server" npm run start:server
 echo [*] Waiting for server to initialize...
 timeout /t 5 /nobreak
 
+echo [*] Opening Release Folder (Look for Setup.exe)...
+start "" "release"
+
 if exist "release\win-unpacked\Retro RPG.exe" (
     echo [*] Launching Client...
     start "" "release\win-unpacked\Retro RPG.exe"
