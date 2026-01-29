@@ -5,7 +5,16 @@ echo ==========================================
 echo      Retro RPG - Update and Build Tool
 echo ==========================================
 
-REM Check if we are inside the repo
+REM --- 1. PRE-CHECKS ---
+git --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Git is not installed or not in PATH.
+    echo Please install Git from https://git-scm.com/
+    pause
+    exit /b
+)
+
+REM --- 2. REPO RECOVERY LOGIC ---
 if exist ".git" goto :UPDATE
 if exist "package.json" goto :UPDATE
 
@@ -32,13 +41,14 @@ echo [!] No existing installation found.
 echo [*] Cloning from GitHub (https://github.com/wekax2004/RPG)...
 git clone https://github.com/wekax2004/RPG.git retro-rpg
 if %errorlevel% neq 0 (
-    echo [ERROR] Git clone failed.
+    echo [ERROR] Git clone failed. Check your internet connection.
     pause
     exit /b
 )
 cd retro-rpg
 
 :UPDATE
+REM --- 3. GIT UPDATE ---
 echo.
 echo [1/4] Pulling latest changes from Git...
 git pull
@@ -47,15 +57,17 @@ if %errorlevel% neq 0 (
     echo [*] Continuing with local files...
 )
 
+REM --- 4. NPM INSTALL ---
 echo.
 echo [2/4] Updating Dependencies...
 call npm install
 if %errorlevel% neq 0 (
-    echo [ERROR] NPM Install failed. Ensure Node.js is installed.
+    echo [ERROR] NPM Install failed. Ensure Node.js is installed (https://nodejs.org/).
     pause
     exit /b
 )
 
+REM --- 5. BUILD ---
 echo.
 echo [3/4] Building Game Executable...
 call npm run electron:build
@@ -65,6 +77,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+REM --- 6. LAUNCH ---
 echo.
 echo [4/4] Starting Server and Game...
 echo [*] Starting Server (in background window)...
