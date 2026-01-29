@@ -820,8 +820,13 @@ export class AssetManager {
                 try {
                     let img = this.sheetCache[file];
                     if (!img) {
-                        img = await this.loadImageElement(url);
-                        this.sheetCache[file] = img;
+                        try {
+                            img = await this.loadImageElement(url);
+                            this.sheetCache[file] = img;
+                        } catch (e: any) {
+                            console.warn(`[AssetManager] Legacy sprite sheet missing: ${url}. Skipping. (This is expected for old assets)`);
+                            continue; // Skip this sheet
+                        }
                     }
 
                     // Slice Sprites & Chroma Key
