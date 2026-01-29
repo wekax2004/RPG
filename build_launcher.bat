@@ -5,7 +5,7 @@ echo ==========================================
 echo      Retro RPG - Update and Build Tool
 echo ==========================================
 
-REM --- 1. PRE-CHECKS ---
+REM Check Git
 git --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Git is not installed or not in PATH.
@@ -14,7 +14,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-REM --- 2. REPO RECOVERY LOGIC ---
+REM Repo Checks
 if exist ".git" goto :UPDATE
 if exist "package.json" goto :UPDATE
 
@@ -26,19 +26,14 @@ if exist "retro-rpg\package.json" (
 )
 
 if exist "retro-rpg" (
-    echo [!] Found 'retro-rpg' folder but it looks corrupted (missing package.json).
-    echo [*] Recursively deleting broken folder...
+    echo [!] Found corrupted 'retro-rpg' folder.
+    echo [*] Deleting broken folder...
     rmdir /s /q "retro-rpg"
-    if exist "retro-rpg" (
-        echo [ERROR] Failed to delete folder. Please delete 'retro-rpg' manually and try again.
-        pause
-        exit /b
-    )
     echo [*] Deleted. Retrying clone...
 )
 
 echo [!] No existing installation found.
-echo [*] Cloning from GitHub (https://github.com/wekax2004/RPG)...
+echo [*] Cloning from GitHub...
 git clone https://github.com/wekax2004/RPG.git retro-rpg
 if %errorlevel% neq 0 (
     echo [ERROR] Git clone failed. Check your internet connection.
@@ -48,27 +43,23 @@ if %errorlevel% neq 0 (
 cd retro-rpg
 
 :UPDATE
-REM --- 3. GIT UPDATE ---
-echo.
-echo [1/4] Pulling latest changes from Git...
+echo ==========================================
+echo [1/4] Pulling latest changes...
 git pull
 if %errorlevel% neq 0 (
-    echo [WARNING] Git pull failed. You might be offline or have local changes.
-    echo [*] Continuing with local files...
+    echo [WARNING] Git pull failed. Continuing...
 )
 
-REM --- 4. NPM INSTALL ---
-echo.
+echo ==========================================
 echo [2/4] Updating Dependencies...
 call npm install
 if %errorlevel% neq 0 (
-    echo [ERROR] NPM Install failed. Ensure Node.js is installed (https://nodejs.org/).
+    echo [ERROR] NPM Install failed. Ensure Node.js is installed.
     pause
     exit /b
 )
 
-REM --- 5. BUILD ---
-echo.
+echo ==========================================
 echo [3/4] Building Game Executable...
 call npm run electron:build
 if %errorlevel% neq 0 (
@@ -77,25 +68,24 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-REM --- 6. LAUNCH ---
-echo.
+echo ==========================================
 echo [4/4] Starting Server and Game...
-echo [*] Starting Server (in background window)...
+echo [*] Starting Server...
 start "Retro RPG Server" npm run start:server
 
-echo [*] Waiting for server to initialize...
+echo [*] Waiting for server...
 timeout /t 5 /nobreak
 
-echo [*] Opening Release Folder (Look for Setup.exe)...
+echo [*] Opening Release Folder...
 start "" "release"
 
 if exist "release\win-unpacked\Retro RPG.exe" (
     echo [*] Launching Client...
     start "" "release\win-unpacked\Retro RPG.exe"
 ) else (
-    echo [ERROR] Executable not found at release\win-unpacked\Retro RPG.exe
+    echo [ERROR] Executable not found.
     pause
 )
 
-echo Done. Do not close the Server window while playing!
+echo Done. Do not close the Server window.
 pause
