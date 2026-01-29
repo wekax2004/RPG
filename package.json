@@ -30,16 +30,14 @@
     "files": [
       "dist/**/*",
       "desktop-app/**/*",
+      "public/**/*",
       "package.json"
     ],
     "directories": {
       "output": "release"
     },
     "win": {
-      "target": [
-        "nsis",
-        "dir"
-      ],
+      "target": "nsis",
       "forceCodeSigning": false
     }
   },
