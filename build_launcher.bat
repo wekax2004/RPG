@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 title Retro RPG Auto-Builder
 echo ==========================================
 echo      Retro RPG - Update and Build Tool
