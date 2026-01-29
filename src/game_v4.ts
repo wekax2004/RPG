@@ -460,6 +460,45 @@ export function interactionSystem(world: World, input: InputHandler, ui: UIManag
                     // Check Z
                     if (pos.z !== pPos.z) continue;
 
+                    // Check for Interaction first
+                    const interactable = world.getComponent(eid, Interactable);
+                    const dx = pos.x - pPos.x;
+                    const dy = pos.y - pPos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    // Interaction Range (e.g. 50px - slightly more than 1 tile diagonal)
+                    if (interactable && dist <= 64) {
+                        console.log(`[Interaction] Interacting with ${eid}`);
+                        const name = world.getComponent(eid, Name)?.value || "Unknown";
+
+                        // Check for Quest Giver
+                        const questGiver = world.getComponent(eid, QuestGiver);
+                        if (questGiver) {
+                            // Show Quest UI (Placeholder or actual system)
+                            if ((ui as any).console) (ui as any).console.addSystemMessage(`You talk to ${name}.`);
+
+                            // Simple Quest Logic: Check specific quests
+                            // This should be delegated to a proper Dialogue System
+                            // For now, let's just log or show a simple alert/modal through UI
+                            // ui.showDialogue(eid, questGiver); // Hypothetical
+                            alert(`[NPC ${name}]: Hello traveler! I have quests for you.`);
+                        }
+                        // Check for Merchant
+                        else if (world.getComponent(eid, Merchant)) {
+                            // Open Shop
+                            if ((ui as any).console) (ui as any).console.addSystemMessage(`Trade with ${name}.`);
+                            // ui.openShop(eid); 
+                        }
+                        else {
+                            // Generic Interaction
+                            // ui.showDialogue(eid, ...);
+                            const lastMsg = (world.getComponent(eid, NPC)?.dialog || [])[0] || "Greetings.";
+                            alert(`[NPC ${name}]: ${lastMsg}`);
+                        }
+                        return;
+                    }
+
+                    // Fallback to Targeting
                     const targetComp = world.getComponent(player, Target);
                     if (targetComp) {
                         targetComp.targetId = eid;
