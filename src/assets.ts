@@ -956,18 +956,18 @@ export class AssetManager {
     private async loadAISprites(): Promise<void> {
         const aiSprites: { [id: number]: string } = {
             // Generated Assets (Yeti/Snake)
-            321: '/sprites/yeti.png',
-            324: '/sprites/snake.png',
+            321: './sprites/yeti.png',
+            324: './sprites/snake.png',
 
             // Corpses
-            297: '/sprites/corpse_orc.png',
-            293: '/sprites/corpse_wolf.png', // Rat shares? No, Wolf Dead
-            // 294: '/sprites/corpse_wolf.png', // USER REPORTED BAD SPRITE (Looks like Undead)
-            295: '/sprites/corpse_bear.png',
-            296: '/sprites/corpse_spider.png',
-            298: '/sprites/corpse_human.png',
-            22: '/sprites/corpse_snake.png', // Snake Corpse
-            23: '/sprites/corpse_wolf.png', // Rat Corpse (Fallback)
+            297: './sprites/corpse_orc.png',
+            293: './sprites/corpse_wolf.png', // Rat shares? No, Wolf Dead
+            // 294: './sprites/corpse_wolf.png', // USER REPORTED BAD SPRITE (Looks like Undead)
+            295: './sprites/corpse_bear.png',
+            296: './sprites/corpse_spider.png',
+            298: './sprites/corpse_human.png',
+            22: './sprites/corpse_snake.png', // Snake Corpse
+            23: './sprites/corpse_wolf.png', // Rat Corpse (Fallback)
             // Mobs.ts: Rat Corpse = 23.
             // Need to generate/map rat corpse too? User said "Wolf, Bear, Spider, Human, Snake".
             // Rat wasn't mentioned explicitly as fixed, but let's assume Rat Corpse is generic or missing.
@@ -976,29 +976,29 @@ export class AssetManager {
 
 
             // NPCs
-            260: '/sprites/npc_merchant.png',
-            261: '/sprites/npc_healer.png',
-            262: '/sprites/npc_guide.png', // Fallback/Existing
+            260: './sprites/npc_merchant.png',
+            261: './sprites/npc_healer.png',
+            262: './sprites/npc_guide.png', // Fallback/Existing
 
             // Orcs
-            9: '/sprites/orc.png',
-            252: '/sprites/orc_peon.png',
-            253: '/sprites/orc_warlord.png', // Re-verify this ID?
+            9: './sprites/orc.png',
+            252: './sprites/orc_peon.png',
+            253: './sprites/orc_warlord.png', // Re-verify this ID?
 
             // Biome Mobs
-            332: '/sprites/hydra.png', // Hydra
-            333: '/sprites/orc_warlord.png', // Warlord
-            330: '/sprites/frost_giant.png', // Frost Giant
-            322: '/sprites/scorpion_king.png', // Scorpion King
-            323: '/sprites/mummy.png', // Mummy
-            320: '/sprites/polar_bear.png', // Polar Bear
+            332: './sprites/hydra.png', // Hydra
+            333: './sprites/orc_warlord.png', // Warlord
+            330: './sprites/frost_giant.png', // Frost Giant
+            322: './sprites/scorpion_king.png', // Scorpion King
+            323: './sprites/mummy.png', // Mummy
+            320: './sprites/polar_bear.png', // Polar Bear
 
             // Standard Mobs (Remapped from generic placeholders)
-            202: '/sprites/skeleton.png',
-            162: '/sprites/ghost.png', // Ghost ID 162? Check constants
-            203: '/sprites/slime.png',
-            289: '/sprites/necromancer.png',
-            // 22: '/sprites/zombie.png', 
+            202: './sprites/skeleton.png',
+            162: './sprites/ghost.png', // Ghost ID 162? Check constants
+            203: './sprites/slime.png',
+            289: './sprites/necromancer.png',
+            // 22: './sprites/zombie.png', 
             // Checking Mobs.ts again for IDs.
             // Zombie Live: SPRITES.ZOMBIE (Need to check value, likely 200 range)
             // Let's assume ID map is safest way.

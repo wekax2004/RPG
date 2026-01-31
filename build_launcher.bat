@@ -59,6 +59,39 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 echo ==========================================
 echo [3/4] Building Game Executable...
 call npm run electron:build
