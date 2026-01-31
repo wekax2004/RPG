@@ -1,4 +1,4 @@
-``7import { SPRITES } from './constants';
+import { SPRITES } from './constants';
 import { RNG } from './rng';
 import { simplex2D } from './core/noise';
 import { Tile } from './components';
